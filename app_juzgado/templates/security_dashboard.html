@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard de Seguridad{% endblock %}
+
+{% block extra_css %}
+<style>
+.security-card {
+    border-left: 4px solid #007bff;
+    transition: all 0.3s ease;
+}
+
+.security-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.security-score {
+    font-size: 3rem;
+    font-weight: bold;
+}
+
+.security-level {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.alert-item {
+    border-left: 4px solid;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+.alert-danger { border-left-color: #dc3545; background-color: #f8d7da; }
+.alert-warning { border-left-color: #ffc107; background-color: #fff3cd; }
+.alert-info { border-left-color: #17a2b8; background-color: #d1ecf1; }
+
+.metric-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.refresh-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="fas fa-shield-alt text-primary"></i>
+                    Dashboard de Seguridad
+                </h2>
+                <div class="text-muted">
+                    <i class="fas fa-clock"></i>
+                    Última actualización: <span id="last-updated">{{ data.last_updated or 'Cargando...' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if data.error %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{ data.error }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Score de Seguridad -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card security-card text-center">
+                <div class="card-body">
+                    <div class="metric-icon">
+                        <i class="fas fa-shield-alt text-{{ data.security_score.color or 'secondary' }}"></i>
+                    </div>
+                    <div class="security-score text-{{ data.security_score.color or 'secondary' }}">
+                        {{ data.security_score.score or 0 }}%
+                    </div>
+                    <div class="security-level text-{{ data.security_score.color or 'secondary' }}">
+                        {{ data.security_score.level or 'Desconocido' }}
+                    </div>
+                    <small class="text-muted">Score de Seguridad</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card security-card">
+                <div class="card-body text-center">
+                    <div class="metric-icon">
+                        <i class="fas fa-ban text-warning"></i>
+                    </div>
+                    <h3 class="text-warning">{{ data.rate_limit_stats.blocked_ips or 0 }}</h3>
+                    <p class="mb-0">IPs Bloqueadas</p>
+                    <small class="text-muted">Rate Limiting Activo</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card security-card">
+                <div class="card-body text-center">
+                    <div class="metric-icon">
+                        <i class="fas fa-user-lock text-danger"></i>
+                    </div>
+                    <h3 class="text-danger">{{ data.rate_limit_stats.blocked_users or 0 }}</h3>
+                    <p class="mb-0">Usuarios Bloqueados</p>
+                    <small class="text-muted">Intentos Fallidos</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas de Eventos -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-bar"></i> Eventos de Seguridad</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h4 class="text-info">{{ data.security_stats.total_events or 0 }}</h4>
+                                <small>Total Eventos</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h4 class="text-success">{{ data.security_stats.login_attempts or 0 }}</h4>
+                                <small>Logins Exitosos</small>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h4 class="text-warning">{{ data.security_stats.failed_logins or 0 }}</h4>
+                                <small>Logins Fallidos</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center">
+                                <h4 class="text-danger">{{ data.security_stats.blocked_attempts or 0 }}</h4>
+                                <small>Intentos Bloqueados</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-exclamation-triangle"></i> Ataques Detectados</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-4">
+                            <div class="text-center">
+                                <h4 class="text-danger">{{ data.security_stats.csrf_attacks or 0 }}</h4>
+                                <small>CSRF</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center">
+                                <h4 class="text-danger">{{ data.security_stats.xss_attempts or 0 }}</h4>
+                                <small>XSS</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center">
+                                <h4 class="text-danger">{{ data.security_stats.sql_injection_attempts or 0 }}</h4>
+                                <small>SQL Injection</small>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="text-center">
+                        <h4 class="text-warning">{{ data.security_stats.rate_limit_exceeded or 0 }}</h4>
+                        <small>Rate Limit Excedido</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertas de Seguridad -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-bell"></i> Alertas de Seguridad</h5>
+                    <span class="badge badge-danger" id="alerts-count">0</span>
+                </div>
+                <div class="card-body">
+                    <div id="security-alerts">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            Cargando alertas...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recomendaciones de Seguridad -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-lightbulb"></i> Recomendaciones de Seguridad</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-check-circle text-success"></i> Medidas Implementadas</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-shield-alt text-success"></i> Protección CSRF activa</li>
+                                <li><i class="fas fa-lock text-success"></i> Headers de seguridad configurados</li>
+                                <li><i class="fas fa-database text-success"></i> Queries parametrizadas (SQL Injection)</li>
+                                <li><i class="fas fa-user-shield text-success"></i> Rate limiting implementado</li>
+                                <li><i class="fas fa-eye text-success"></i> Logging de seguridad activo</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-exclamation-triangle text-warning"></i> Recomendaciones</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-key text-info"></i> Revisar contraseñas débiles regularmente</li>
+                                <li><i class="fas fa-clock text-info"></i> Monitorear logs de seguridad diariamente</li>
+                                <li><i class="fas fa-update text-info"></i> Mantener dependencias actualizadas</li>
+                                <li><i class="fas fa-backup text-info"></i> Realizar backups de seguridad regulares</li>
+                                <li><i class="fas fa-users text-info"></i> Capacitar usuarios en seguridad</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Botón de actualización -->
+<button class="btn btn-primary btn-lg refresh-btn" onclick="refreshDashboard()" title="Actualizar Dashboard">
+    <i class="fas fa-sync-alt"></i>
+</button>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Función para actualizar el dashboard
+function refreshDashboard() {
+    const refreshBtn = document.querySelector('.refresh-btn i');
+    refreshBtn.classList.add('fa-spin');
+    
+    // Actualizar estadísticas
+    fetch('/api/security-stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateDashboardData(data.data);
+            }
+        })
+        .catch(error => {
+            console.error('Error actualizando dashboard:', error);
+        })
+        .finally(() => {
+            refreshBtn.classList.remove('fa-spin');
+        });
+    
+    // Actualizar alertas
+    loadSecurityAlerts();
+}
+
+// Función para actualizar datos del dashboard
+function updateDashboardData(data) {
+    // Actualizar timestamp
+    document.getElementById('last-updated').textContent = new Date().toLocaleString();
+    
+    // Aquí se pueden actualizar otros elementos del dashboard
+    // Por simplicidad, recargamos la página
+    setTimeout(() => {
+        location.reload();
+    }, 1000);
+}
+
+// Función para cargar alertas de seguridad
+function loadSecurityAlerts() {
+    fetch('/api/security-alerts')
+        .then(response => response.json())
+        .then(data => {
+            const alertsContainer = document.getElementById('security-alerts');
+            const alertsCount = document.getElementById('alerts-count');
+            
+            if (data.success && data.alerts.length > 0) {
+                alertsCount.textContent = data.count;
+                alertsCount.className = 'badge badge-danger';
+                
+                let alertsHtml = '';
+                data.alerts.forEach(alert => {
+                    alertsHtml += `
+                        <div class="alert-item alert-${alert.type}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">${alert.title}</h6>
+                                    <p class="mb-1">${alert.message}</p>
+                                    <small class="text-muted">${new Date(alert.timestamp).toLocaleString()}</small>
+                                </div>
+                                <i class="fas fa-${alert.type === 'danger' ? 'exclamation-triangle' : 'exclamation-circle'}"></i>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                alertsContainer.innerHTML = alertsHtml;
+            } else {
+                alertsCount.textContent = '0';
+                alertsCount.className = 'badge badge-success';
+                alertsContainer.innerHTML = `
+                    <div class="text-center text-success">
+                        <i class="fas fa-check-circle fa-2x mb-2"></i>
+                        <p>No hay alertas de seguridad activas</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error cargando alertas:', error);
+            document.getElementById('security-alerts').innerHTML = `
+                <div class="text-center text-danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Error cargando alertas de seguridad
+                </div>
+            `;
+        });
+}
+
+// Cargar alertas al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    loadSecurityAlerts();
+    
+    // Auto-refresh cada 30 segundos
+    setInterval(loadSecurityAlerts, 30000);
+});
+
+// Actualizar timestamp cada segundo
+setInterval(() => {
+    const now = new Date();
+    document.getElementById('last-updated').textContent = now.toLocaleString();
+}, 1000);
+</script>
+{% endblock %}

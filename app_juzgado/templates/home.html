@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Sistema Expedientes{% endblock %}
+
+{% block content %}
+    <!-- <div class="content-2"> -->
+    <div>
+        <!-- DASHBOARD PRINCIPAL -->
+        <div class="container-fluid mt-4">
+            <!-- Encabezado del Dashboard -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h2 class="mb-1">
+                                <i class="fas fa-tachometer-alt text-primary"></i> Dashboard
+                            </h2>
+                            
+                        </div>
+                        <div class="text-right">
+                            <small class="text-muted">
+                                <i class="fas fa-user"></i> 
+                                Bienvenido, {{ user.nombre if user else 'Usuario' }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tarjetas de Métricas Principales -->
+             <!-- Total Expedientes -->
+            <div class="row mb-4">
+                <div class="col-xl-3 col-md-6 mb-4">
+                    <div class="card border-left-primary shadow h-100 py-2 metric-card">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                        Total Expedientes
+                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800 format-number" id="total-expedientes">
+                                        {{ metricas.total_expedientes or 0 }}
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-folder fa-2x text-gray-300 metric-icon"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- <div class="col-xl-3 col-md-6 mb-4">
+                    <div class="card border-left-success shadow h-100 py-2 metric-card">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                        Expedientes en proceso
+                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800 format-number" id="ingresos-recientes">
+                                        {{ metricas.ingresos_recientes or 0 }}
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-calendar-plus fa-2x text-gray-300 metric-icon"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+
+                <div class="col-xl-3 col-md-6 mb-4">
+                    <div class="card border-left-info shadow h-100 py-2 metric-card">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                        Expedientes completados
+                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800 format-number" id="actualizados-recientes">
+                                        {{ metricas.actualizados_recientes or 0 }}
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-edit fa-2x text-gray-300 metric-icon"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div> -->
+
+                <!-- <div class="col-xl-3 col-md-6 mb-4">
+                    <div class="card border-left-warning shadow h-100 py-2 metric-card">
+                        <div class="card-body">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                        Responsables Activos
+                                    </div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800 format-number" id="responsables-activos">
+                                        {{ metricas.expedientes_por_responsable|length or 0 }}
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-users fa-2x text-gray-300 metric-icon"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div> -->
+            </div>
+
+            <!-- Gráficos y Tablas -->
+            <div class="row">
+                <!-- Expedientes por Estado -->
+                <div class="col-xl-6 col-lg-7">
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                            <h6 class="m-0 font-weight-bold text-primary">
+                                <i class="fas fa-chart-pie"></i> Expedientes por Estado
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            {% if metricas.expedientes_por_estado %}
+                                <div class="chart-pie pt-4 pb-2">
+                                    <canvas id="estadosChart"></canvas>
+                                </div>
+                                <div class="mt-4 text-center small">
+                                    {% for estado, cantidad in metricas.expedientes_por_estado[:5] %}
+                                        <span class="mr-2 mb-1 d-inline-block">
+                                            <i class="fas fa-circle text-primary"></i> {{ estado }}: {{ cantidad }}
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-chart-pie fa-3x mb-3"></i>
+                                    <p>No hay datos de estados disponibles</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expedientes por Responsable -->
+                <div class="col-xl-6 col-lg-5">
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                            <h6 class="m-0 font-weight-bold text-primary">
+                                <i class="fas fa-chart-bar"></i> Expedientes por Responsable
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            {% if metricas.expedientes_por_responsable %}
+                                {% for responsable, cantidad in metricas.expedientes_por_responsable[:8] %}
+                                    <div class="mb-3">
+                                        <div class="small mb-1">
+                                            {{ responsable }} 
+                                            <span class="float-right">{{ cantidad }}</span>
+                                        </div>
+                                        <div class="progress progress-custom">
+                                            <div class="progress-bar bg-primary" role="progressbar" 
+                                                 style="width: {{ (cantidad / metricas.total_expedientes * 100) if metricas.total_expedientes > 0 else 0 }}%">
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-users fa-3x mb-3"></i>
+                                    <p>No hay datos de responsables disponibles</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expedientes Recientes y Acciones Rápidas -->
+            <div class="row">
+                <!-- Expedientes Recientes -->
+                <div class="col-xl-8 col-lg-7">
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                            <h6 class="m-0 font-weight-bold text-primary">
+                                <i class="fas fa-history"></i> Expedientes Recientes
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            {% if metricas.expedientes_recientes %}
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-hover">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>Radicado</th>
+                                                <th>Demandante</th>
+                                                <th>Estado</th>
+                                                <th>Responsable</th>
+                                                <th>Actualización</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for expediente in metricas.expedientes_recientes %}
+                                            <tr>
+                                                <td>
+                                                    <small class="font-weight-bold">
+                                                        {{ expediente[0] or expediente[1] or 'N/A' }}
+                                                    </small>
+                                                </td>
+                                                <td>{{ (expediente[2][:20] + '...') if expediente[2] and expediente[2]|length > 20 else (expediente[2] or 'N/A') }}</td>
+                                                <td>
+                                                    {% if expediente[5] and expediente[6] %}
+                                                        <span class="badge badge-success">{{ expediente[5] }}</span>
+                                                        <span class="badge badge-info">{{ expediente[6] }}</span>
+                                                    {% elif expediente[5] %}
+                                                        <span class="badge badge-success">{{ expediente[5] }}</span>
+                                                    {% elif expediente[6] %}
+                                                        <span class="badge badge-info">{{ expediente[6] }}</span>
+                                                    {% else %}
+                                                        <span class="badge badge-secondary">{{ expediente[4] or 'Sin estado' }}</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>{{ expediente[7] or 'Sin asignar' }}</td>
+                                                <td>
+                                                    <small>
+                                                        {{ expediente[8].strftime('%d/%m/%Y') if expediente[8] else 'N/A' }}
+                                                    </small>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-folder-open fa-3x mb-3"></i>
+                                    <p>No hay expedientes recientes</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Acciones Rápidas y Estadísticas -->
+                <div class="col-xl-4 col-lg-5">
+                    <!-- Acciones Rápidas -->
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">
+                                <i class="fas fa-bolt"></i> Acciones Rápidas
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <a href="{{ url_for('idvistasubirexpediente.vista_subirexpediente') }}" 
+                                   class="btn btn-success btn-block mb-2">
+                                    <i class="fas fa-plus"></i> Nuevo Expediente
+                                </a>
+                                <a href="{{ url_for('idvistaexpediente.vista_expediente') }}" 
+                                   class="btn btn-primary btn-block mb-2">
+                                    <i class="fas fa-search"></i> Buscar Expedientes
+                                </a>
+                                <a href="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" 
+                                   class="btn btn-warning btn-block">
+                                    <i class="fas fa-edit"></i> Actualizar Expedientes
+                                </a>
+                                <a href="{{ url_for('idvistaroles.vista_roles') }}" 
+                                   class="btn btn-warning btn-block">
+                                    <i class="fa-solid fa-users"></i> Gestionar roles
+                                </a>
+                                <a href="{{ url_for('idvistaasignacion.vista_asignacion') }}" 
+                                   class="btn btn-warning btn-block">
+                                    <i class="fa-solid fa-folder"></i> Gestionar expediente
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+<!-- Estilo css -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+
+<!-- CSS personalizado para el dashboard -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+
+<!-- Scripts -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+<script src="{{ url_for('static', filename='js/base.js') }}"></script>
+
+<!-- JavaScript para gráficos -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Datos para el gráfico -->
+<script>
+{% if metricas.expedientes_por_estado %}
+window.estadosChartData = {
+    labels: [{% for estado, cantidad in metricas.expedientes_por_estado[:5] %}'{{ estado }}'{% if not loop.last %},{% endif %}{% endfor %}],
+    data: [{% for estado, cantidad in metricas.expedientes_por_estado[:5] %}{{ cantidad }}{% if not loop.last %},{% endif %}{% endfor %}]
+};
+{% else %}
+window.estadosChartData = null;
+{% endif %}
+
+</script> 
+
+<!-- JavaScript personalizado del dashboard -->
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+
+{% endblock %}

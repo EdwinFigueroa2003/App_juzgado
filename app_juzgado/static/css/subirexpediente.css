@@ -1,0 +1,93 @@
+/* Estilos para las pestañas de subir expediente */
+
+/* Estilo para el contenedor de pestañas */
+.tab {
+    overflow: hidden;
+    border: 1px solid #ccc;
+    background-color: #f1f1f1;
+    border-radius: 5px 5px 0 0;
+}
+
+/* Estilo para los botones dentro de las pestañas */
+.tab button {
+    background-color: inherit;
+    float: left;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    padding: 14px 20px;
+    transition: 0.3s;
+    font-size: 16px;
+    font-weight: 500;
+    color: black;
+}
+
+/* Cambiar color de fondo de los botones al pasar el mouse */
+.tab button:hover {
+    background-color: #ddd;
+}
+
+/* Clase activa/actual para el botón de pestaña */
+.tab button.active {
+    background-color: #007bff;
+    color: rgb(255, 255, 255);
+}
+
+/* Estilo para el contenido de las pestañas */
+.tabcontent {
+    display: none;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 5px 5px;
+    background-color: white;
+}
+
+/* Mostrar la primera pestaña por defecto */
+.tabcontent:first-of-type {
+    display: block;
+}
+
+/* Estilos adicionales para mejorar la apariencia */
+.card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+.card-header {
+    border-radius: 8px 8px 0 0;
+    padding: 15px 20px;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.btn {
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-weight: 500;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    transition: all 0.2s;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .tab button {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+    
+    .tabcontent {
+        padding: 15px;
+    }
+}

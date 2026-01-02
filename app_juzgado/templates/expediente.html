@@ -1,0 +1,769 @@
+{% extends "base.html" %}
+
+{% block title %}Consultar Expedientes{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-search"></i> Consultar Expedientes
+            </h2>
+
+            <!-- Pestañas de navegación -->
+            <ul class="nav nav-tabs mb-4" id="expedienteTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link active" id="buscar-tab" data-bs-toggle="tab" href="#buscar" role="tab"
+                        aria-controls="buscar" aria-selected="true">
+                        <i class="fas fa-search"></i> Buscar por Radicado
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="filtrar-tab" data-bs-toggle="tab" href="#filtrar" role="tab"
+                        aria-controls="filtrar" aria-selected="false">
+                        <i class="fas fa-filter"></i> Filtrar por Estado
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Contenido de las pestañas -->
+            <div class="tab-content" id="expedienteTabContent">
+
+                <!-- PESTAÑA 1: Buscar por Radicado -->
+                <div class="tab-pane fade show active" id="buscar" role="tabpanel" aria-labelledby="buscar-tab">
+                    <!-- Formulario de búsqueda por radicado -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">Buscar por Radicado</h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="POST" action="{{ url_for('idvistaexpediente.vista_expediente') }}">
+                        <!-- 🔒 CSRF Protection -->
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="tipo_busqueda" value="radicado">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <div class="form-group">
+                                            <label for="radicado">Radicado:</label>
+                                            <input type="text" class="form-control" id="radicado" name="radicado"
+                                                value="{{ radicado_buscar }}"
+                                                placeholder="Ej: 08001418902020220003100" required>
+                                            <small class="form-text text-muted">
+                                                Puede buscar por radicado completo
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label>&nbsp;</label>
+                                        <button type="submit" class="btn btn-primary btn-block">
+                                            <i class="fas fa-search"></i> Buscar
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PESTAÑA 2: Filtrar por Estado -->
+                <div class="tab-pane fade" id="filtrar" role="tabpanel" aria-labelledby="filtrar-tab">
+                    <!-- Formulario de filtros -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">Filtrar Expedientes por Estado</h5>
+                        </div>
+                        <div class="card-body filtros-expedientes">
+                            <form method="POST" action="{{ url_for('idvistaexpediente.vista_expediente') }}">
+                        <!-- 🔒 CSRF Protection -->
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <input type="hidden" name="tipo_busqueda" value="estado">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label for="estado_filtro" class="form-label">Estado del Expediente:</label>
+                                            <select class="form-select form-select-lg" id="estado_filtro" name="estado_filtro"
+                                                required>
+                                                <option value="">Seleccione un estado</option>
+                                                
+                                                <!-- Estados Principales -->
+                                                <optgroup label="Estados Principales">
+                                                    <option value="ACTIVO" {{ 'selected' if estado_filtro=='ACTIVO' }}>
+                                                        Activos (últimos 6 meses)
+                                                    </option>
+                                                    <option value="INACTIVO" {{ 'selected' if estado_filtro=='INACTIVO' }}>
+                                                        Inactivos (más de 6 meses)
+                                                    </option>
+                                                </optgroup>
+                                                
+                                                <!-- Estados Adicionales -->
+                                                <optgroup label="Estados de Proceso">
+                                                    <option value="PENDIENTE" {{ 'selected' if estado_filtro=='PENDIENTE' }}>
+                                                        Pendientes (en despacho)
+                                                    </option>
+                                                    <option value="SALIO" {{ 'selected' if estado_filtro=='SALIO' }}>
+                                                        Salieron (en secretaría)
+                                                    </option>
+                                                </optgroup>
+                                                
+                                                <!-- Combinaciones -->
+                                                <optgroup label="Combinaciones">
+                                                    <option value="ACTIVO_PENDIENTE" {{ 'selected' if estado_filtro=='ACTIVO_PENDIENTE' }}>
+                                                        Activos + Pendientes
+                                                    </option>
+                                                    <option value="ACTIVO_SALIO" {{ 'selected' if estado_filtro=='ACTIVO_SALIO' }}>
+                                                        Activos + Salieron
+                                                    </option>
+                                                    <option value="INACTIVO_PENDIENTE" {{ 'selected' if estado_filtro=='INACTIVO_PENDIENTE' }}>
+                                                        Inactivos + Pendientes
+                                                    </option>
+                                                    <option value="INACTIVO_SALIO" {{ 'selected' if estado_filtro=='INACTIVO_SALIO' }}>
+                                                        Inactivos + Salieron
+                                                    </option>
+                                                </optgroup>
+                                                
+                                                <!-- Estados Antiguos (Compatibilidad) -->
+                                                <!-- <optgroup label="Estados Antiguos">
+                                                    <option value="COMPLETADO" {{ 'selected' if estado_filtro=='COMPLETADO' }}>
+                                                        Completado (antiguo)
+                                                    </option>
+                                                    <option value="EN_PROCESO" {{ 'selected' if estado_filtro=='EN_PROCESO' }}>
+                                                        En Proceso (antiguo)
+                                                    </option>
+                                                    <option value="SIN_INFORMACION" {{ 'selected' if estado_filtro=='SIN_INFORMACION' }}>
+                                                        Sin Información (antiguo)
+                                                    </option>
+                                                </optgroup> -->
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label for="orden_fecha" class="form-label">Ordenar por Fecha:</label>
+                                            <select class="form-select form-select-lg" id="orden_fecha" name="orden_fecha">
+                                                <option value="DESC" {{ 'selected' if orden_fecha=='DESC' }}>Más
+                                                    reciente primero</option>
+                                                <option value="ASC" {{ 'selected' if orden_fecha=='ASC' }}>Más antiguo
+                                                    primero</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="form-group">
+                                            <label for="limite" class="form-label">Mostrar:</label>
+                                            <select class="form-select form-select-lg" id="limite" name="limite">
+                                                <option value="50" {{ 'selected' if limite=='50' }}>50</option>
+                                                <option value="100" {{ 'selected' if limite=='100' }}>100</option>
+                                                <option value="200" {{ 'selected' if limite=='200' }}>200</option>
+                                                <option value="500" {{ 'selected' if limite=='500' }}>500</option>
+                                                <option value="1000" {{ 'selected' if limite=='1000' }}>1000</option>
+                                                <option value="2000" {{ 'selected' if limite=='2000' }}>2000</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label>&nbsp;</label>
+                                        <button type="submit" class="btn btn-success btn-block">
+                                            <i class="fas fa-filter"></i> Filtrar
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mensajes -->
+            {% if mensaje %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> {{ mensaje }}
+                {% if expedientes|length > 1 %}
+                <br><small><strong>Nota:</strong> Se encontraron múltiples expedientes con el mismo radicado corto. Esto
+                    es normal cuando diferentes juzgados usan el mismo número.</small>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Resumen para múltiples expedientes -->
+            {% if resumen %}
+            <div class="card mb-4 border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0"><i class="fas fa-list"></i> Resumen de Expedientes con Radicado: {{
+                        resumen.radicado_buscado }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary">{{ resumen.total_expedientes }}</h4>
+                                <small>Expedientes</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-success">{{ resumen.total_ingresos }}</h4>
+                                <small>Ingresos Totales</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-info">{{ resumen.total_estados }}</h4>
+                                <small>Estados Totales</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <button class="btn btn-sm btn-outline-primary" onclick="scrollToDetails()">
+                                    <i class="fas fa-arrow-down"></i> Ver Detalles
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Información de paginación en resumen -->
+                    {% if paginacion %}
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Paginación activada:</strong> Mostrando 10 expedientes por página para mejorar el rendimiento.
+                        Use los controles de navegación al final de los resultados.
+                    </div>
+                    {% endif %}
+
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Radicado Completo</th>
+                                    <th>Demandante</th>
+                                    <th>Demandado</th>
+                                    <th class="text-center">Ingresos</th>
+                                    <th class="text-center">Estados</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for exp in resumen.expedientes_resumen %}
+                                <tr>
+                                    <td>{{ exp.radicado_completo or 'Sin radicado completo' }}</td>
+                                    <td>{{ exp.demandante or 'No especificado' }}</td>
+                                    <td>{{ exp.demandado or 'No especificado' }}</td>
+                                    <td class="text-center"><span class="badge badge-success">{{ exp.ingresos }}</span>
+                                    </td>
+                                    <td class="text-center"><span class="badge badge-info">{{ exp.estados }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Resumen para filtros por estado -->
+            {% if resumen_filtro %}
+            <div class="card mb-4 border-success">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-chart-bar"></i>
+                        Expedientes con Estado: {{ resumen_filtro.estado_filtrado }}
+                        <span class="badge badge-light ml-2">{{ resumen_filtro.total_encontrados }} encontrados</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary">{{ resumen_filtro.total_encontrados }}</h4>
+                                <small>Expedientes</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-info">{{ resumen_filtro.orden }}</h4>
+                                <small>Orden</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-warning">{{ resumen_filtro.limite }}</h4>
+                                <small>Límite Original</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <button class="btn btn-sm btn-outline-primary" onclick="scrollToDetails()">
+                                    <i class="fas fa-arrow-down"></i> Ver Resultados
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Información de paginación en resumen de filtros -->
+                    {% if paginacion %}
+                    <div class="alert alert-info mt-3 mb-0">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Paginación activada:</strong> Mostrando 10 expedientes por página (página {{ paginacion.pagina_actual }} de {{ paginacion.total_paginas }}).
+                        Use los controles de navegación al final de los resultados.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Resultados -->
+            {% if expedientes %}
+            <div class="row" id="resultados-expedientes">
+                {% for expediente in expedientes %}
+                <div class="col-12 mb-4">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-folder"></i>
+                                Expediente: {{ expediente.radicado_completo or expediente.radicado_corto }}
+                                {% if expedientes|length > 1 %}
+                                <small class="badge badge-light ml-2">{{ loop.index }} de {{ expedientes|length }}</small>
+                                {% endif %}
+                                <span class="badge badge-warning ml-2">
+                                    {% if expediente.estado_principal and expediente.estado_adicional %}
+                                        {{ expediente.estado_principal }} + {{ expediente.estado_adicional }}
+                                    {% elif expediente.estado_principal %}
+                                        {{ expediente.estado_principal }}
+                                    {% elif expediente.estado_adicional %}
+                                        {{ expediente.estado_adicional }}
+                                    {% else %}
+                                        {{ expediente.estado_actual or 'Sin estado' }}
+                                    {% endif %}
+                                </span>
+                            </h5>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-light" 
+                                        onclick="copiarRadicado('{{ expediente.radicado_completo or expediente.radicado_corto }}')"
+                                        title="Copiar radicado">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                                {% if resumen_filtro %}
+                                <!-- Vista de filtro por estado: solo botón Ver más -->
+                                <button type="button" class="btn btn-sm btn-outline-light" 
+                                        onclick="toggleExpedienteDetails('{{ expediente.id }}')"
+                                        title="Ver detalles completos">
+                                    <i class="fas fa-eye"></i> Ver más
+                                </button>
+                                {% endif %}
+                                <a href="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}?radicado={{ expediente.radicado_completo or expediente.radicado_corto }}" 
+                                   class="btn btn-sm btn-warning" title="Editar este expediente">
+                                    <i class="fas fa-edit"></i> Editar
+                                </a>
+                            </div>
+                        </div>
+                        
+                        {% if resumen_filtro %}
+                        <!-- Vista compacta para filtros por estado -->
+                        <div class="card-body expediente-details expediente-details-hidden" data-expediente-id="{{ expediente.id }}">
+                        {% else %}
+                        <!-- Vista completa para búsqueda por radicado -->
+                        <div class="card-body" data-expediente-id="{{ expediente.id }}">
+                        {% endif %}
+                            <!-- Información básica del expediente -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <h6><strong><i class="fas fa-info-circle"></i> Información General</strong></h6>
+                                    <p><strong>Radicado Completo:</strong> {{ expediente.radicado_completo or 'No disponible' }}</p>
+                                    <p><strong>Radicado Corto:</strong> {{ expediente.radicado_corto or 'No disponible' }}</p>
+                                    <p><strong>Estado Actual:</strong>
+                                        {% if expediente.estado_principal and expediente.estado_adicional %}
+                                            <span class="badge badge-success">{{ expediente.estado_principal }}</span>
+                                            <span class="badge badge-info">{{ expediente.estado_adicional }}</span>
+                                        {% elif expediente.estado_principal %}
+                                            <span class="badge badge-success">{{ expediente.estado_principal }}</span>
+                                        {% elif expediente.estado_adicional %}
+                                            <span class="badge badge-info">{{ expediente.estado_adicional }}</span>
+                                        {% else %}
+                                            <span class="badge badge-secondary">{{ expediente.estado_actual or 'Sin estado' }}</span>
+                                        {% endif %}
+                                    </p>
+                                    <!-- <p><strong>Ubicación:</strong> {{ expediente.ubicacion_actual or 'No especificada' }}</p> -->
+                                    <p><strong>Responsable:</strong> 
+                                        {% if expediente.responsable %}
+                                            <span class="badge badge-success">{{ expediente.responsable }}</span>
+                                        {% else %}
+                                            <span class="badge badge-secondary">No asignado</span>
+                                        {% endif %}
+                                    </p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><strong><i class="fas fa-users"></i> Partes del Proceso</strong></h6>
+                                    <p><strong>Demandante:</strong> {{ expediente.demandante or 'No especificado' }}</p>
+                                    <p><strong>Demandado:</strong> {{ expediente.demandado or 'No especificado' }}</p>
+                                    <p><strong>Tipo de Trámite:</strong> {{ expediente.tipo_tramite or 'No especificado' }}</p>
+                                    <p><strong>Juzgado de Origen:</strong> {{ expediente.juzgado_origen or 'No especificado' }}</p>
+                                    {% if expediente.fecha_resolucion %}
+                                    <p><strong>Fecha de Resolución:</strong> {{ expediente.fecha_resolucion.strftime('%d/%m/%Y') }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Fechas importantes -->
+                            <div class="row mb-3">
+                                <div class="col-12">
+                                    <h6><strong><i class="fas fa-calendar"></i> Fechas Importantes</strong></h6>
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Fecha de Creación/Ingreso:</small><br>
+                                            <strong>{{ expediente.fecha_creacion_registro.strftime('%d/%m/%Y %H:%M') if expediente.fecha_creacion_registro else 'No disponible' }}</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Última Actualización Sistema:</small><br>
+                                            <strong>{{ expediente.fecha_ultima_actualizacion.strftime('%d/%m/%Y %H:%M') if expediente.fecha_ultima_actualizacion else 'No disponible' }}</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Última Actuación Real:</small><br>
+                                            <strong>{{ expediente.fecha_ultima_actuacion_real.strftime('%d/%m/%Y') if expediente.fecha_ultima_actuacion_real else 'No disponible' }}</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Total de Trámites:</small><br>
+                                            <strong>{{ expediente.total_tramites or 0 }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Estadísticas del expediente -->
+                            {% if expediente.estadisticas %}
+                            <div class="row mb-3">
+                                <div class="col-12">
+                                    <h6><strong><i class="fas fa-chart-pie"></i> Estadísticas de Trámites</strong></h6>
+                                    <div class="row">
+                                        <div class="col-md-2">
+                                            <div class="text-center p-2 bg-light rounded">
+                                                <h4 class="text-primary mb-0">{{ expediente.estadisticas.total_tramites_detalle or 0 }}</h4>
+                                                <small>Total</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="text-center p-2 bg-light rounded">
+                                                <h4 class="text-success mb-0">{{ expediente.estadisticas.tramites_finalizados or 0 }}</h4>
+                                                <small>Finalizados</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="text-center p-2 bg-light rounded">
+                                                <h4 class="text-warning mb-0">{{ expediente.estadisticas.tramites_pendientes or 0 }}</h4>
+                                                <small>Pendientes</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <div class="text-center p-2 bg-light rounded">
+                                                <h4 class="text-secondary mb-0">{{ expediente.estadisticas.tramites_sin_tramite or 0 }}</h4>
+                                                <small>Sin Trámite</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="text-center p-2 bg-light rounded">
+                                                {% set total = expediente.estadisticas.total_tramites_detalle or 0 %}
+                                                {% set finalizados = expediente.estadisticas.tramites_finalizados or 0 %}
+                                                {% if total > 0 %}
+                                                    <h4 class="text-info mb-0">{{ "%.1f"|format((finalizados / total) * 100) }}%</h4>
+                                                {% else %}
+                                                    <h4 class="text-info mb-0">0%</h4>
+                                                {% endif %}
+                                                <small>Porcentaje Completado</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Ingresos del expediente -->
+                            {% if expediente.ingresos %}
+                            <div class="mb-3">
+                                <h6><strong><i class="fas fa-calendar-plus"></i> Historial de Ingresos ({{
+                                        expediente.ingresos|length }})</strong></h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>Fecha</th>
+                                                <th>Solicitud</th>
+                                                <th>Observaciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for ingreso in expediente.ingresos %}
+                                            <tr>
+                                                <td>{{ ingreso.fecha_ingreso.strftime('%d/%m/%Y') if
+                                                    ingreso.fecha_ingreso else 'No disponible' }}</td>
+                                                <td>{{ ingreso.motivo_ingreso or 'Sin motivo' }}</td>
+                                                <td>
+                                                    {% if ingreso.observaciones_ingreso %}
+                                                        {% set obs_text = ingreso.observaciones_ingreso %}
+                                                        {% if obs_text|length > 100 %}
+                                                            <div class="observaciones-ingreso-container">
+                                                                <small class="observaciones-ingreso-preview">{{ obs_text[:100] }}...</small>
+                                                                <div class="observaciones-ingreso-full" style="display: none;">
+                                                                    <small>{{ obs_text }}</small>
+                                                                </div>
+                                                                <br>
+                                                                <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-ingreso" 
+                                                                        onclick="toggleObservacionesIngresoText(this)">
+                                                                    <i class="fas fa-expand"></i> Ver completo
+                                                                </button>
+                                                            </div>
+                                                        {% else %}
+                                                            <small>{{ obs_text }}</small>
+                                                        {% endif %}
+                                                    {% else %}
+                                                        <span class="text-muted">Sin observaciones</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Estados del expediente -->
+                            {% if expediente.estados %}
+                            <div class="mb-3">
+                                <h6><strong><i class="fas fa-history"></i> Historial de Estados ({{
+                                        expediente.estados|length }})</strong></h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>Fecha</th>
+                                                <th>Estado</th>
+                                                <th>Observaciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for estado in expediente.estados %}
+                                            <tr>
+                                                <td>{{ estado.fecha_estado.strftime('%d/%m/%Y') if estado.fecha_estado
+                                                    else 'No disponible' }}</td>
+                                                <td>
+                                                    <span class="badge badge-secondary">{{ estado.estado_registrado or
+                                                        'Sin estado' }}</span>
+                                                </td>
+                                                <td>{{ estado.observaciones_estado or 'Sin observaciones' }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Trámites detallados -->
+                            {% if expediente.tramites_detallados %}
+                            <div class="mb-3">
+                                <h6><strong><i class="fas fa-list-alt"></i> Trámites Detallados ({{ expediente.tramites_detallados|length }}{% if expediente.estadisticas.total_tramites_detalle > expediente.tramites_detallados|length %} de {{ expediente.estadisticas.total_tramites_detalle }}{% endif %})</strong></h6>
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>Fecha Actuación</th>
+                                                <th>Estado Trámite</th>
+                                                <th>Tipo Trámite</th>
+                                                <th>Fecha Notificación</th>
+                                                <th>Auto/Resolución</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for tramite in expediente.tramites_detallados %}
+                                            <tr>
+                                                <td>{{ tramite.fecha_actuacion.strftime('%d/%m/%Y') if tramite.fecha_actuacion else 'No disponible' }}</td>
+                                                <td>
+                                                    {% if tramite.estado_tramite %}
+                                                        {% if 'FINALIZADO' in tramite.estado_tramite.upper() or 'COMPLETADO' in tramite.estado_tramite.upper() %}
+                                                            <span class="badge badge-success">{{ tramite.estado_tramite }}</span>
+                                                        {% elif 'PENDIENTE' in tramite.estado_tramite.upper() or 'PROCESO' in tramite.estado_tramite.upper() %}
+                                                            <span class="badge badge-warning">{{ tramite.estado_tramite }}</span>
+                                                        {% else %}
+                                                            <span class="badge badge-secondary">{{ tramite.estado_tramite }}</span>
+                                                        {% endif %}
+                                                    {% else %}
+                                                        <span class="text-muted">Sin estado</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>{{ tramite.tramite_homologado or 'No especificado' }}</td>
+                                                <td>{{ tramite.fecha_estado_notificacion.strftime('%d/%m/%Y') if tramite.fecha_estado_notificacion else 'No disponible' }}</td>
+                                                <td>
+                                                    {% if tramite.auto %}
+                                                        {% set auto_text = tramite.auto %}
+                                                        {% if auto_text|length > 100 %}
+                                                            <div class="auto-text-container">
+                                                                <small class="auto-preview">{{ auto_text[:100] }}...</small>
+                                                                <div class="auto-full" style="display: none;">
+                                                                    <small>{{ auto_text }}</small>
+                                                                </div>
+                                                                <br>
+                                                                <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-auto" 
+                                                                        onclick="toggleAutoText(this)">
+                                                                    <i class="fas fa-expand"></i> Ver completo
+                                                                </button>
+                                                            </div>
+                                                        {% else %}
+                                                            <small>{{ auto_text }}</small>
+                                                        {% endif %}
+                                                    {% else %}
+                                                        <span class="text-muted">Sin auto</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% if expediente.estadisticas.total_tramites_detalle > expediente.tramites_detallados|length %}
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle"></i> 
+                                    Mostrando los {{ expediente.tramites_detallados|length }} trámites más recientes de {{ expediente.estadisticas.total_tramites_detalle }} totales.
+                                </small>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+
+                            <!-- Observaciones adicionales -->
+                            {% if expediente.observaciones %}
+                            <div class="mb-3">
+                                <h6><strong><i class="fas fa-sticky-note"></i> Observaciones Adicionales</strong></h6>
+                                <div class="alert alert-light">
+                                    <small>{{ expediente.observaciones }}</small>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Información adicional -->
+                            <div class="row mt-3 pt-3 border-top">
+                                <div class="col-md-6">
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock"></i>
+                                        <strong>Última actualización:</strong> {{ expediente.fecha_ultima_actualizacion.strftime('%d/%m/%Y %H:%M') if expediente.fecha_ultima_actualizacion else 'No disponible' }}
+                                    </small>
+                                </div>
+                                <div class="col-md-6 text-right">
+                                    <small class="text-muted">
+                                        <i class="fas fa-database"></i>
+                                        <strong>ID del expediente:</strong> {{ expediente.id }}
+                                    </small>
+                                </div>
+                            </div>
+
+                            <!-- Resumen rápido -->
+                            <div class="row mt-2">
+                                <div class="col-12">
+                                    <div class="alert alert-info alert-sm">
+                                        <i class="fas fa-info-circle"></i>
+                                        <strong>Resumen:</strong>
+                                        {{ expediente.ingresos|length }} ingreso(s), 
+                                        {{ expediente.estados|length }} estado(s) registrado(s){% if expediente.tramites_detallados %}, 
+                                        {{ expediente.tramites_detallados|length }} trámite(s) detallado(s){% endif %}
+                                        {% if expediente.estadisticas.total_tramites_detalle %}
+                                        - Total de {{ expediente.estadisticas.total_tramites_detalle }} trámite(s) en el sistema
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <!-- Paginación -->
+            {% if paginacion and paginacion.total_paginas > 1 %}
+            <div class="row mt-4">
+                <div class="col-12">
+                    <nav aria-label="Paginación de expedientes">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <small class="text-muted">
+                                    Mostrando {{ paginacion.inicio_item }} - {{ paginacion.fin_item }} de {{ paginacion.total_items }} expedientes
+                                </small>
+                            </div>
+                            <div>
+                                <small class="text-muted">
+                                    Página {{ paginacion.pagina_actual }} de {{ paginacion.total_paginas }}
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <ul class="pagination justify-content-center">
+                            <!-- Botón Anterior -->
+                            <li class="page-item {{ 'disabled' if not paginacion.tiene_anterior }}">
+                                {% if paginacion.tiene_anterior %}
+                                    <a class="page-link" href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_anterior }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}" aria-label="Anterior">
+                                        <span aria-hidden="true">&laquo; Anterior</span>
+                                    </a>
+                                {% else %}
+                                    <span class="page-link">&laquo; Anterior</span>
+                                {% endif %}
+                            </li>
+                            
+                            <!-- Números de página -->
+                            {% for num_pagina in paginacion.paginas_mostrar %}
+                                <li class="page-item {{ 'active' if num_pagina == paginacion.pagina_actual }}">
+                                    {% if num_pagina == paginacion.pagina_actual %}
+                                        <span class="page-link">{{ num_pagina }}</span>
+                                    {% else %}
+                                        <a class="page-link" href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ num_pagina }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}">{{ num_pagina }}</a>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                            
+                            <!-- Botón Siguiente -->
+                            <li class="page-item {{ 'disabled' if not paginacion.tiene_siguiente }}">
+                                {% if paginacion.tiene_siguiente %}
+                                    <a class="page-link" href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_siguiente }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}" aria-label="Siguiente">
+                                        <span aria-hidden="true">Siguiente &raquo;</span>
+                                    </a>
+                                {% else %}
+                                    <span class="page-link">Siguiente &raquo;</span>
+                                {% endif %}
+                            </li>
+                        </ul>
+                        
+                        <!-- Navegación rápida -->
+                        {% if paginacion.total_paginas > 10 %}
+                        <div class="text-center mt-3">
+                            <div class="btn-group" role="group" aria-label="Navegación rápida">
+                                {% if paginacion.pagina_actual > 5 %}
+                                    <a href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina=1{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}" 
+                                       class="btn btn-sm btn-outline-primary">Primera</a>
+                                {% endif %}
+                                
+                                {% if paginacion.pagina_actual < paginacion.total_paginas - 4 %}
+                                    <a href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.total_paginas }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}" 
+                                       class="btn btn-sm btn-outline-primary">Última</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </nav>
+                </div>
+            </div>
+            {% endif %}
+            {% elif radicado_buscar or estado_filtro %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                {% if radicado_buscar %}
+                No se encontraron expedientes con el radicado: <strong>{{ radicado_buscar }}</strong>
+                {% elif estado_filtro %}
+                No se encontraron expedientes con el estado: <strong>{{ estado_filtro }}</strong>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Indicador para JavaScript si se debe activar la pestaña de filtros -->
+{% if estado_filtro %}
+<div data-activar-filtros="true" style="display: none;"></div>
+{% endif %}
+
+<!-- JavaScript consolidado en base.js -->
+
+{% endblock %}

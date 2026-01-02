@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+
+{% block title %}Subir Expedientes{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-upload"></i> Subir Expedientes
+            </h2>
+            
+            <!-- Mensajes de flash -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'warning' }} alert-dismissible fade show" role="alert">
+                            <i class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' }}"></i>
+                            {{ message }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <!-- Información sobre roles -->
+            <div class="alert alert-info mb-4">
+                <h6><i class="fas fa-info-circle"></i> Información sobre Asignación por Roles</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong><i class="fas fa-pen text-success"></i> ESCRIBIENTE:</strong>
+                        <small class="text-muted d-block">Encargado de redacción, documentación y actualización de expedientes</small>
+                    </div>
+                    <div class="col-md-6">
+                        <strong><i class="fas fa-gavel text-info"></i> SUSTANCIADOR:</strong>
+                        <small class="text-muted d-block">Encargado de revisión, análisis y sustanciación de casos</small>
+                    </div>
+                </div>
+                <hr class="my-2">
+                <small class="text-muted">
+                    <i class="fas fa-lightbulb"></i> 
+                    <strong>Ventaja:</strong> Al asignar por rol, cualquier usuario con ese rol puede trabajar el expediente, 
+                    proporcionando mayor flexibilidad en la gestión de casos.
+                </small>
+            </div>
+            
+            <!-- Pestañas simples -->
+            <div class="tab">
+                <button class="tablinks" onclick="openTab(event, 'Manual')">
+                    <i class="fas fa-edit"></i> Ingreso Manual
+                </button>
+                <button class="tablinks" onclick="openTab(event, 'Excel')">
+                    <i class="fas fa-file-excel"></i> Subir desde Excel
+                </button>
+            </div>
+            
+            <!-- Contenido: Ingreso Manual -->
+            <div id="Manual" class="tabcontent">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-edit"></i> Ingreso Manual de Expediente
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text mb-4">Ingresa un expediente individual completando el formulario:</p>
+                        
+                        <form method="POST" action="{{ url_for('idvistasubirexpediente.vista_subirexpediente') }}">
+                        <!-- 🔒 CSRF Protection -->
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <div class="form-group">
+                                <label for="radicado_completo">Radicado Completo:</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="radicado_completo" 
+                                       name="radicado_completo"
+                                       placeholder="Ej: 08001418902020220003100">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="radicado_corto">Radicado Corto:</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="radicado_corto" 
+                                       name="radicado_corto"
+                                       placeholder="Ej: 2022-00031">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="demandante">Demandante:</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="demandante" 
+                                       name="demandante"
+                                       placeholder="Nombre del demandante">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="demandado">Demandado:</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="demandado" 
+                                       name="demandado"
+                                       placeholder="Nombre del demandado">
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="estado_actual">Estado Actual:</label>
+                                        <select class="form-control" id="estado_actual" name="estado_actual">
+                                            <option value="">Seleccionar estado</option>
+                                            <option value="EN_PROCESO">En Proceso</option>
+                                            <option value="COMPLETADO">Completado</option>
+                                            <option value="PROCESADO_AZURE">Procesado Azure</option>
+                                            <option value="PENDIENTE">Pendiente</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="tipo_proceso">Tipo de Proceso:</label>
+                                        <input type="text" 
+                                               class="form-control" 
+                                               id="tipo_proceso" 
+                                               name="tipo_proceso"
+                                               placeholder="Tipo de proceso">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="responsable">Responsable (Rol):</label>
+                                <select class="form-control" id="responsable" name="responsable">
+                                    <option value="">Seleccionar rol</option>
+                                    {% for rol in roles %}
+                                        <option value="{{ rol.nombre_rol }}">
+                                            {% if rol.nombre_rol == 'ESCRIBIENTE' %}
+                                                <i class="fas fa-pen"></i> {{ rol.nombre_rol }}
+                                            {% elif rol.nombre_rol == 'SUSTANCIADOR' %}
+                                                <i class="fas fa-gavel"></i> {{ rol.nombre_rol }}
+                                            {% else %}
+                                                {{ rol.nombre_rol }}
+                                            {% endif %}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-info-circle"></i> 
+                                    Asignar por rol permite que cualquier usuario con ese rol pueda trabajar el expediente
+                                </small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="observaciones">Observaciones:</label>
+                                <textarea class="form-control" 
+                                          id="observaciones" 
+                                          name="observaciones" 
+                                          rows="2"
+                                          placeholder="Observaciones generales del expediente"></textarea>
+                            </div>
+                            
+                            <!-- Sección de Ingreso -->
+                            <hr>
+                            <h6 class="text-primary"><i class="fas fa-calendar-plus"></i> Información de Ingreso</h6>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="fecha_ingreso">Fecha de Ingreso:</label>
+                                        <input type="date" 
+                                               class="form-control" 
+                                               id="fecha_ingreso" 
+                                               name="fecha_ingreso">
+                                        <small class="form-text text-muted">Si no se especifica, se usará la fecha actual</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label for="motivo_ingreso">Motivo/Solicitud:</label>
+                                        <input type="text" 
+                                               class="form-control" 
+                                               id="motivo_ingreso" 
+                                               name="motivo_ingreso"
+                                               placeholder="Motivo del ingreso o solicitud">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="observaciones_ingreso">Observaciones del Ingreso:</label>
+                                <textarea class="form-control" 
+                                          id="observaciones_ingreso" 
+                                          name="observaciones_ingreso" 
+                                          rows="2"
+                                          placeholder="Observaciones específicas del ingreso"></textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-save"></i> Guardar Expediente
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Contenido: Subir desde Excel -->
+            <div id="Excel" class="tabcontent">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-file-excel"></i> Subir Expedientes desde Excel
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text mb-4">Sube un archivo Excel con múltiples expedientes. El archivo debe usar la hoja <strong>"Resumen por Expediente"</strong> y contener las siguientes columnas:</p>
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <h6 class="text-primary"><i class="fas fa-list"></i> Columnas Requeridas:</h6>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item"><strong>RadicadoUnicoLimpio</strong> o <strong>RadicadoUnicoCompleto</strong></li>
+                                    <li class="list-group-item"><strong>DEMANDANTE_HOMOLOGADO</strong></li>
+                                    <li class="list-group-item"><strong>DEMANDADO_HOMOLOGADO</strong></li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-secondary"><i class="fas fa-list"></i> Columnas Opcionales:</h6>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item">ESTADO_EXPEDIENTE</li>
+                                    <li class="list-group-item">UBICACION</li>
+                                    <li class="list-group-item">TRAMITES</li>
+                                    <li class="list-group-item">JuzgadoOrigen</li>
+                                    <li class="list-group-item">RESPONSABLE <small class="text-muted">(usar: ESCRIBIENTE o SUSTANCIADOR)</small></li>
+                                    <li class="list-group-item">OBSERVACIONES</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <form method="POST" enctype="multipart/form-data" action="{{ url_for('idvistasubirexpediente.vista_subirexpediente') }}">
+                        <!-- 🔒 CSRF Protection -->
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <div class="form-group">
+                                <label for="archivo_excel" class="font-weight-bold">
+                                    <i class="fas fa-file-upload"></i> Seleccionar archivo Excel:
+                                </label>
+                                <input type="file" 
+                                       class="form-control-file" 
+                                       id="archivo_excel" 
+                                       name="archivo_excel" 
+                                       accept=".xlsx,.xls"
+                                       required>
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-info-circle"></i> Formatos permitidos: .xlsx, .xls (máximo 10MB)
+                                </small>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <i class="fas fa-lightbulb"></i>
+                                <strong>Importante:</strong> El sistema utilizará automáticamente la hoja <strong>"Resumen por Expediente"</strong> del archivo Excel. Esta hoja contiene los datos únicos sin duplicados (aproximadamente 14,300 expedientes únicos).
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-upload"></i> Subir Archivo Excel
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Información adicional -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0">
+                                <i class="fas fa-info-circle"></i> Información Importante
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6><strong>Formato de Radicados:</strong></h6>
+                                    <ul class="small">
+                                        <li><strong>Radicado Completo:</strong> Formato largo (ej: 08001418902020220003100)</li>
+                                        <li><strong>Radicado Corto:</strong> Formato año-número (ej: 2022-00031)</li>
+                                        <li>Debe proporcionar al menos uno de los dos formatos</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><strong>Validaciones:</strong></h6>
+                                    <ul class="small">
+                                        <li>Los radicados duplicados serán detectados automáticamente</li>
+                                        <li>Los campos obligatorios están marcados</li>
+                                        <li>Los archivos Excel deben tener las columnas correctas</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Incluir CSS personalizado -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subirexpediente.css') }}">
+
+<!-- Script personalizado para pestañas -->
+<script src="{{ url_for('static', filename='js/subirexpediente.js') }}"></script>
+{% endblock %}
