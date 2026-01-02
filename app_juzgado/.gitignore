@@ -58,3 +58,11 @@ verificaciones/
 Archivos/
 archivos/
 
+link_temporal/
+
+logs/
+
+proceso_excel.py
+
+cargar_datos_limpios.py
+cargar_datos_limpios_corregido.py

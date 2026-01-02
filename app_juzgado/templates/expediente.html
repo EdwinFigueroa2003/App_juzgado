@@ -88,10 +88,10 @@
                                                 <!-- Estados Principales -->
                                                 <optgroup label="Estados Principales">
                                                     <option value="ACTIVO" {{ 'selected' if estado_filtro=='ACTIVO' }}>
-                                                        Activos (últimos 6 meses)
+                                                        Activos <!-- (últimos 6 meses) -->
                                                     </option>
                                                     <option value="INACTIVO" {{ 'selected' if estado_filtro=='INACTIVO' }}>
-                                                        Inactivos (más de 6 meses)
+                                                        Inactivos <!-- (más de 6 meses) -->
                                                     </option>
                                                 </optgroup>
                                                 
@@ -102,6 +102,9 @@
                                                     </option>
                                                     <option value="SALIO" {{ 'selected' if estado_filtro=='SALIO' }}>
                                                         Salieron (en secretaría)
+                                                    </option>
+                                                    <option value="SIN_FECHA" {{ 'selected' if estado_filtro=='SIN_FECHA' }}>
+                                                        Sin Fecha (con radicado pero sin fechas)
                                                     </option>
                                                 </optgroup>
                                                 
@@ -155,6 +158,68 @@
                                                 <option value="100" {{ 'selected' if limite=='100' }}>100</option>
                                                 <option value="200" {{ 'selected' if limite=='200' }}>200</option>
                                                 <option value="500" {{ 'selected' if limite=='500' }}>500</option>
+                                                <option value="1000" {{ 'selected' if limite=='1000' }}>1000</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Filtros de fecha -->
+                                <div class="row mb-3">
+                                    <div class="col-md-3">
+                                        <div class="form-group">
+                                            <label for="fecha_desde" class="form-label">Fecha Desde:</label>
+                                            <input type="date" class="form-control" id="fecha_desde" name="fecha_desde" 
+                                                   value="{{ fecha_desde or '' }}">
+                                            <small class="form-text text-muted">Fecha mínima de ingreso/estado</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="form-group">
+                                            <label for="fecha_hasta" class="form-label">Fecha Hasta:</label>
+                                            <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" 
+                                                   value="{{ fecha_hasta or '' }}">
+                                            <small class="form-text text-muted">Fecha máxima de ingreso/estado</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="form-group">
+                                            <label for="tipo_fecha" class="form-label">Filtrar por:</label>
+                                            <select class="form-select" id="tipo_fecha" name="tipo_fecha">
+                                                <option value="ingreso" {{ 'selected' if tipo_fecha=='ingreso' }}>Fecha de Ingreso</option>
+                                                <option value="estado" {{ 'selected' if tipo_fecha=='estado' }}>Fecha de Estado</option>
+                                                <option value="ambas" {{ 'selected' if tipo_fecha=='ambas' }}>Cualquier Fecha</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="form-group">
+                                            <label class="form-label">&nbsp;</label>
+                                            <button type="button" class="btn btn-outline-secondary form-control" 
+                                                    onclick="limpiarFiltrosFecha()">
+                                                <i class="fas fa-eraser"></i> Limpiar Fechas
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Botones de fecha rápida -->
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <label class="form-label">Filtros rápidos:</label>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-outline-info btn-sm" 
+                                                    onclick="establecerFechaRapida(7)">Últimos 7 días</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" 
+                                                    onclick="establecerFechaRapida(30)">Último mes</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" 
+                                                    onclick="establecerFechaRapida(90)">Últimos 3 meses</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" 
+                                                    onclick="establecerFechaRapida(180)">Últimos 6 meses</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" 
+                                                    onclick="establecerFechaRapida(365)">Último año</button>
+                                        </div>
+                                    </div>
                                                 <option value="1000" {{ 'selected' if limite=='1000' }}>1000</option>
                                                 <option value="2000" {{ 'selected' if limite=='2000' }}>2000</option>
                                             </select>
@@ -765,5 +830,26 @@
 {% endif %}
 
 <!-- JavaScript consolidado en base.js -->
+
+<script>
+function limpiarFiltrosFecha() {
+    document.getElementById('fecha_desde').value = '';
+    document.getElementById('fecha_hasta').value = '';
+    document.getElementById('tipo_fecha').value = 'ingreso';
+}
+
+// Función para establecer fechas rápidas
+function establecerFechaRapida(dias) {
+    const hoy = new Date();
+    const fechaHasta = hoy.toISOString().split('T')[0];
+    
+    const fechaDesde = new Date();
+    fechaDesde.setDate(hoy.getDate() - dias);
+    const fechaDesdeStr = fechaDesde.toISOString().split('T')[0];
+    
+    document.getElementById('fecha_desde').value = fechaDesdeStr;
+    document.getElementById('fecha_hasta').value = fechaHasta;
+}
+</script>
 
 {% endblock %}
