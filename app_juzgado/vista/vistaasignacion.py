@@ -118,7 +118,7 @@ def obtener_expedientes_por_usuario(usuario_id, rol_usuario):
             SELECT 
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
                 e.estado_actual, e.estado_principal, e.estado_adicional, e.ubicacion_actual, 
-                e.tipo_tramite, e.juzgado_origen, e.responsable, e.fecha_ultima_actualizacion,
+                e.tipo_solicitud, e.juzgado_origen, e.responsable, e.fecha_ultima_actualizacion,
                 e.fecha_ultima_actuacion_real,
                 COUNT(i.id) as total_ingresos,
                 COUNT(s.id) as total_estados,
@@ -130,7 +130,7 @@ def obtener_expedientes_por_usuario(usuario_id, rol_usuario):
             WHERE e.responsable = %s
             GROUP BY e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
                      e.estado_actual, e.estado_principal, e.estado_adicional, e.ubicacion_actual, 
-                     e.tipo_tramite, e.juzgado_origen, e.responsable, e.fecha_ultima_actualizacion,
+                     e.tipo_solicitud, e.juzgado_origen, e.responsable, e.fecha_ultima_actualizacion,
                      e.fecha_ultima_actuacion_real
             ORDER BY 
                 CASE 
@@ -160,7 +160,7 @@ def obtener_expedientes_por_usuario(usuario_id, rol_usuario):
                 'estado_principal': row[6],
                 'estado_adicional': row[7],
                 'ubicacion_actual': row[8],
-                'tipo_tramite': row[9],
+                'tipo_solicitud': row[9],
                 'juzgado_origen': row[10],
                 'responsable': row[11],
                 'fecha_ultima_actualizacion': row[12],

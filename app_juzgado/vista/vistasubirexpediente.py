@@ -101,7 +101,7 @@ def procesar_formulario_manual():
         demandado = request.form.get('demandado', '').strip()
         estado_actual = request.form.get('estado_actual', '').strip()
         ubicacion = request.form.get('ubicacion', '').strip()
-        tipo_tramite = request.form.get('tipo_tramite', '').strip()
+        tipo_solicitud = request.form.get('tipo_solicitud', '').strip()
         juzgado_origen = request.form.get('juzgado_origen', '').strip()
         responsable = request.form.get('responsable', '').strip()
         observaciones = request.form.get('observaciones', '').strip()
@@ -125,7 +125,7 @@ def procesar_formulario_manual():
             query = """
                 INSERT INTO expedientes 
                 (radicado_completo, radicado_corto, demandante, demandado, 
-                 estado_actual, ubicacion_actual, tipo_tramite, juzgado_origen, 
+                 estado_actual, ubicacion_actual, tipo_solicitud, juzgado_origen, 
                  responsable, observaciones)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
@@ -138,7 +138,7 @@ def procesar_formulario_manual():
                 demandado or None,
                 estado_actual or None,
                 ubicacion or None,
-                tipo_tramite or None,
+                tipo_solicitud or None,
                 juzgado_origen or None,
                 responsable or None,
                 observaciones or None
@@ -223,7 +223,7 @@ def procesar_excel_expedientes(filepath):
                 query = """
                     INSERT INTO expedientes 
                     (radicado_completo, radicado_corto, demandante, demandado, 
-                     estado_actual, ubicacion_actual, tipo_tramite, juzgado_origen, 
+                     estado_actual, ubicacion_actual, tipo_solicitud, juzgado_origen, 
                      responsable, observaciones)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """

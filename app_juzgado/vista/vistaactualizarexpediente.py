@@ -34,34 +34,75 @@ def obtener_roles_activos():
         print(f"Error obteniendo roles: {e}")
         return []
 
+def _detectar_columna_tipo(cursor):
+    """Retorna el nombre de la columna existente entre 'tipo_solicitud' y 'tipo_tramite', o None"""
+    try:
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'expedientes' AND column_name IN ('tipo_solicitud', 'tipo_tramite')
+        """)
+        cols = [r[0] for r in cursor.fetchall()]
+        if 'tipo_solicitud' in cols:
+            return 'tipo_solicitud'
+        if 'tipo_tramite' in cols:
+            return 'tipo_tramite'
+        return None
+    except Exception:
+        return None
+
+def _fragmento_tipo_select(cursor, alias='e'):
+    """Devuelve (tipo_expr, tipo_select) donde tipo_expr es la expresión para GROUP/WHERE y tipo_select es la parte SELECT con alias.
+    Ejemplos: ('e.tipo_solicitud', 'e.tipo_solicitud AS tipo_solicitud') o
+    ('COALESCE(e.tipo_solicitud, e.tipo_tramite)', 'COALESCE(e.tipo_solicitud, e.tipo_tramite) AS tipo_solicitud')
+    Si no existe ninguna columna devuelve ("''", "'' AS tipo_solicitud")."""
+    col = _detectar_columna_tipo(cursor)
+    if col == 'tipo_solicitud':
+        expr = f"{alias}.tipo_solicitud"
+        return expr, f"{expr} AS tipo_solicitud"
+    if col == 'tipo_tramite':
+        expr = f"{alias}.tipo_tramite"
+        return expr, f"{expr} AS tipo_solicitud"
+    return "''", "'' AS tipo_solicitud"
+
 def buscar_expediente_por_radicado(radicado):
     """Busca un expediente por radicado y devuelve sus datos completos"""
     try:
         conn = obtener_conexion()
         cursor = conn.cursor()
         
+        # Limpiar el radicado: eliminar espacios
+        radicado_limpio = radicado.strip() if radicado else ''
+        
         # Determinar si es radicado completo o corto
-        es_radicado_completo = len(radicado) > 15
+        es_radicado_completo = len(radicado_limpio) > 15
         
         if es_radicado_completo:
-            cursor.execute("""
+            # Búsqueda mejorada para radicado completo
+            tipo_expr, tipo_select = _fragmento_tipo_select(cursor, 'e')
+            query = f"""
                 SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado_actual, estado_principal, estado_adicional, ubicacion_actual, 
-                       tipo_tramite, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                       estado_actual, estado_principal, estado_adicional, ubicacion_actual,
+                       {tipo_select}, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
                        fecha_ultima_actuacion_real
                 FROM expedientes 
                 WHERE radicado_completo = %s
-            """, (radicado,))
+                   OR REPLACE(radicado_completo, ' ', '') = %s
+                   OR radicado_completo LIKE %s
+                LIMIT 1
+            """
+            cursor.execute(query, (radicado_limpio, radicado_limpio.replace(' ', ''), f'%{radicado_limpio}%'))
         else:
-            cursor.execute("""
+            tipo_expr, tipo_select = _fragmento_tipo_select(cursor, 'e')
+            query = f"""
                 SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado_actual, estado_principal, estado_adicional, ubicacion_actual, 
-                       tipo_tramite, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                       estado_actual, estado_principal, estado_adicional, ubicacion_actual,
+                       {tipo_select}, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
                        fecha_ultima_actuacion_real
                 FROM expedientes 
                 WHERE radicado_corto = %s
                 LIMIT 1
-            """, (radicado,))
+            """
+            cursor.execute(query, (radicado_limpio,))
         
         result = cursor.fetchone()
         
@@ -76,7 +117,7 @@ def buscar_expediente_por_radicado(radicado):
                 'estado_principal': result[6],
                 'estado_adicional': result[7],
                 'ubicacion_actual': result[8],
-                'tipo_tramite': result[9],
+                'tipo_solicitud': result[9],
                 'juzgado_origen': result[10],
                 'responsable': result[11],
                 'observaciones': result[12],
@@ -123,7 +164,7 @@ def buscar_expediente_por_id(expediente_id):
         cursor.execute("""
             SELECT id, radicado_completo, radicado_corto, demandante, demandado,
                    estado_actual, estado_principal, estado_adicional, ubicacion_actual, 
-                   tipo_tramite, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                   , juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
                    fecha_ultima_actuacion_real
             FROM expedientes 
             WHERE id = %s
@@ -142,7 +183,7 @@ def buscar_expediente_por_id(expediente_id):
                 'estado_principal': result[6],
                 'estado_adicional': result[7],
                 'ubicacion_actual': result[8],
-                'tipo_tramite': result[9],
+                '': result[9],
                 'juzgado_origen': result[10],
                 'responsable': result[11],
                 'observaciones': result[12],
@@ -239,28 +280,34 @@ def buscar_expediente_para_actualizar():
         conn = obtener_conexion()
         cursor = conn.cursor()
         
+        # Limpiar el radicado: eliminar espacios
+        radicado_limpio = radicado.strip()
+        
         # Determinar si es radicado completo o corto
-        es_radicado_completo = len(radicado) > 15
+        es_radicado_completo = len(radicado_limpio) > 15
         
         if es_radicado_completo:
+            # Búsqueda mejorada para radicado completo
             cursor.execute("""
                 SELECT id, radicado_completo, radicado_corto, demandante, demandado,
                        estado_actual, estado_principal, estado_adicional, ubicacion_actual, 
-                       tipo_tramite, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                       tipo_solicitud, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
                        fecha_ultima_actuacion_real
                 FROM expedientes 
                 WHERE radicado_completo = %s
-            """, (radicado,))
+                   OR REPLACE(radicado_completo, ' ', '') = %s
+                   OR radicado_completo LIKE %s
+            """, (radicado_limpio, radicado_limpio.replace(' ', ''), f'%{radicado_limpio}%'))
         else:
             cursor.execute("""
                 SELECT id, radicado_completo, radicado_corto, demandante, demandado,
                        estado_actual, estado_principal, estado_adicional, ubicacion_actual, 
-                       tipo_tramite, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                       tipo_solicitud, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
                        fecha_ultima_actuacion_real
                 FROM expedientes 
                 WHERE radicado_corto = %s
                 LIMIT 1
-            """, (radicado,))
+            """, (radicado_limpio,))
         
         result = cursor.fetchone()
         
@@ -275,7 +322,7 @@ def buscar_expediente_para_actualizar():
                 'estado_principal': result[6],
                 'estado_adicional': result[7],
                 'ubicacion_actual': result[8],
-                'tipo_tramite': result[9],
+                'tipo_solicitud': result[9],
                 'juzgado_origen': result[10],
                 'responsable': result[11],
                 'observaciones': result[12],
@@ -331,7 +378,7 @@ def actualizar_expediente():
         demandado = request.form.get('demandado', '').strip()
         estado_actual = request.form.get('estado_actual', '').strip()
         ubicacion_actual = request.form.get('ubicacion_actual', '').strip()
-        tipo_tramite = request.form.get('tipo_tramite', '').strip()
+        tipo_solicitud = request.form.get('tipo_solicitud', '').strip()
         juzgado_origen = request.form.get('juzgado_origen', '').strip()
         rol_responsable = request.form.get('rol_responsable', '').strip()  # Cambio: ahora es rol
         observaciones = request.form.get('observaciones', '').strip()
@@ -342,12 +389,12 @@ def actualizar_expediente():
         cursor.execute("""
             UPDATE expedientes 
             SET demandante = %s, demandado = %s, estado_actual = %s,
-                ubicacion_actual = %s, tipo_tramite = %s, juzgado_origen = %s,
+                ubicacion_actual = %s, tipo_solicitud = %s, juzgado_origen = %s,
                 responsable = %s, observaciones = %s,
                 fecha_ultima_actualizacion = CURRENT_TIMESTAMP
             WHERE id = %s
         """, (demandante, demandado, estado_actual, ubicacion_actual, 
-              tipo_tramite, juzgado_origen, rol_responsable, observaciones, expediente_id))
+              tipo_solicitud, juzgado_origen, rol_responsable, observaciones, expediente_id))
         
         conn.commit()
         cursor.close()
@@ -623,15 +670,19 @@ def asignacion_masiva():
             """
             cursor.execute(query, (rol_asignar,))
             
-        elif criterio == 'tipo_tramite':
+        elif criterio == 'tipo_solicitud':
             if not valor_criterio:
                 flash('Debe especificar un tipo de trámite para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            
-            query = """
+            # Determinar la columna real a usar (tipo_solicitud o tipo_tramite)
+            tipo_col = _detectar_columna_tipo(cursor)
+            if not tipo_col:
+                flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'error')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            query = f"""
                 UPDATE expedientes 
                 SET responsable = %s, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
-                WHERE tipo_tramite ILIKE %s
+                WHERE {tipo_col} ILIKE %s
             """
             cursor.execute(query, (rol_asignar, f'%{valor_criterio}%'))
             
@@ -697,15 +748,18 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
             flash('Los expedientes sin responsable ya no tienen responsable asignado', 'warning')
             return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
-        elif criterio == 'tipo_tramite':
+        elif criterio == 'tipo_solicitud':
             if not valor_criterio:
                 flash('Debe especificar un tipo de trámite para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            
-            query = """
+            tipo_col = _detectar_columna_tipo(cursor)
+            if not tipo_col:
+                flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'error')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            query = f"""
                 UPDATE expedientes 
                 SET responsable = NULL, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
-                WHERE tipo_tramite ILIKE %s AND responsable IS NOT NULL
+                WHERE {tipo_col} ILIKE %s AND responsable IS NOT NULL
             """
             cursor.execute(query, (f'%{valor_criterio}%',))
             expedientes_actualizados = cursor.rowcount
@@ -765,12 +819,15 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
             cursor.execute("SELECT id FROM expedientes WHERE responsable IS NULL OR responsable = ''")
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
-        elif criterio == 'tipo_tramite':
+        elif criterio == 'tipo_solicitud':
             if not valor_criterio:
                 flash('Debe especificar un tipo de trámite para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            
-            cursor.execute("SELECT id FROM expedientes WHERE tipo_tramite ILIKE %s", (f'%{valor_criterio}%',))
+            tipo_col = _detectar_columna_tipo(cursor)
+            if not tipo_col:
+                flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'warning')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            cursor.execute(f"SELECT id FROM expedientes WHERE {tipo_col} ILIKE %s", (f'%{valor_criterio}%',))
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'juzgado_origen':

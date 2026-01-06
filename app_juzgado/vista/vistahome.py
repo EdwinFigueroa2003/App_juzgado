@@ -101,10 +101,10 @@ def obtener_metricas_dashboard():
         
         # 7. Distribución por tipo de proceso
         cursor.execute("""
-            SELECT tipo_tramite, COUNT(*) 
+            SELECT tipo_solicitud, COUNT(*) 
             FROM expedientes 
-            WHERE tipo_tramite IS NOT NULL AND tipo_tramite != ''
-            GROUP BY tipo_tramite
+            WHERE tipo_solicitud IS NOT NULL AND tipo_solicitud != ''
+            GROUP BY tipo_solicitud
             ORDER BY COUNT(*) DESC
             LIMIT 5
         """)

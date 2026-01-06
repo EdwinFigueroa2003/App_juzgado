@@ -38,8 +38,8 @@
                         </div>
                         <div class="card-body">
                             <form method="POST" action="{{ url_for('idvistaexpediente.vista_expediente') }}">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <!-- 🔒 CSRF Protection -->
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <input type="hidden" name="tipo_busqueda" value="radicado">
                                 <div class="row">
                                     <div class="col-md-8">
@@ -74,68 +74,38 @@
                         </div>
                         <div class="card-body filtros-expedientes">
                             <form method="POST" action="{{ url_for('idvistaexpediente.vista_expediente') }}">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <!-- 🔒 CSRF Protection -->
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <input type="hidden" name="tipo_busqueda" value="estado">
                                 <div class="row">
                                     <div class="col-md-4">
                                         <div class="form-group">
                                             <label for="estado_filtro" class="form-label">Estado del Expediente:</label>
-                                            <select class="form-select form-select-lg" id="estado_filtro" name="estado_filtro"
-                                                required>
+                                            <select class="form-select form-select-lg" id="estado_filtro" name="estado_filtro" required>
                                                 <option value="">Seleccione un estado</option>
                                                 
                                                 <!-- Estados Principales -->
                                                 <optgroup label="Estados Principales">
                                                     <option value="ACTIVO" {{ 'selected' if estado_filtro=='ACTIVO' }}>
-                                                        Activos <!-- (últimos 6 meses) -->
+                                                        Activos (incluye ACTIVO PENDIENTE)
                                                     </option>
                                                     <option value="INACTIVO" {{ 'selected' if estado_filtro=='INACTIVO' }}>
-                                                        Inactivos <!-- (más de 6 meses) -->
+                                                        Inactivos (incluye INACTIVO RESUELTO)
                                                     </option>
-                                                </optgroup>
-                                                
-                                                <!-- Estados Adicionales -->
-                                                <optgroup label="Estados de Proceso">
                                                     <option value="PENDIENTE" {{ 'selected' if estado_filtro=='PENDIENTE' }}>
-                                                        Pendientes (en despacho)
-                                                    </option>
-                                                    <option value="SALIO" {{ 'selected' if estado_filtro=='SALIO' }}>
-                                                        Salieron (en secretaría)
-                                                    </option>
-                                                    <option value="SIN_FECHA" {{ 'selected' if estado_filtro=='SIN_FECHA' }}>
-                                                        Sin Fecha (con radicado pero sin fechas)
+                                                        Pendientes (estado por defecto)
                                                     </option>
                                                 </optgroup>
                                                 
-                                                <!-- Combinaciones -->
-                                                <optgroup label="Combinaciones">
-                                                    <option value="ACTIVO_PENDIENTE" {{ 'selected' if estado_filtro=='ACTIVO_PENDIENTE' }}>
-                                                        Activos + Pendientes
+                                                <!-- Estados Específicos -->
+                                                <optgroup label="Estados Específicos">
+                                                    <option value="ACTIVO PENDIENTE" {{ 'selected' if estado_filtro=='ACTIVO PENDIENTE' }}>
+                                                        Activo Pendiente (≤1 año con fecha)
                                                     </option>
-                                                    <option value="ACTIVO_SALIO" {{ 'selected' if estado_filtro=='ACTIVO_SALIO' }}>
-                                                        Activos + Salieron
-                                                    </option>
-                                                    <option value="INACTIVO_PENDIENTE" {{ 'selected' if estado_filtro=='INACTIVO_PENDIENTE' }}>
-                                                        Inactivos + Pendientes
-                                                    </option>
-                                                    <option value="INACTIVO_SALIO" {{ 'selected' if estado_filtro=='INACTIVO_SALIO' }}>
-                                                        Inactivos + Salieron
+                                                    <option value="INACTIVO RESUELTO" {{ 'selected' if estado_filtro=='INACTIVO RESUELTO' }}>
+                                                        Inactivo Resuelto (>1 año)
                                                     </option>
                                                 </optgroup>
-                                                
-                                                <!-- Estados Antiguos (Compatibilidad) -->
-                                                <!-- <optgroup label="Estados Antiguos">
-                                                    <option value="COMPLETADO" {{ 'selected' if estado_filtro=='COMPLETADO' }}>
-                                                        Completado (antiguo)
-                                                    </option>
-                                                    <option value="EN_PROCESO" {{ 'selected' if estado_filtro=='EN_PROCESO' }}>
-                                                        En Proceso (antiguo)
-                                                    </option>
-                                                    <option value="SIN_INFORMACION" {{ 'selected' if estado_filtro=='SIN_INFORMACION' }}>
-                                                        Sin Información (antiguo)
-                                                    </option>
-                                                </optgroup> -->
                                             </select>
                                         </div>
                                     </div>
@@ -143,10 +113,8 @@
                                         <div class="form-group">
                                             <label for="orden_fecha" class="form-label">Ordenar por Fecha:</label>
                                             <select class="form-select form-select-lg" id="orden_fecha" name="orden_fecha">
-                                                <option value="DESC" {{ 'selected' if orden_fecha=='DESC' }}>Más
-                                                    reciente primero</option>
-                                                <option value="ASC" {{ 'selected' if orden_fecha=='ASC' }}>Más antiguo
-                                                    primero</option>
+                                                <option value="DESC" {{ 'selected' if orden_fecha=='DESC' }}>Más reciente primero</option>
+                                                <option value="ASC" {{ 'selected' if orden_fecha=='ASC' }}>Más antiguo primero</option>
                                             </select>
                                         </div>
                                     </div>
@@ -159,26 +127,31 @@
                                                 <option value="200" {{ 'selected' if limite=='200' }}>200</option>
                                                 <option value="500" {{ 'selected' if limite=='500' }}>500</option>
                                                 <option value="1000" {{ 'selected' if limite=='1000' }}>1000</option>
+                                                <option value="2000" {{ 'selected' if limite=='2000' }}>2000</option>
                                             </select>
                                         </div>
                                     </div>
+                                    <div class="col-md-2">
+                                        <label>&nbsp;</label>
+                                        <button type="submit" class="btn btn-success btn-block">
+                                            <i class="fas fa-filter"></i> Filtrar
+                                        </button>
+                                    </div>
                                 </div>
-                                
+
                                 <!-- Filtros de fecha -->
-                                <div class="row mb-3">
+                                <!-- <div class="row mb-3">
                                     <div class="col-md-3">
                                         <div class="form-group">
                                             <label for="fecha_desde" class="form-label">Fecha Desde:</label>
-                                            <input type="date" class="form-control" id="fecha_desde" name="fecha_desde" 
-                                                   value="{{ fecha_desde or '' }}">
+                                            <input type="date" class="form-control" id="fecha_desde" name="fecha_desde" value="{{ fecha_desde or '' }}">
                                             <small class="form-text text-muted">Fecha mínima de ingreso/estado</small>
                                         </div>
                                     </div>
                                     <div class="col-md-3">
                                         <div class="form-group">
                                             <label for="fecha_hasta" class="form-label">Fecha Hasta:</label>
-                                            <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" 
-                                                   value="{{ fecha_hasta or '' }}">
+                                            <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" value="{{ fecha_hasta or '' }}">
                                             <small class="form-text text-muted">Fecha máxima de ingreso/estado</small>
                                         </div>
                                     </div>
@@ -195,43 +168,26 @@
                                     <div class="col-md-3">
                                         <div class="form-group">
                                             <label class="form-label">&nbsp;</label>
-                                            <button type="button" class="btn btn-outline-secondary form-control" 
-                                                    onclick="limpiarFiltrosFecha()">
+                                            <button type="button" class="btn btn-outline-secondary form-control" onclick="limpiarFiltrosFecha()">
                                                 <i class="fas fa-eraser"></i> Limpiar Fechas
                                             </button>
                                         </div>
                                     </div>
-                                </div>
-                                
+                                </div> -->
+
                                 <!-- Botones de fecha rápida -->
-                                <div class="row mb-3">
+                                <!-- <div class="row mb-3">
                                     <div class="col-12">
                                         <label class="form-label">Filtros rápidos:</label>
                                         <div class="btn-group" role="group">
-                                            <button type="button" class="btn btn-outline-info btn-sm" 
-                                                    onclick="establecerFechaRapida(7)">Últimos 7 días</button>
-                                            <button type="button" class="btn btn-outline-info btn-sm" 
-                                                    onclick="establecerFechaRapida(30)">Último mes</button>
-                                            <button type="button" class="btn btn-outline-info btn-sm" 
-                                                    onclick="establecerFechaRapida(90)">Últimos 3 meses</button>
-                                            <button type="button" class="btn btn-outline-info btn-sm" 
-                                                    onclick="establecerFechaRapida(180)">Últimos 6 meses</button>
-                                            <button type="button" class="btn btn-outline-info btn-sm" 
-                                                    onclick="establecerFechaRapida(365)">Último año</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" onclick="establecerFechaRapida(7)">Últimos 7 días</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" onclick="establecerFechaRapida(30)">Último mes</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" onclick="establecerFechaRapida(90)">Últimos 3 meses</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" onclick="establecerFechaRapida(180)">Últimos 6 meses</button>
+                                            <button type="button" class="btn btn-outline-info btn-sm" onclick="establecerFechaRapida(365)">Último año</button>
                                         </div>
                                     </div>
-                                                <option value="1000" {{ 'selected' if limite=='1000' }}>1000</option>
-                                                <option value="2000" {{ 'selected' if limite=='2000' }}>2000</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label>&nbsp;</label>
-                                        <button type="submit" class="btn btn-success btn-block">
-                                            <i class="fas fa-filter"></i> Filtrar
-                                        </button>
-                                    </div>
-                                </div>
+                                </div> -->
                             </form>
                         </div>
                     </div>
@@ -253,8 +209,7 @@
             {% if resumen %}
             <div class="card mb-4 border-warning">
                 <div class="card-header bg-warning text-dark">
-                    <h6 class="mb-0"><i class="fas fa-list"></i> Resumen de Expedientes con Radicado: {{
-                        resumen.radicado_buscado }}</h6>
+                    <h6 class="mb-0"><i class="fas fa-list"></i> Resumen de Expedientes con Radicado: {{ resumen.radicado_buscado }}</h6>
                 </div>
                 <div class="card-body">
                     <div class="row mb-3">
@@ -311,8 +266,7 @@
                                     <td>{{ exp.radicado_completo or 'Sin radicado completo' }}</td>
                                     <td>{{ exp.demandante or 'No especificado' }}</td>
                                     <td>{{ exp.demandado or 'No especificado' }}</td>
-                                    <td class="text-center"><span class="badge badge-success">{{ exp.ingresos }}</span>
-                                    </td>
+                                    <td class="text-center"><span class="badge badge-success">{{ exp.ingresos }}</span></td>
                                     <td class="text-center"><span class="badge badge-info">{{ exp.estados }}</span></td>
                                 </tr>
                                 {% endfor %}
@@ -388,15 +342,7 @@
                                 <small class="badge badge-light ml-2">{{ loop.index }} de {{ expedientes|length }}</small>
                                 {% endif %}
                                 <span class="badge badge-warning ml-2">
-                                    {% if expediente.estado_principal and expediente.estado_adicional %}
-                                        {{ expediente.estado_principal }} + {{ expediente.estado_adicional }}
-                                    {% elif expediente.estado_principal %}
-                                        {{ expediente.estado_principal }}
-                                    {% elif expediente.estado_adicional %}
-                                        {{ expediente.estado_adicional }}
-                                    {% else %}
-                                        {{ expediente.estado_actual or 'Sin estado' }}
-                                    {% endif %}
+                                    {{ expediente.estado_actual or 'Sin estado' }}
                                 </span>
                             </h5>
                             <div class="btn-group" role="group">
@@ -433,19 +379,9 @@
                                     <h6><strong><i class="fas fa-info-circle"></i> Información General</strong></h6>
                                     <p><strong>Radicado Completo:</strong> {{ expediente.radicado_completo or 'No disponible' }}</p>
                                     <p><strong>Radicado Corto:</strong> {{ expediente.radicado_corto or 'No disponible' }}</p>
-                                    <p><strong>Estado Actual:</strong>
-                                        {% if expediente.estado_principal and expediente.estado_adicional %}
-                                            <span class="badge badge-success">{{ expediente.estado_principal }}</span>
-                                            <span class="badge badge-info">{{ expediente.estado_adicional }}</span>
-                                        {% elif expediente.estado_principal %}
-                                            <span class="badge badge-success">{{ expediente.estado_principal }}</span>
-                                        {% elif expediente.estado_adicional %}
-                                            <span class="badge badge-info">{{ expediente.estado_adicional }}</span>
-                                        {% else %}
-                                            <span class="badge badge-secondary">{{ expediente.estado_actual or 'Sin estado' }}</span>
-                                        {% endif %}
+                                    <p><strong>Estado Actual:</strong> 
+                                        <span class="badge badge-secondary">{{ expediente.estado_actual or 'Sin estado' }}</span>
                                     </p>
-                                    <!-- <p><strong>Ubicación:</strong> {{ expediente.ubicacion_actual or 'No especificada' }}</p> -->
                                     <p><strong>Responsable:</strong> 
                                         {% if expediente.responsable %}
                                             <span class="badge badge-success">{{ expediente.responsable }}</span>
@@ -458,7 +394,7 @@
                                     <h6><strong><i class="fas fa-users"></i> Partes del Proceso</strong></h6>
                                     <p><strong>Demandante:</strong> {{ expediente.demandante or 'No especificado' }}</p>
                                     <p><strong>Demandado:</strong> {{ expediente.demandado or 'No especificado' }}</p>
-                                    <p><strong>Tipo de Trámite:</strong> {{ expediente.tipo_tramite or 'No especificado' }}</p>
+                                    <p><strong>Tipo de Solicitud:</strong> {{ expediente.tipo_solicitud or 'No especificado' }}</p>
                                     <p><strong>Juzgado de Origen:</strong> {{ expediente.juzgado_origen or 'No especificado' }}</p>
                                     {% if expediente.fecha_resolucion %}
                                     <p><strong>Fecha de Resolución:</strong> {{ expediente.fecha_resolucion.strftime('%d/%m/%Y') }}</p>
@@ -471,19 +407,15 @@
                                 <div class="col-12">
                                     <h6><strong><i class="fas fa-calendar"></i> Fechas Importantes</strong></h6>
                                     <div class="row">
-                                        <div class="col-md-3">
+                                        <div class="col-md-4">
                                             <small class="text-muted">Fecha de Creación/Ingreso:</small><br>
                                             <strong>{{ expediente.fecha_creacion_registro.strftime('%d/%m/%Y %H:%M') if expediente.fecha_creacion_registro else 'No disponible' }}</strong>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-4">
                                             <small class="text-muted">Última Actualización Sistema:</small><br>
                                             <strong>{{ expediente.fecha_ultima_actualizacion.strftime('%d/%m/%Y %H:%M') if expediente.fecha_ultima_actualizacion else 'No disponible' }}</strong>
                                         </div>
-                                        <div class="col-md-3">
-                                            <small class="text-muted">Última Actuación Real:</small><br>
-                                            <strong>{{ expediente.fecha_ultima_actuacion_real.strftime('%d/%m/%Y') if expediente.fecha_ultima_actuacion_real else 'No disponible' }}</strong>
-                                        </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-4">
                                             <small class="text-muted">Total de Trámites:</small><br>
                                             <strong>{{ expediente.total_tramites or 0 }}</strong>
                                         </div>
@@ -491,95 +423,27 @@
                                 </div>
                             </div>
 
-                            <!-- Estadísticas del expediente -->
-                            {% if expediente.estadisticas %}
-                            <div class="row mb-3">
-                                <div class="col-12">
-                                    <h6><strong><i class="fas fa-chart-pie"></i> Estadísticas de Trámites</strong></h6>
-                                    <div class="row">
-                                        <div class="col-md-2">
-                                            <div class="text-center p-2 bg-light rounded">
-                                                <h4 class="text-primary mb-0">{{ expediente.estadisticas.total_tramites_detalle or 0 }}</h4>
-                                                <small>Total</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <div class="text-center p-2 bg-light rounded">
-                                                <h4 class="text-success mb-0">{{ expediente.estadisticas.tramites_finalizados or 0 }}</h4>
-                                                <small>Finalizados</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <div class="text-center p-2 bg-light rounded">
-                                                <h4 class="text-warning mb-0">{{ expediente.estadisticas.tramites_pendientes or 0 }}</h4>
-                                                <small>Pendientes</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <div class="text-center p-2 bg-light rounded">
-                                                <h4 class="text-secondary mb-0">{{ expediente.estadisticas.tramites_sin_tramite or 0 }}</h4>
-                                                <small>Sin Trámite</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="text-center p-2 bg-light rounded">
-                                                {% set total = expediente.estadisticas.total_tramites_detalle or 0 %}
-                                                {% set finalizados = expediente.estadisticas.tramites_finalizados or 0 %}
-                                                {% if total > 0 %}
-                                                    <h4 class="text-info mb-0">{{ "%.1f"|format((finalizados / total) * 100) }}%</h4>
-                                                {% else %}
-                                                    <h4 class="text-info mb-0">0%</h4>
-                                                {% endif %}
-                                                <small>Porcentaje Completado</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endif %}
-
                             <!-- Ingresos del expediente -->
                             {% if expediente.ingresos %}
                             <div class="mb-3">
-                                <h6><strong><i class="fas fa-calendar-plus"></i> Historial de Ingresos ({{
-                                        expediente.ingresos|length }})</strong></h6>
+                                <h6><strong><i class="fas fa-calendar-plus"></i> Historial de Ingresos ({{ expediente.ingresos|length }})</strong></h6>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-striped">
                                         <thead class="thead-light">
                                             <tr>
                                                 <th>Fecha</th>
                                                 <th>Solicitud</th>
+                                                <th>Juzgado Origen</th>
                                                 <th>Observaciones</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {% for ingreso in expediente.ingresos %}
                                             <tr>
-                                                <td>{{ ingreso.fecha_ingreso.strftime('%d/%m/%Y') if
-                                                    ingreso.fecha_ingreso else 'No disponible' }}</td>
+                                                <td>{{ ingreso.fecha_ingreso.strftime('%d/%m/%Y') if ingreso.fecha_ingreso else 'No disponible' }}</td>
                                                 <td>{{ ingreso.motivo_ingreso or 'Sin motivo' }}</td>
-                                                <td>
-                                                    {% if ingreso.observaciones_ingreso %}
-                                                        {% set obs_text = ingreso.observaciones_ingreso %}
-                                                        {% if obs_text|length > 100 %}
-                                                            <div class="observaciones-ingreso-container">
-                                                                <small class="observaciones-ingreso-preview">{{ obs_text[:100] }}...</small>
-                                                                <div class="observaciones-ingreso-full" style="display: none;">
-                                                                    <small>{{ obs_text }}</small>
-                                                                </div>
-                                                                <br>
-                                                                <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-ingreso" 
-                                                                        onclick="toggleObservacionesIngresoText(this)">
-                                                                    <i class="fas fa-expand"></i> Ver completo
-                                                                </button>
-                                                            </div>
-                                                        {% else %}
-                                                            <small>{{ obs_text }}</small>
-                                                        {% endif %}
-                                                    {% else %}
-                                                        <span class="text-muted">Sin observaciones</span>
-                                                    {% endif %}
-                                                </td>
+                                                <td>{{ ingreso.juzgado_origen or 'No especificado' }}</td>
+                                                <td>{{ ingreso.observaciones_ingreso or 'Sin observaciones' }}</td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>
@@ -591,26 +455,23 @@
                             <!-- Estados del expediente -->
                             {% if expediente.estados %}
                             <div class="mb-3">
-                                <h6><strong><i class="fas fa-history"></i> Historial de Estados ({{
-                                        expediente.estados|length }})</strong></h6>
+                                <h6><strong><i class="fas fa-history"></i> Historial de Estados ({{ expediente.estados|length }})</strong></h6>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-striped">
                                         <thead class="thead-light">
                                             <tr>
                                                 <th>Fecha</th>
                                                 <th>Estado</th>
+                                                <th>Juzgado Origen</th>
                                                 <th>Observaciones</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {% for estado in expediente.estados %}
                                             <tr>
-                                                <td>{{ estado.fecha_estado.strftime('%d/%m/%Y') if estado.fecha_estado
-                                                    else 'No disponible' }}</td>
-                                                <td>
-                                                    <span class="badge badge-secondary">{{ estado.estado_registrado or
-                                                        'Sin estado' }}</span>
-                                                </td>
+                                                <td>{{ estado.fecha_estado.strftime('%d/%m/%Y') if estado.fecha_estado else 'No disponible' }}</td>
+                                                <td><span class="badge badge-secondary">{{ estado.estado_registrado or 'Sin estado' }}</span></td>
+                                                <td>{{ estado.juzgado_origen or 'No especificado' }}</td>
                                                 <td>{{ estado.observaciones_estado or 'Sin observaciones' }}</td>
                                             </tr>
                                             {% endfor %}
@@ -623,7 +484,7 @@
                             <!-- Trámites detallados -->
                             {% if expediente.tramites_detallados %}
                             <div class="mb-3">
-                                <h6><strong><i class="fas fa-list-alt"></i> Trámites Detallados ({{ expediente.tramites_detallados|length }}{% if expediente.estadisticas.total_tramites_detalle > expediente.tramites_detallados|length %} de {{ expediente.estadisticas.total_tramites_detalle }}{% endif %})</strong></h6>
+                                <h6><strong><i class="fas fa-list-alt"></i> Trámites Detallados ({{ expediente.tramites_detallados|length }})</strong></h6>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-striped">
                                         <thead class="thead-light">
@@ -632,7 +493,6 @@
                                                 <th>Estado Trámite</th>
                                                 <th>Tipo Trámite</th>
                                                 <th>Fecha Notificación</th>
-                                                <th>Auto/Resolución</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -641,52 +501,18 @@
                                                 <td>{{ tramite.fecha_actuacion.strftime('%d/%m/%Y') if tramite.fecha_actuacion else 'No disponible' }}</td>
                                                 <td>
                                                     {% if tramite.estado_tramite %}
-                                                        {% if 'FINALIZADO' in tramite.estado_tramite.upper() or 'COMPLETADO' in tramite.estado_tramite.upper() %}
-                                                            <span class="badge badge-success">{{ tramite.estado_tramite }}</span>
-                                                        {% elif 'PENDIENTE' in tramite.estado_tramite.upper() or 'PROCESO' in tramite.estado_tramite.upper() %}
-                                                            <span class="badge badge-warning">{{ tramite.estado_tramite }}</span>
-                                                        {% else %}
-                                                            <span class="badge badge-secondary">{{ tramite.estado_tramite }}</span>
-                                                        {% endif %}
+                                                        <span class="badge badge-secondary">{{ tramite.estado_tramite }}</span>
                                                     {% else %}
                                                         <span class="text-muted">Sin estado</span>
                                                     {% endif %}
                                                 </td>
                                                 <td>{{ tramite.tramite_homologado or 'No especificado' }}</td>
                                                 <td>{{ tramite.fecha_estado_notificacion.strftime('%d/%m/%Y') if tramite.fecha_estado_notificacion else 'No disponible' }}</td>
-                                                <td>
-                                                    {% if tramite.auto %}
-                                                        {% set auto_text = tramite.auto %}
-                                                        {% if auto_text|length > 100 %}
-                                                            <div class="auto-text-container">
-                                                                <small class="auto-preview">{{ auto_text[:100] }}...</small>
-                                                                <div class="auto-full" style="display: none;">
-                                                                    <small>{{ auto_text }}</small>
-                                                                </div>
-                                                                <br>
-                                                                <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-auto" 
-                                                                        onclick="toggleAutoText(this)">
-                                                                    <i class="fas fa-expand"></i> Ver completo
-                                                                </button>
-                                                            </div>
-                                                        {% else %}
-                                                            <small>{{ auto_text }}</small>
-                                                        {% endif %}
-                                                    {% else %}
-                                                        <span class="text-muted">Sin auto</span>
-                                                    {% endif %}
-                                                </td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>
                                     </table>
                                 </div>
-                                {% if expediente.estadisticas.total_tramites_detalle > expediente.tramites_detallados|length %}
-                                <small class="text-muted">
-                                    <i class="fas fa-info-circle"></i> 
-                                    Mostrando los {{ expediente.tramites_detallados|length }} trámites más recientes de {{ expediente.estadisticas.total_tramites_detalle }} totales.
-                                </small>
-                                {% endif %}
                             </div>
                             {% endif %}
 
@@ -723,10 +549,9 @@
                                         <i class="fas fa-info-circle"></i>
                                         <strong>Resumen:</strong>
                                         {{ expediente.ingresos|length }} ingreso(s), 
-                                        {{ expediente.estados|length }} estado(s) registrado(s){% if expediente.tramites_detallados %}, 
-                                        {{ expediente.tramites_detallados|length }} trámite(s) detallado(s){% endif %}
-                                        {% if expediente.estadisticas.total_tramites_detalle %}
-                                        - Total de {{ expediente.estadisticas.total_tramites_detalle }} trámite(s) en el sistema
+                                        {{ expediente.estados|length }} estado(s) registrado(s)
+                                        {% if expediente.tramites_detallados %}, 
+                                        {{ expediente.tramites_detallados|length }} trámite(s) detallado(s)
                                         {% endif %}
                                     </div>
                                 </div>
@@ -736,7 +561,7 @@
                 </div>
                 {% endfor %}
             </div>
-            
+
             <!-- Paginación -->
             {% if paginacion and paginacion.total_paginas > 1 %}
             <div class="row mt-4">
@@ -744,17 +569,12 @@
                     <nav aria-label="Paginación de expedientes">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div>
-                                <small class="text-muted">
-                                    Mostrando {{ paginacion.inicio_item }} - {{ paginacion.fin_item }} de {{ paginacion.total_items }} expedientes
-                                </small>
+                                <small class="text-muted">Mostrando {{ paginacion.inicio_item }} - {{ paginacion.fin_item }} de {{ paginacion.total_items }} expedientes</small>
                             </div>
                             <div>
-                                <small class="text-muted">
-                                    Página {{ paginacion.pagina_actual }} de {{ paginacion.total_paginas }}
-                                </small>
+                                <small class="text-muted">Página {{ paginacion.pagina_actual }} de {{ paginacion.total_paginas }}</small>
                             </div>
                         </div>
-                        
                         <ul class="pagination justify-content-center">
                             <!-- Botón Anterior -->
                             <li class="page-item {{ 'disabled' if not paginacion.tiene_anterior }}">
@@ -789,27 +609,11 @@
                                 {% endif %}
                             </li>
                         </ul>
-                        
-                        <!-- Navegación rápida -->
-                        {% if paginacion.total_paginas > 10 %}
-                        <div class="text-center mt-3">
-                            <div class="btn-group" role="group" aria-label="Navegación rápida">
-                                {% if paginacion.pagina_actual > 5 %}
-                                    <a href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina=1{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}" 
-                                       class="btn btn-sm btn-outline-primary">Primera</a>
-                                {% endif %}
-                                
-                                {% if paginacion.pagina_actual < paginacion.total_paginas - 4 %}
-                                    <a href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.total_paginas }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}" 
-                                       class="btn btn-sm btn-outline-primary">Última</a>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
                     </nav>
                 </div>
             </div>
             {% endif %}
+
             {% elif radicado_buscar or estado_filtro %}
             <div class="alert alert-warning">
                 <i class="fas fa-exclamation-triangle"></i>
@@ -830,7 +634,6 @@
 {% endif %}
 
 <!-- JavaScript consolidado en base.js -->
-
 <script>
 function limpiarFiltrosFecha() {
     document.getElementById('fecha_desde').value = '';
@@ -842,13 +645,30 @@ function limpiarFiltrosFecha() {
 function establecerFechaRapida(dias) {
     const hoy = new Date();
     const fechaHasta = hoy.toISOString().split('T')[0];
-    
     const fechaDesde = new Date();
     fechaDesde.setDate(hoy.getDate() - dias);
     const fechaDesdeStr = fechaDesde.toISOString().split('T')[0];
     
     document.getElementById('fecha_desde').value = fechaDesdeStr;
     document.getElementById('fecha_hasta').value = fechaHasta;
+}
+
+function copiarRadicado(radicado) {
+    navigator.clipboard.writeText(radicado).then(function() {
+        // Mostrar notificación de éxito
+        alert('Radicado copiado: ' + radicado);
+    });
+}
+
+function toggleExpedienteDetails(expedienteId) {
+    const element = document.querySelector(`[data-expediente-id="${expedienteId}"]`);
+    if (element) {
+        element.classList.toggle('expediente-details-hidden');
+    }
+}
+
+function scrollToDetails() {
+    document.getElementById('resultados-expedientes').scrollIntoView({ behavior: 'smooth' });
 }
 </script>
 

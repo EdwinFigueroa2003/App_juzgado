@@ -17,6 +17,9 @@ def vista_expediente():
     estado_filtro = ""
     orden_fecha = "DESC"
     limite = "50"
+    fecha_desde = ""
+    fecha_hasta = ""
+    tipo_fecha = "ingreso"
     mensaje = ""
     resumen = None
     resumen_filtro = None
@@ -31,6 +34,9 @@ def vista_expediente():
     estado_paginacion = request.args.get('estado')
     orden_paginacion = request.args.get('orden', 'DESC')
     limite_paginacion = request.args.get('limite', '50')
+    fecha_desde_paginacion = request.args.get('fecha_desde', '')
+    fecha_hasta_paginacion = request.args.get('fecha_hasta', '')
+    tipo_fecha_paginacion = request.args.get('tipo_fecha', 'ingreso')
     
     if request.method == 'POST':
         tipo_busqueda = request.form.get('tipo_busqueda', 'radicado')
@@ -84,12 +90,9 @@ def vista_expediente():
             
             if estado_filtro:
                 try:
-                    expedientes_completos = filtrar_por_estado(estado_filtro, orden_fecha, int(limite), 
-                                                             fecha_desde, fecha_hasta, tipo_fecha)
+                    expedientes_completos = filtrar_por_estado(estado_filtro, orden_fecha, int(limite), fecha_desde, fecha_hasta, tipo_fecha)
                     if not expedientes_completos:
                         mensaje = f"No se encontraron expedientes con el estado: {estado_filtro}"
-                        if fecha_desde or fecha_hasta:
-                            mensaje += f" en el rango de fechas especificado"
                         expedientes = []
                         paginacion = None
                     else:
@@ -98,14 +101,9 @@ def vista_expediente():
                             'estado_filtrado': estado_filtro,
                             'total_encontrados': len(expedientes_completos),
                             'orden': 'Más reciente primero' if orden_fecha == 'DESC' else 'Más antiguo primero',
-                            'limite': limite,
-                            'fecha_desde': fecha_desde,
-                            'fecha_hasta': fecha_hasta,
-                            'tipo_fecha': tipo_fecha
+                            'limite': limite
                         }
                         mensaje = f"Se encontraron {len(expedientes_completos)} expedientes con estado: {estado_filtro}"
-                        if fecha_desde or fecha_hasta:
-                            mensaje += f" en el rango de fechas especificado"
                         
                         # Aplicar paginación
                         expedientes, paginacion = paginar_resultados(expedientes_completos, pagina, por_pagina)
@@ -113,9 +111,6 @@ def vista_expediente():
                         paginacion['estado'] = estado_filtro
                         paginacion['orden'] = orden_fecha
                         paginacion['limite'] = limite
-                        paginacion['fecha_desde'] = fecha_desde
-                        paginacion['fecha_hasta'] = fecha_hasta
-                        paginacion['tipo_fecha'] = tipo_fecha
                 except Exception as e:
                     mensaje = f"Error en el filtro: {str(e)}"
                     flash(mensaje, 'error')
@@ -149,38 +144,29 @@ def vista_expediente():
     elif estado_paginacion:
         # GET request con paginación para filtro por estado
         try:
-            fecha_desde_pag = request.args.get('fecha_desde', '')
-            fecha_hasta_pag = request.args.get('fecha_hasta', '')
-            tipo_fecha_pag = request.args.get('tipo_fecha', 'ingreso')
-            
-            expedientes_completos = filtrar_por_estado(estado_paginacion, orden_paginacion, int(limite_paginacion),
-                                                     fecha_desde_pag, fecha_hasta_pag, tipo_fecha_pag)
+            expedientes_completos = filtrar_por_estado(estado_paginacion, orden_paginacion, int(limite_paginacion), 
+                                                     fecha_desde_paginacion, fecha_hasta_paginacion, tipo_fecha_paginacion)
             if expedientes_completos:
                 estado_filtro = estado_paginacion
                 orden_fecha = orden_paginacion
                 limite = limite_paginacion
+                fecha_desde = fecha_desde_paginacion
+                fecha_hasta = fecha_hasta_paginacion
+                tipo_fecha = tipo_fecha_paginacion
                 
                 resumen_filtro = {
                     'estado_filtrado': estado_paginacion,
                     'total_encontrados': len(expedientes_completos),
                     'orden': 'Más reciente primero' if orden_paginacion == 'DESC' else 'Más antiguo primero',
-                    'limite': limite_paginacion,
-                    'fecha_desde': fecha_desde_pag,
-                    'fecha_hasta': fecha_hasta_pag,
-                    'tipo_fecha': tipo_fecha_pag
+                    'limite': limite_paginacion
                 }
                 mensaje = f"Se encontraron {len(expedientes_completos)} expedientes con estado: {estado_paginacion}"
-                if fecha_desde_pag or fecha_hasta_pag:
-                    mensaje += f" en el rango de fechas especificado"
                 
                 expedientes, paginacion = paginar_resultados(expedientes_completos, pagina, por_pagina)
                 paginacion['tipo_busqueda'] = 'estado'
                 paginacion['estado'] = estado_paginacion
                 paginacion['orden'] = orden_paginacion
                 paginacion['limite'] = limite_paginacion
-                paginacion['fecha_desde'] = fecha_desde_pag
-                paginacion['fecha_hasta'] = fecha_hasta_pag
-                paginacion['tipo_fecha'] = tipo_fecha_pag
         except Exception as e:
             mensaje = f"Error en el filtro: {str(e)}"
             flash(mensaje, 'error')
@@ -191,9 +177,9 @@ def vista_expediente():
                          estado_filtro=estado_filtro,
                          orden_fecha=orden_fecha,
                          limite=limite,
-                         fecha_desde=request.form.get('fecha_desde', '') if request.method == 'POST' else request.args.get('fecha_desde', ''),
-                         fecha_hasta=request.form.get('fecha_hasta', '') if request.method == 'POST' else request.args.get('fecha_hasta', ''),
-                         tipo_fecha=request.form.get('tipo_fecha', 'ingreso') if request.method == 'POST' else request.args.get('tipo_fecha', 'ingreso'),
+                         fecha_desde=fecha_desde,
+                         fecha_hasta=fecha_hasta,
+                         tipo_fecha=tipo_fecha,
                          mensaje=mensaje,
                          resumen=resumen,
                          resumen_filtro=resumen_filtro,
@@ -269,107 +255,94 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
         cursor = conn.cursor()
         
         # Construir la consulta según el tipo de estado
-        if estado == 'INACTIVO':
-            # Filtrar por estado principal INACTIVO
-            where_clause = "e.estado_principal = %s"
-            parametros = [estado]
+        # Mapear los valores del formulario a los valores reales en la BD
+        if estado == 'ACTIVO':
+            # Buscar expedientes con estado_actual que EMPIECE con ACTIVO
+            where_clause = "e.estado_actual LIKE %s"
+            parametros = ['ACTIVO%']
+        elif estado == 'INACTIVO':
+            # Buscar expedientes con estado_actual que EMPIECE con INACTIVO
+            where_clause = "e.estado_actual LIKE %s"
+            parametros = ['INACTIVO%']
+        elif estado == 'PENDIENTE':
+            # Buscar expedientes con estado_actual = PENDIENTE o que contenga PENDIENTE
+            where_clause = "(e.estado_actual = %s OR e.estado_actual LIKE %s)"
+            parametros = ['PENDIENTE', '%PENDIENTE%']
+        elif estado == 'ACTIVO_PENDIENTE':
+            # Buscar específicamente ACTIVO PENDIENTE
+            where_clause = "e.estado_actual = %s"
+            parametros = ['ACTIVO PENDIENTE']
+        elif estado == 'INACTIVO_RESUELTO':
+            # Buscar específicamente INACTIVO RESUELTO
+            where_clause = "e.estado_actual = %s"
+            parametros = ['INACTIVO RESUELTO']
         elif estado == 'SALIO' or estado == 'SALIÓ':
-            # Filtrar por estado adicional SALIO (incluye ACTIVO_SALIO)
+            # Filtrar por estado adicional SALIO (si existe esa columna)
             where_clause = "e.estado_adicional = %s"
             parametros = ['SALIO']
-        elif estado == 'ACTIVO':
-            # Filtrar solo ACTIVO que NO haya salido (excluir los que salieron)
-            where_clause = "e.estado_principal = %s AND (e.estado_adicional IS NULL OR e.estado_adicional != 'SALIO')"
-            parametros = [estado]
-        elif estado == 'PENDIENTE':
-            # Filtrar por estado adicional PENDIENTE
-            where_clause = "e.estado_adicional = %s"
-            parametros = [estado]
-        elif estado == 'SIN_FECHA':
-            # Expedientes con radicado pero sin fecha de ingreso ni fecha de estado
-            where_clause = "e.estado_actual = %s OR (e.radicado_completo IS NOT NULL AND e.radicado_completo != '' AND NOT EXISTS (SELECT 1 FROM ingresos_expediente i WHERE i.expediente_id = e.id) AND NOT EXISTS (SELECT 1 FROM estados_expediente es WHERE es.expediente_id = e.id AND es.fecha_estado IS NOT NULL))"
-            parametros = ['SIN_FECHA']
-        elif '_' in estado:
-            # Filtrar por combinación (ej: ACTIVO_PENDIENTE)
-            partes = estado.split('_')
-            if len(partes) == 2:
-                estado_principal, estado_adicional = partes
-                where_clause = "e.estado_principal = %s AND e.estado_adicional = %s"
-                parametros = [estado_principal, estado_adicional]
-            else:
-                # Fallback a estados antiguos
-                where_clause = "e.estado_actual = %s"
-                parametros = [estado]
+        elif estado == 'SIN_FECHA' or estado == 'SIN_DATOS':
+            # Expedientes sin datos
+            where_clause = "e.estado_actual = %s"
+            parametros = ['SIN_DATOS']
         else:
-            # Mantener compatibilidad con estados antiguos
-            estados_map = {
-                'COMPLETADO': ['COMPLETADO', 'FINALIZADO', 'TERMINADO'],
-                'EN_PROCESO': ['EN_PROCESO', 'PENDIENTE', 'EN PROCESO'],
-                'SIN_INFORMACION': ['SIN_INFORMACION', 'SIN INFORMACION', 'SIN_TRAMITE', 'SIN TRAMITE', None, '']
-            }
-            
-            estados_buscar = estados_map.get(estado, [estado])
-            placeholders = ','.join(['%s'] * len(estados_buscar))
-            where_clause = f"(e.estado_actual IN ({placeholders}) OR (e.estado_actual IS NULL AND %s IN ({placeholders})))"
-            parametros = list(estados_buscar) + ['SIN_INFORMACION'] + list(estados_buscar)
+            # Búsqueda exacta por estado_actual
+            where_clause = "e.estado_actual = %s"
+            parametros = [estado]
         
         # Determinar el campo de fecha para ordenar
         orden_sql = 'DESC' if orden_fecha == 'DESC' else 'ASC'
         
-        # Construir filtros de fecha
-        fecha_where = ""
-        fecha_params = []
-        
+        # Construir filtros de fecha adicionales
+        date_filters = []
         if fecha_desde or fecha_hasta:
             if tipo_fecha == 'ingreso':
                 if fecha_desde:
-                    fecha_where += " AND EXISTS (SELECT 1 FROM ingresos_expediente i2 WHERE i2.expediente_id = e.id AND i2.fecha_ingreso >= %s)"
-                    fecha_params.append(fecha_desde)
+                    date_filters.append("EXISTS (SELECT 1 FROM ingresos_expediente i WHERE i.expediente_id = e.id AND i.fecha_ingreso >= %s)")
+                    parametros.append(fecha_desde)
                 if fecha_hasta:
-                    fecha_where += " AND EXISTS (SELECT 1 FROM ingresos_expediente i3 WHERE i3.expediente_id = e.id AND i3.fecha_ingreso <= %s)"
-                    fecha_params.append(fecha_hasta)
+                    date_filters.append("EXISTS (SELECT 1 FROM ingresos_expediente i WHERE i.expediente_id = e.id AND i.fecha_ingreso <= %s)")
+                    parametros.append(fecha_hasta)
             elif tipo_fecha == 'estado':
                 if fecha_desde:
-                    fecha_where += " AND EXISTS (SELECT 1 FROM estados_expediente es2 WHERE es2.expediente_id = e.id AND es2.fecha_estado >= %s)"
-                    fecha_params.append(fecha_desde)
+                    date_filters.append("EXISTS (SELECT 1 FROM estados_expediente es WHERE es.expediente_id = e.id AND es.fecha_estado >= %s)")
+                    parametros.append(fecha_desde)
                 if fecha_hasta:
-                    fecha_where += " AND EXISTS (SELECT 1 FROM estados_expediente es3 WHERE es3.expediente_id = e.id AND es3.fecha_estado <= %s)"
-                    fecha_params.append(fecha_hasta)
+                    date_filters.append("EXISTS (SELECT 1 FROM estados_expediente es WHERE es.expediente_id = e.id AND es.fecha_estado <= %s)")
+                    parametros.append(fecha_hasta)
             elif tipo_fecha == 'ambas':
                 fecha_conditions = []
                 if fecha_desde:
-                    fecha_conditions.append("(EXISTS (SELECT 1 FROM ingresos_expediente i2 WHERE i2.expediente_id = e.id AND i2.fecha_ingreso >= %s) OR EXISTS (SELECT 1 FROM estados_expediente es2 WHERE es2.expediente_id = e.id AND es2.fecha_estado >= %s))")
-                    fecha_params.extend([fecha_desde, fecha_desde])
+                    fecha_conditions.append("(EXISTS (SELECT 1 FROM ingresos_expediente i WHERE i.expediente_id = e.id AND i.fecha_ingreso >= %s) OR EXISTS (SELECT 1 FROM estados_expediente es WHERE es.expediente_id = e.id AND es.fecha_estado >= %s))")
+                    parametros.extend([fecha_desde, fecha_desde])
                 if fecha_hasta:
-                    fecha_conditions.append("(EXISTS (SELECT 1 FROM ingresos_expediente i3 WHERE i3.expediente_id = e.id AND i3.fecha_ingreso <= %s) OR EXISTS (SELECT 1 FROM estados_expediente es3 WHERE es3.expediente_id = e.id AND es3.fecha_estado <= %s))")
-                    fecha_params.extend([fecha_hasta, fecha_hasta])
-                if fecha_conditions:
-                    fecha_where += " AND " + " AND ".join(fecha_conditions)
+                    fecha_conditions.append("(EXISTS (SELECT 1 FROM ingresos_expediente i WHERE i.expediente_id = e.id AND i.fecha_ingreso <= %s) OR EXISTS (SELECT 1 FROM estados_expediente es WHERE es.expediente_id = e.id AND es.fecha_estado <= %s))")
+                    parametros.extend([fecha_hasta, fecha_hasta])
+                date_filters.extend(fecha_conditions)
+        
+        # Combinar filtros
+        all_filters = [where_clause]
+        if date_filters:
+            all_filters.extend(date_filters)
+        
+        combined_where = " AND ".join(all_filters)
         
         query = f"""
             SELECT 
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
-                e.estado_actual, e.ubicacion_actual, e.tipo_tramite, e.juzgado_origen, e.responsable,
+                e.estado_actual, e.ubicacion_actual, e.tipo_solicitud, e.juzgado_origen, e.responsable,
                 e.fecha_ultima_actualizacion, e.fecha_creacion_registro, e.fecha_resolucion,
-                e.observaciones, e.total_tramites, e.estado_principal, e.estado_adicional,
-                e.fecha_ultima_actuacion_real,
-                COALESCE(e.fecha_ultima_actuacion_real, MAX(i.fecha_ingreso), e.fecha_ultima_actualizacion, CURRENT_DATE) as fecha_orden
+                e.observaciones, e.total_tramites,
+                COALESCE(e.fecha_ultima_actualizacion, CURRENT_DATE) as fecha_orden
             FROM expedientes e
-            LEFT JOIN ingresos_expediente i ON e.id = i.expediente_id
-            WHERE {where_clause}{fecha_where}
-            GROUP BY e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
-                     e.estado_actual, e.ubicacion_actual, e.tipo_tramite, e.juzgado_origen, e.responsable,
-                     e.fecha_ultima_actualizacion, e.fecha_creacion_registro, e.fecha_resolucion,
-                     e.observaciones, e.total_tramites, e.estado_principal, e.estado_adicional,
-                     e.fecha_ultima_actuacion_real
+            WHERE {combined_where}
             ORDER BY fecha_orden {orden_sql}
             LIMIT %s
         """
         
-        # Combinar parámetros: estado + fecha + límite
-        parametros_finales = parametros + fecha_params + [limite]
+        # Agregar límite a los parámetros
+        parametros.append(limite)
         
-        cursor.execute(query, parametros_finales)
+        cursor.execute(query, parametros)
         resultados_principales = cursor.fetchall()
         
         # Para cada expediente, obtener toda su información relacionada
@@ -378,39 +351,38 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
         for row in resultados_principales:
             exp_id = row[0]
             
-            expediente = {
-                'id': row[0],
-                'radicado_completo': row[1],
-                'radicado_corto': row[2],
-                'demandante': row[3],
-                'demandado': row[4],
-                'estado_actual': row[5] or 'SIN_INFORMACION',
-                'ubicacion_actual': row[6],
-                'tipo_tramite': row[7],
-                'juzgado_origen': row[8],
-                'responsable': row[9],
-                'fecha_ultima_actualizacion': row[10],
-                'fecha_creacion_registro': row[11],
-                'fecha_resolucion': row[12],
-                'observaciones': row[13],
-                'total_tramites': row[14],
-                'estado_principal': row[15],
-                'estado_adicional': row[16],
-                'fecha_ultima_actuacion_real': row[17],
-                'ingresos': [],
-                'estados': [],
-                'tramites_detallados': [],
-                'estadisticas': {},
-                'total_tramites': row[14],
-                'ingresos': [],
-                'estados': [],
-                'tramites_detallados': [],
-                'estadisticas': {}
-            }
+            try:
+                expediente = {
+                    'id': row[0],
+                    'radicado_completo': row[1],
+                    'radicado_corto': row[2],
+                    'demandante': row[3],
+                    'demandado': row[4],
+                    'estado_actual': row[5] or 'SIN_INFORMACION',
+                    'ubicacion_actual': row[6],
+                    'tipo_solicitud': row[7],
+                    'juzgado_origen': row[8],
+                    'responsable': row[9],
+                    'fecha_ultima_actualizacion': row[10],
+                    'fecha_creacion_registro': row[11],
+                    'fecha_resolucion': row[12],
+                    'observaciones': row[13],
+                    'total_tramites': row[14],
+                    'estado_principal': None,  # Columna no existe, usar None
+                    'estado_adicional': None,  # Columna no existe, usar None
+                    'fecha_ultima_actuacion_real': None,  # Columna no existe, usar None
+                    'ingresos': [],
+                    'estados': [],
+                    'tramites_detallados': [],
+                    'estadisticas': {}
+                }
+            except Exception as e:
+                print(f"Error creating expediente: {e}")
+                continue
             
             # Obtener ingresos
             cursor.execute("""
-                SELECT fecha_ingreso, motivo_ingreso, observaciones_ingreso
+                SELECT fecha_ingreso, motivo_ingreso, observaciones_ingreso, juzgado_origen
                 FROM ingresos_expediente 
                 WHERE expediente_id = %s
                 ORDER BY fecha_ingreso ASC
@@ -420,14 +392,15 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 {
                     'fecha_ingreso': row[0],
                     'motivo_ingreso': row[1],
-                    'observaciones_ingreso': row[2]
+                    'observaciones_ingreso': row[2],
+                    'juzgado_origen': row[3]
                 }
                 for row in cursor.fetchall()
             ]
             
             # Obtener estados
             cursor.execute("""
-                SELECT fecha_estado, estado, observaciones
+                SELECT fecha_estado, estado, observaciones, juzgado_origen
                 FROM estados_expediente 
                 WHERE expediente_id = %s
                 ORDER BY fecha_estado DESC
@@ -437,31 +410,36 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 {
                     'fecha_estado': row[0],
                     'estado_registrado': row[1],
-                    'observaciones_estado': row[2]
+                    'observaciones_estado': row[2],
+                    'juzgado_origen': row[3]
                 }
                 for row in cursor.fetchall()
             ]
             
             # Obtener algunos trámites detallados (limitados para rendimiento)
             if expediente['radicado_completo']:
-                cursor.execute("""
-                    SELECT fecha_actuacion, estado_tramite, auto, fecha_estado_notificacion, tramite_homologado
-                    FROM tramites_expediente 
-                    WHERE radicado_completo = %s
-                    ORDER BY fecha_actuacion DESC NULLS LAST
-                    LIMIT 10
-                """, (expediente['radicado_completo'],))
-                
-                expediente['tramites_detallados'] = [
-                    {
-                        'fecha_actuacion': row[0],
-                        'estado_tramite': row[1],
-                        'auto': row[2],
-                        'fecha_estado_notificacion': row[3],
-                        'tramite_homologado': row[4]
-                    }
-                    for row in cursor.fetchall()
-                ]
+                try:
+                    cursor.execute("""
+                        SELECT fecha_actuacion, estado_tramite, fecha_estado_notificacion, tramite_homologado
+                        FROM tramites_expediente 
+                        WHERE radicado_completo = %s
+                        ORDER BY fecha_actuacion DESC NULLS LAST
+                        LIMIT 10
+                    """, (expediente['radicado_completo'],))
+                    
+                    expediente['tramites_detallados'] = [
+                        {
+                            'fecha_actuacion': row[0],
+                            'estado_tramite': row[1],
+                            'auto': row[2],
+                            'fecha_estado_notificacion': row[3],
+                            'tramite_homologado': row[4]
+                        }
+                        for row in cursor.fetchall()
+                    ]
+                except Exception as e:
+                    print(f"Error obteniendo trámites detallados para {expediente['radicado_completo']}: {e}")
+                    expediente['tramites_detallados'] = []
                 
                 # Calcular estadísticas básicas con manejo de errores
                 try:
@@ -531,6 +509,15 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                         'tramites_pendientes': 0,
                         'tramites_sin_tramite': 0
                     }
+            else:
+                # No hay radicado completo, no se pueden obtener trámites
+                expediente['tramites_detallados'] = []
+                expediente['estadisticas'] = {
+                    'total_tramites_detalle': 0,
+                    'tramites_finalizados': 0,
+                    'tramites_pendientes': 0,
+                    'tramites_sin_tramite': 0
+                }
             
             expedientes_completos.append(expediente)
         
@@ -549,36 +536,42 @@ def buscar_expedientes(radicado):
         conn = obtener_conexion()
         cursor = conn.cursor()
         
+        # Limpiar el radicado: eliminar espacios en blanco
+        radicado_limpio = radicado.strip() if radicado else ''
+        
         # Determinar si es búsqueda por radicado completo o corto
-        es_radicado_completo = len(radicado) > 15  # Los radicados completos son largos
+        es_radicado_completo = len(radicado_limpio) > 15  # Los radicados completos son largos
         
         # Primero obtener los expedientes básicos
         if es_radicado_completo:
+            # Búsqueda de radicado completo: intentar exacto primero, luego sin espacios
             query_expedientes = """
                 SELECT 
                     e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
-                    e.estado_actual, e.ubicacion_actual, e.tipo_tramite, e.juzgado_origen, e.responsable,
+                    e.estado_actual, e.ubicacion_actual, e.tipo_solicitud, e.juzgado_origen, e.responsable,
                     e.fecha_ultima_actualizacion, e.fecha_creacion_registro, e.fecha_resolucion,
-                    e.observaciones, e.total_tramites, e.estado_principal, e.estado_adicional,
-                    e.fecha_ultima_actuacion_real
+                    e.observaciones, e.total_tramites
                 FROM expedientes e
                 WHERE e.radicado_completo = %s
+                   OR REPLACE(e.radicado_completo, ' ', '') = %s
+                   OR e.radicado_completo LIKE %s
                 ORDER BY e.radicado_completo
             """
-            cursor.execute(query_expedientes, (radicado,))
+            radicado_sin_espacios = radicado_limpio.replace(' ', '')
+            cursor.execute(query_expedientes, (radicado_limpio, radicado_sin_espacios, f'%{radicado_limpio}%'))
         else:
+            # Búsqueda de radicado corto o búsqueda parcial
             query_expedientes = """
                 SELECT 
                     e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
-                    e.estado_actual, e.ubicacion_actual, e.tipo_tramite, e.juzgado_origen, e.responsable,
+                    e.estado_actual, e.ubicacion_actual, e.tipo_solicitud, e.juzgado_origen, e.responsable,
                     e.fecha_ultima_actualizacion, e.fecha_creacion_registro, e.fecha_resolucion,
-                    e.observaciones, e.total_tramites, e.estado_principal, e.estado_adicional,
-                    e.fecha_ultima_actuacion_real
+                    e.observaciones, e.total_tramites
                 FROM expedientes e
                 WHERE e.radicado_corto = %s OR e.radicado_completo LIKE %s
                 ORDER BY e.radicado_completo NULLS LAST
             """
-            cursor.execute(query_expedientes, (radicado, f'%{radicado}%'))
+            cursor.execute(query_expedientes, (radicado_limpio, f'%{radicado_limpio}%'))
         
         expedientes_base = cursor.fetchall()
         
@@ -599,7 +592,7 @@ def buscar_expedientes(radicado):
                 'demandado': exp_row[4],
                 'estado_actual': exp_row[5],
                 'ubicacion_actual': exp_row[6],
-                'tipo_tramite': exp_row[7],
+                'tipo_solicitud': exp_row[7],
                 'juzgado_origen': exp_row[8],
                 'responsable': exp_row[9],
                 'fecha_ultima_actualizacion': exp_row[10],
@@ -607,9 +600,9 @@ def buscar_expedientes(radicado):
                 'fecha_resolucion': exp_row[12],
                 'observaciones': exp_row[13],
                 'total_tramites': exp_row[14],
-                'estado_principal': exp_row[15],
-                'estado_adicional': exp_row[16],
-                'fecha_ultima_actuacion_real': exp_row[17],
+                'estado_principal': None,  # Columna no existe
+                'estado_adicional': None,  # Columna no existe  
+                'fecha_ultima_actuacion_real': None,  # Columna no existe
                 'ingresos': [],
                 'estados': [],
                 'tramites_detallados': [],
@@ -619,7 +612,7 @@ def buscar_expedientes(radicado):
             # Obtener ingresos con manejo de errores
             try:
                 cursor.execute("""
-                    SELECT fecha_ingreso, motivo_ingreso, observaciones_ingreso
+                    SELECT fecha_ingreso, motivo_ingreso, observaciones_ingreso, juzgado_origen
                     FROM ingresos_expediente 
                     WHERE expediente_id = %s
                     ORDER BY fecha_ingreso ASC
@@ -629,7 +622,8 @@ def buscar_expedientes(radicado):
                     {
                         'fecha_ingreso': row[0],
                         'motivo_ingreso': row[1],
-                        'observaciones_ingreso': row[2]
+                        'observaciones_ingreso': row[2],
+                        'juzgado_origen': row[3]
                     }
                     for row in cursor.fetchall()
                 ]
@@ -640,17 +634,18 @@ def buscar_expedientes(radicado):
             # Obtener estados con manejo de errores
             try:
                 cursor.execute("""
-                    SELECT fecha_estado, estado, observaciones
+                    SELECT fecha_estado, estado, observaciones, juzgado_origen
                     FROM estados_expediente 
                     WHERE expediente_id = %s
-                    ORDER BY fecha_estado DESC
+                    ORDER BY fecha_estado ASC
                 """, (exp_id,))
                 
                 expediente['estados'] = [
                     {
                         'fecha_estado': row[0],
                         'estado_registrado': row[1],
-                        'observaciones_estado': row[2]
+                        'observaciones_estado': row[2],
+                        'juzgado_origen': row[3]
                     }
                     for row in cursor.fetchall()
                 ]
@@ -662,7 +657,7 @@ def buscar_expedientes(radicado):
             if expediente['radicado_completo']:
                 try:
                     cursor.execute("""
-                        SELECT fecha_actuacion, estado_tramite, auto, fecha_estado_notificacion, tramite_homologado
+                        SELECT fecha_actuacion, estado_tramite, fecha_estado_notificacion, tramite_homologado
                         FROM tramites_expediente 
                         WHERE radicado_completo = %s
                         ORDER BY fecha_actuacion DESC NULLS LAST
