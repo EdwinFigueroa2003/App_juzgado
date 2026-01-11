@@ -30,7 +30,7 @@
             <!-- Tarjetas de Métricas Principales -->
              <!-- Total Expedientes -->
             <div class="row mb-4">
-                <div class="col-xl-3 col-md-6 mb-4">
+                <!-- <div class="col-xl-3 col-md-6 mb-4">
                     <div class="card border-left-primary shadow h-100 py-2 metric-card">
                         <div class="card-body">
                             <div class="row no-gutters align-items-center">
@@ -38,8 +38,8 @@
                                     <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
                                         Total Expedientes
                                     </div>
-                                    <div class="h5 mb-0 font-weight-bold text-gray-800 format-number" id="total-expedientes">
-                                        {{ metricas.total_expedientes or 0 }}
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800 format-number" id="total-expediente">
+                                        {{ metricas.total_expediente or 0 }}
                                     </div>
                                 </div>
                                 <div class="col-auto">
@@ -48,7 +48,7 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> -->
 
                 <!-- <div class="col-xl-3 col-md-6 mb-4">
                     <div class="card border-left-success shadow h-100 py-2 metric-card">
@@ -123,12 +123,12 @@
                             </h6>
                         </div>
                         <div class="card-body">
-                            {% if metricas.expedientes_por_estado %}
+                            {% if metricas.expediente_por_estado %}
                                 <div class="chart-pie pt-4 pb-2">
                                     <canvas id="estadosChart"></canvas>
                                 </div>
                                 <div class="mt-4 text-center small">
-                                    {% for estado, cantidad in metricas.expedientes_por_estado[:5] %}
+                                    {% for estado, cantidad in metricas.expediente_por_estado[:5] %}
                                         <span class="mr-2 mb-1 d-inline-block">
                                             <i class="fas fa-circle text-primary"></i> {{ estado }}: {{ cantidad }}
                                         </span>
@@ -153,8 +153,8 @@
                             </h6>
                         </div>
                         <div class="card-body">
-                            {% if metricas.expedientes_por_responsable %}
-                                {% for responsable, cantidad in metricas.expedientes_por_responsable[:8] %}
+                            {% if metricas.expediente_por_responsable %}
+                                {% for responsable, cantidad in metricas.expediente_por_responsable[:8] %}
                                     <div class="mb-3">
                                         <div class="small mb-1">
                                             {{ responsable }} 
@@ -162,7 +162,7 @@
                                         </div>
                                         <div class="progress progress-custom">
                                             <div class="progress-bar bg-primary" role="progressbar" 
-                                                 style="width: {{ (cantidad / metricas.total_expedientes * 100) if metricas.total_expedientes > 0 else 0 }}%">
+                                                 style="width: {{ (cantidad / metricas.total_expediente * 100) if metricas.total_expediente > 0 else 0 }}%">
                                             </div>
                                         </div>
                                     </div>
@@ -189,7 +189,7 @@
                             </h6>
                         </div>
                         <div class="card-body">
-                            {% if metricas.expedientes_recientes %}
+                            {% if metricas.expediente_recientes %}
                                 <div class="table-responsive">
                                     <table class="table table-bordered table-hover">
                                         <thead class="thead-light">
@@ -202,7 +202,7 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {% for expediente in metricas.expedientes_recientes %}
+                                            {% for expediente in metricas.expediente_recientes %}
                                             <tr>
                                                 <td>
                                                     <small class="font-weight-bold">
@@ -300,10 +300,10 @@
 
 <!-- Datos para el gráfico -->
 <script>
-{% if metricas.expedientes_por_estado %}
+{% if metricas.expediente_por_estado %}
 window.estadosChartData = {
-    labels: [{% for estado, cantidad in metricas.expedientes_por_estado[:5] %}'{{ estado }}'{% if not loop.last %},{% endif %}{% endfor %}],
-    data: [{% for estado, cantidad in metricas.expedientes_por_estado[:5] %}{{ cantidad }}{% if not loop.last %},{% endif %}{% endfor %}]
+    labels: [{% for estado, cantidad in metricas.expediente_por_estado[:5] %}'{{ estado }}'{% if not loop.last %},{% endif %}{% endfor %}],
+    data: [{% for estado, cantidad in metricas.expediente_por_estado[:5] %}{{ cantidad }}{% if not loop.last %},{% endif %}{% endfor %}]
 };
 {% else %}
 window.estadosChartData = null;

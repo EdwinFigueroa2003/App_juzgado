@@ -63,7 +63,6 @@ link_temporal/
 
 logs/
 
-proceso_excel.py
-
-cargar_datos_limpios.py
-cargar_datos_limpios_v2_mejorado.py
+utils/
+__pycache__/
+*.py[cod]

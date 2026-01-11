@@ -20,11 +20,11 @@ def obtener_metricas_dashboard():
         
         metricas = {}
         
-        # 1. Total de expedientes
-        cursor.execute("SELECT COUNT(*) FROM expedientes")
-        metricas['total_expedientes'] = cursor.fetchone()[0]
+        # 1. Total de expediente
+        cursor.execute("SELECT COUNT(*) FROM expediente")
+        metricas['total_expediente'] = cursor.fetchone()[0]
         
-        # 2. Expedientes por estado (NUEVOS ESTADOS)
+        # 2. expediente por estado (NUEVOS ESTADOS)
         cursor.execute("""
             SELECT 
                 CASE 
@@ -35,16 +35,16 @@ def obtener_metricas_dashboard():
                     ELSE COALESCE(estado_actual, 'SIN_INFORMACION')
                 END as estado_combinado,
                 COUNT(*) 
-            FROM expedientes 
+            FROM expediente 
             GROUP BY estado_combinado
             ORDER BY COUNT(*) DESC
         """)
-        metricas['expedientes_por_estado'] = cursor.fetchall()
+        metricas['expediente_por_estado'] = cursor.fetchall()
         
         # 2b. Estadísticas de estados principales
         cursor.execute("""
             SELECT estado_principal, COUNT(*) 
-            FROM expedientes 
+            FROM expediente 
             WHERE estado_principal IS NOT NULL
             GROUP BY estado_principal
             ORDER BY COUNT(*) DESC
@@ -54,22 +54,22 @@ def obtener_metricas_dashboard():
         # 2c. Estadísticas de estados adicionales
         cursor.execute("""
             SELECT estado_adicional, COUNT(*) 
-            FROM expedientes 
+            FROM expediente 
             WHERE estado_adicional IS NOT NULL
             GROUP BY estado_adicional
             ORDER BY COUNT(*) DESC
         """)
         metricas['estados_adicionales'] = cursor.fetchall()
         
-        # 3. Expedientes por responsable
+        # 3. expediente por responsable
         cursor.execute("""
             SELECT responsable, COUNT(*) 
-            FROM expedientes 
+            FROM expediente 
             WHERE responsable IS NOT NULL AND responsable != ''
             GROUP BY responsable
             ORDER BY COUNT(*) DESC
         """)
-        metricas['expedientes_por_responsable'] = cursor.fetchall()
+        metricas['expediente_por_responsable'] = cursor.fetchall()
         
         # 4. Ingresos recientes (últimos 30 días)
         #fecha_limite = datetime.now() - timedelta(days=30)
@@ -80,29 +80,29 @@ def obtener_metricas_dashboard():
         #""", (fecha_limite.date(),))
         #metricas['ingresos_recientes'] = cursor.fetchone()[0]
         
-        # 5. Expedientes actualizados recientemente (últimos 7 días)
+        # 5. expediente actualizados recientemente (últimos 7 días)
         #fecha_limite_semana = datetime.now() - timedelta(days=7)
         #cursor.execute("""
         #    SELECT COUNT(*) 
-        #    FROM expedientes 
+        #    FROM expediente 
         #    WHERE fecha_ultima_actualizacion >= %s
         #""", (fecha_limite_semana,))
         #metricas['actualizados_recientes'] = cursor.fetchone()[0]
         
-        # 6. Top 5 expedientes más recientes
+        # 6. Top 5 expediente más recientes
         cursor.execute("""
             SELECT radicado_completo, radicado_corto, demandante, demandado, 
                    estado_actual, estado_principal, estado_adicional, responsable, fecha_ultima_actualizacion
-            FROM expedientes 
+            FROM expediente 
             ORDER BY fecha_ultima_actualizacion DESC NULLS LAST
             LIMIT 5
         """)
-        metricas['expedientes_recientes'] = cursor.fetchall()
+        metricas['expediente_recientes'] = cursor.fetchall()
         
         # 7. Distribución por tipo de proceso
         cursor.execute("""
             SELECT tipo_solicitud, COUNT(*) 
-            FROM expedientes 
+            FROM expediente
             WHERE tipo_solicitud IS NOT NULL AND tipo_solicitud != ''
             GROUP BY tipo_solicitud
             ORDER BY COUNT(*) DESC
