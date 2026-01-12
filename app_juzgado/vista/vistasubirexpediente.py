@@ -123,9 +123,9 @@ def procesar_formulario_manual():
         try:
             # 1. Insertar expediente principal
             query = """
-                INSERT INTO expedientes 
+                INSERT INTO expediente 
                 (radicado_completo, radicado_corto, demandante, demandado, 
-                 estado_actual, ubicacion_actual, tipo_solicitud, juzgado_origen, 
+                 estado, ubicacion, tipo_solicitud, juzgado_origen, 
                  responsable, observaciones)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
@@ -221,9 +221,9 @@ def procesar_excel_expedientes(filepath):
                 
                 # Insertar expediente
                 query = """
-                    INSERT INTO expedientes 
+                    INSERT INTO expediente 
                     (radicado_completo, radicado_corto, demandante, demandado, 
-                     estado_actual, ubicacion_actual, tipo_solicitud, juzgado_origen, 
+                     estado, ubicacion, tipo_solicitud, juzgado_origen, 
                      responsable, observaciones)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
@@ -235,7 +235,7 @@ def procesar_excel_expedientes(filepath):
                     demandado,
                     str(row.get('ESTADO_EXPEDIENTE', '')).strip() if pd.notna(row.get('ESTADO_EXPEDIENTE')) else None,
                     str(row.get('UBICACION', '')).strip() if pd.notna(row.get('UBICACION')) else None,
-                    str(row.get('TRAMITES', '')).strip() if pd.notna(row.get('TRAMITES')) else None,
+                    str(row.get('SOLICITUD', '')).strip() if pd.notna(row.get('SOLICITUD')) else None,
                     str(row.get('JuzgadoOrigen', '')).strip() if pd.notna(row.get('JuzgadoOrigen')) else None,
                     str(row.get('RESPONSABLE', '')).strip() if pd.notna(row.get('RESPONSABLE')) else None,
                     str(row.get('OBSERVACIONES', '')).strip() if pd.notna(row.get('OBSERVACIONES')) else None

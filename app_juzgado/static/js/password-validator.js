@@ -86,24 +86,35 @@ class PasswordValidator {
      */
     async validatePassword(password, resultContainer) {
         try {
+            console.log('[DEBUG] Validando contraseña, longitud:', password.length);
+            
+            const requestData = { password: password };
+            console.log('[DEBUG] Enviando datos:', requestData);
+            
             const response = await fetch('/api/validate-password', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ password: password })
+                body: JSON.stringify(requestData)
             });
 
+            console.log('[DEBUG] Response status:', response.status);
+            console.log('[DEBUG] Response ok:', response.ok);
+
             if (!response.ok) {
-                throw new Error('Error en la validación');
+                const errorText = await response.text();
+                console.error('[ERROR] Response no ok:', errorText);
+                throw new Error(`Error ${response.status}: ${errorText}`);
             }
 
             const result = await response.json();
+            console.log('[DEBUG] Resultado recibido:', result);
             this.displayResults(result, resultContainer);
 
         } catch (error) {
-            console.error('Error validating password:', error);
-            this.displayError(resultContainer);
+            console.error('[ERROR] Error validating password:', error);
+            this.displayError(resultContainer, error.message);
         }
     }
 
@@ -174,15 +185,16 @@ class PasswordValidator {
     /**
      * Muestra error de validación
      * @param {HTMLElement} container - Contenedor de resultados
+     * @param {string} errorMessage - Mensaje de error específico
      */
-    displayError(container) {
+    displayError(container, errorMessage = 'Error al validar contraseña') {
         const strengthContainer = container.querySelector('.password-strength-container');
         const errorsList = container.querySelector('.errors-list');
         
         strengthContainer.style.display = 'block';
         errorsList.innerHTML = `
             <div class="validation-item text-danger">
-                <i class="fas fa-exclamation-triangle"></i> Error al validar contraseña
+                <i class="fas fa-exclamation-triangle"></i> ${errorMessage}
             </div>
         `;
     }
@@ -207,12 +219,20 @@ class PasswordValidator {
      */
     async validateBeforeSubmit(passwordFieldId) {
         const passwordField = document.getElementById(passwordFieldId);
-        if (!passwordField) return false;
+        if (!passwordField) {
+            console.error('[ERROR] Campo de contraseña no encontrado:', passwordFieldId);
+            return false;
+        }
 
         const password = passwordField.value;
-        if (!password.trim()) return false;
+        if (!password.trim()) {
+            console.log('[DEBUG] Contraseña vacía en validateBeforeSubmit');
+            return false;
+        }
 
         try {
+            console.log('[DEBUG] Validando antes del envío, longitud:', password.length);
+            
             const response = await fetch('/api/validate-password', {
                 method: 'POST',
                 headers: {
@@ -221,13 +241,20 @@ class PasswordValidator {
                 body: JSON.stringify({ password: password })
             });
 
-            if (!response.ok) return false;
+            console.log('[DEBUG] Response status en validateBeforeSubmit:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[ERROR] Error en validateBeforeSubmit:', errorText);
+                return false;
+            }
 
             const result = await response.json();
+            console.log('[DEBUG] Resultado validateBeforeSubmit:', result);
             return result.is_valid;
 
         } catch (error) {
-            console.error('Error validating password before submit:', error);
+            console.error('[ERROR] Error validating password before submit:', error);
             return false;
         }
     }

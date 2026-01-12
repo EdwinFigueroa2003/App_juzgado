@@ -358,25 +358,60 @@ def cambiar_rol():
 def api_validate_password():
     """API para validar contraseña en tiempo real"""
     try:
+        print(f"[DEBUG] API validate-password llamada")
+        print(f"[DEBUG] Content-Type: {request.content_type}")
+        print(f"[DEBUG] Method: {request.method}")
+        
+        # Verificar si es JSON
+        if not request.is_json:
+            print(f"[ERROR] Request no es JSON. Content-Type: {request.content_type}")
+            return jsonify({
+                'is_valid': False,
+                'errors': ['Content-Type debe ser application/json'],
+                'score': 0,
+                'strength': 'Error',
+                'suggestions': []
+            }), 400
+        
         data = request.get_json()
+        print(f"[DEBUG] Data recibida: {data}")
+        
+        if not data:
+            print(f"[ERROR] No se pudo parsear JSON")
+            return jsonify({
+                'is_valid': False,
+                'errors': ['Datos JSON inválidos'],
+                'score': 0,
+                'strength': 'Error',
+                'suggestions': []
+            }), 400
+        
         password = data.get('password', '')
+        print(f"[DEBUG] Password length: {len(password)}")
         
         if not password:
+            print(f"[DEBUG] Password vacía")
             return jsonify({
                 'is_valid': False,
                 'errors': ['Contraseña requerida'],
                 'score': 0,
                 'strength': 'Muy Débil',
-                'suggestions': []
+                'suggestions': ['Ingrese una contraseña']
             })
         
+        print(f"[DEBUG] Validando contraseña...")
         validation_result = validate_password(password)
+        print(f"[DEBUG] Resultado validación: {validation_result}")
+        
         return jsonify(validation_result)
         
     except Exception as e:
+        print(f"[ERROR] Excepción en api_validate_password: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'is_valid': False,
-            'errors': [f'Error al validar contraseña: {str(e)}'],
+            'errors': [f'Error interno del servidor: {str(e)}'],
             'score': 0,
             'strength': 'Error',
             'suggestions': []

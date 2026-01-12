@@ -59,7 +59,7 @@ vistaexpediente = Blueprint('idvistaexpediente', __name__, template_folder='temp
 def calcular_estado_expediente(expediente_id, cursor):
     """
     Calcula el estado del expediente basado en la nueva lógica:
-    - Si está en ingresos → Activo Pendiente
+    - Si está en ingresos o actuaciones → Activo Pendiente
     - Si está en estados → Activo Resuelto (si < 1 año) o Inactivo Resuelto (si > 1 año)
     - Los expedientes siempre están activos, lo que cambia es el sub-estado
     
@@ -78,6 +78,17 @@ def calcular_estado_expediente(expediente_id, cursor):
         # Normalizar a datetime.date usando normalize_date
         ultima_fecha_ingreso = normalize_date(ultima_fecha_ingreso)
         
+        # Verificar si tiene actuaciones
+        cursor.execute("""
+            SELECT COUNT(*), MAX(fecha_actuacion) 
+            FROM actuaciones 
+            WHERE expediente_id = %s
+        """, (expediente_id,))
+        
+        actuaciones_count, ultima_fecha_actuacion = cursor.fetchone()
+        # Normalizar a datetime.date usando normalize_date
+        ultima_fecha_actuacion = normalize_date(ultima_fecha_actuacion)
+        
         # Verificar si tiene estados
         cursor.execute("""
             SELECT COUNT(*), MAX(fecha_estado) 
@@ -90,11 +101,16 @@ def calcular_estado_expediente(expediente_id, cursor):
         ultima_fecha_estado = normalize_date(ultima_fecha_estado)
         
         # Lógica de estados según las nuevas reglas
-        if ingresos_count > 0 and estados_count == 0:
-            # Solo ingresos → Activo Pendiente
-            return "Activo Pendiente", f"En trámite - {ingresos_count} ingreso(s)"
+        if (ingresos_count > 0 or actuaciones_count > 0) and estados_count == 0:
+            # Solo ingresos/actuaciones → Activo Pendiente
+            if ingresos_count > 0 and actuaciones_count > 0:
+                return "Activo Pendiente", f"En trámite - {ingresos_count} ingreso(s), {actuaciones_count} actuación(es)"
+            elif ingresos_count > 0:
+                return "Activo Pendiente", f"En trámite - {ingresos_count} ingreso(s)"
+            else:
+                return "Activo Pendiente", f"En trámite - {actuaciones_count} actuación(es)"
         
-        elif estados_count > 0 and ingresos_count == 0:
+        elif estados_count > 0 and ingresos_count == 0 and actuaciones_count == 0:
             # Solo estados → Verificar si es reciente o antiguo
             if ultima_fecha_estado:
                 # Convertir a datetime si es necesario
@@ -116,13 +132,27 @@ def calcular_estado_expediente(expediente_id, cursor):
             
             # Si no se puede determinar la fecha, asumir activo resuelto
             return "Activo Resuelto", f"Resuelto - {estados_count} estado(s)"
-        
-        elif ingresos_count > 0 and estados_count > 0:
-            # Tiene ambos → Verificar cuál es más reciente
-            if ultima_fecha_ingreso and ultima_fecha_estado:
-                if ultima_fecha_ingreso > ultima_fecha_estado:
-                    # Ingreso más reciente → Activo Pendiente
-                    return "Activo Pendiente", f"Reingresó después del último estado - {ingresos_count} ingreso(s), {estados_count} estado(s)"
+
+        elif (ingresos_count > 0 or actuaciones_count > 0) and estados_count > 0:
+            # Tiene ingresos/actuaciones y estados → Verificar cuál es más reciente
+            # Encontrar la fecha más reciente entre ingresos y actuaciones
+            fecha_mas_reciente_actividad = None
+            if ultima_fecha_ingreso and ultima_fecha_actuacion:
+                fecha_mas_reciente_actividad = max(ultima_fecha_ingreso, ultima_fecha_actuacion)
+            elif ultima_fecha_ingreso:
+                fecha_mas_reciente_actividad = ultima_fecha_ingreso
+            elif ultima_fecha_actuacion:
+                fecha_mas_reciente_actividad = ultima_fecha_actuacion
+            
+            if fecha_mas_reciente_actividad and ultima_fecha_estado:
+                if fecha_mas_reciente_actividad > ultima_fecha_estado:
+                    # Actividad más reciente → Activo Pendiente
+                    desc_actividad = []
+                    if ingresos_count > 0:
+                        desc_actividad.append(f"{ingresos_count} ingreso(s)")
+                    if actuaciones_count > 0:
+                        desc_actividad.append(f"{actuaciones_count} actuación(es)")
+                    return "Activo Pendiente", f"Reingresó después del último estado - {', '.join(desc_actividad)}, {estados_count} estado(s)"
                 else:
                     # Estado más reciente → Aplicar lógica de estados
                     if isinstance(ultima_fecha_estado, str):
@@ -133,18 +163,33 @@ def calcular_estado_expediente(expediente_id, cursor):
                     
                     if ultima_fecha_estado:
                         dias_desde_ultimo_estado = (datetime.now().date() - ultima_fecha_estado).days
+                        desc_actividad = []
+                        if ingresos_count > 0:
+                            desc_actividad.append(f"{ingresos_count} ingreso(s)")
+                        if actuaciones_count > 0:
+                            desc_actividad.append(f"{actuaciones_count} actuación(es)")
                         
                         if dias_desde_ultimo_estado <= 365:
-                            return "Activo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días - {ingresos_count} ingreso(s), {estados_count} estado(s)"
+                            return "Activo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días - {', '.join(desc_actividad)}, {estados_count} estado(s)"
                         else:
-                            return "Inactivo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días (>1 año) - {ingresos_count} ingreso(s), {estados_count} estado(s)"
+                            return "Inactivo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días (>1 año) - {', '.join(desc_actividad)}, {estados_count} estado(s)"
                     else:
-                        return "Activo Resuelto", f"Resuelto - {ingresos_count} ingreso(s), {estados_count} estado(s)"
+                        desc_actividad = []
+                        if ingresos_count > 0:
+                            desc_actividad.append(f"{ingresos_count} ingreso(s)")
+                        if actuaciones_count > 0:
+                            desc_actividad.append(f"{actuaciones_count} actuación(es)")
+                        return "Activo Resuelto", f"Resuelto - {', '.join(desc_actividad)}, {estados_count} estado(s)"
             else:
                 # Si no hay fechas, usar contadores
-                return "Activo Pendiente", f"En trámite - {ingresos_count} ingreso(s), {estados_count} estado(s)"
+                desc_actividad = []
+                if ingresos_count > 0:
+                    desc_actividad.append(f"{ingresos_count} ingreso(s)")
+                if actuaciones_count > 0:
+                    desc_actividad.append(f"{actuaciones_count} actuación(es)")
+                return "Activo Pendiente", f"En trámite - {', '.join(desc_actividad)}, {estados_count} estado(s)"
         
-        # Por defecto (sin ingresos ni estados)
+        # Por defecto (sin ingresos, actuaciones ni estados)
         return "Pendiente", "Sin movimiento registrado"
         
     except Exception as e:
@@ -457,37 +502,65 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
         
         # Filtro por estado según la nueva lógica
         if estado == "ACTIVO PENDIENTE" or estado == "ACTIVO":
-            # Expedientes que tienen ingresos (están en trámite)
-            where_conditions.append("EXISTS (SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id)")
+            # Expedientes que tienen ingresos o actuaciones (están en trámite)
+            where_conditions.append("""
+                (EXISTS (SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id)
+                 OR EXISTS (SELECT 1 FROM actuaciones a WHERE a.expediente_id = e.id))
+            """)
             if estado == "ACTIVO PENDIENTE":
-                # Solo los que no tienen estados o el último ingreso es más reciente que el último estado
+                # Solo los que no tienen estados o el último ingreso/actuación es más reciente que el último estado
                 where_conditions.append("""
                     (NOT EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)
                      OR 
-                     (SELECT MAX(i2.fecha_ingreso) FROM ingresos i2 WHERE i2.expediente_id = e.id) > 
+                     GREATEST(
+                         COALESCE((SELECT MAX(i2.fecha_ingreso) FROM ingresos i2 WHERE i2.expediente_id = e.id), DATE '1900-01-01'),
+                         COALESCE((SELECT MAX(a2.fecha_actuacion) FROM actuaciones a2 WHERE a2.expediente_id = e.id), DATE '1900-01-01'),
+                         COALESCE(e.fecha_ingreso, DATE '1900-01-01')
+                     ) > 
                      (SELECT MAX(s2.fecha_estado) FROM estados s2 WHERE s2.expediente_id = e.id))
                 """)
         
         elif estado == "ACTIVO RESUELTO":
             # Expedientes con estados y última fecha de estado < 1 año
+            # Y que no tengan actividad más reciente (ingresos/actuaciones)
             where_conditions.append("EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)")
             where_conditions.append("""
                 (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) > 
                 (CURRENT_DATE - INTERVAL '1 year')
             """)
+            # Verificar que el estado sea más reciente que cualquier actividad
+            where_conditions.append("""
+                (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) >= 
+                COALESCE(
+                    (SELECT MAX(i.fecha_ingreso) FROM ingresos i WHERE i.expediente_id = e.id),
+                    (SELECT MAX(a.fecha_actuacion) FROM actuaciones a WHERE a.expediente_id = e.id),
+                    '1900-01-01'::date
+                )
+            """)
         
         elif estado == "INACTIVO RESUELTO" or estado == "INACTIVO":
             # Expedientes con estados y última fecha de estado > 1 año
+            # Y que no tengan actividad más reciente (ingresos/actuaciones)
             where_conditions.append("EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)")
             where_conditions.append("""
                 (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) <= 
                 (CURRENT_DATE - INTERVAL '1 year')
             """)
+            # Verificar que el estado sea más reciente que cualquier actividad
+            where_conditions.append("""
+                (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) >= 
+                COALESCE(
+                    (SELECT MAX(i.fecha_ingreso) FROM ingresos i WHERE i.expediente_id = e.id),
+                    (SELECT MAX(a.fecha_actuacion) FROM actuaciones a WHERE a.expediente_id = e.id),
+                    '1900-01-01'::date
+                )
+            """)
         
         elif estado == "PENDIENTE":
-            # Expedientes sin ingresos ni estados
+            # Expedientes sin ingresos, estados ni actuaciones
             where_conditions.append("NOT EXISTS (SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id)")
             where_conditions.append("NOT EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)")
+            where_conditions.append("NOT EXISTS (SELECT 1 FROM actuaciones a WHERE a.expediente_id = e.id)")
         
         # Construir la consulta completa
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
@@ -497,11 +570,11 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
             SELECT 
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
                 e.juzgado_origen, e.fecha_ingreso, e.estado,
-                COALESCE(
-                    (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id),
-                    (SELECT MAX(i.fecha_ingreso) FROM ingresos i WHERE i.expediente_id = e.id),
-                    e.fecha_ingreso,
-                    CURRENT_DATE
+                GREATEST(
+                    COALESCE((SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id), DATE '1900-01-01'),
+                    COALESCE((SELECT MAX(i.fecha_ingreso) FROM ingresos i WHERE i.expediente_id = e.id), DATE '1900-01-01'),
+                    COALESCE((SELECT MAX(a.fecha_actuacion) FROM actuaciones a WHERE a.expediente_id = e.id), DATE '1900-01-01'),
+                    COALESCE(e.fecha_ingreso, CURRENT_DATE)
                 ) as fecha_orden
             FROM expediente e
             WHERE {where_clause}

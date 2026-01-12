@@ -12,6 +12,22 @@ from modelo.configBd import obtener_conexion
 # Crear un Blueprint
 vistahome = Blueprint('idvistahome', __name__, template_folder='templates')
 
+def _detectar_columna_tipo(cursor):
+    """Retorna el nombre de la columna existente entre 'tipo_solicitud' y 'tipo_tramite', o None"""
+    try:
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'expediente' AND column_name IN ('tipo_solicitud', 'tipo_tramite')
+        """)
+        cols = [r[0] for r in cursor.fetchall()]
+        if 'tipo_solicitud' in cols:
+            return 'tipo_solicitud'
+        if 'tipo_tramite' in cols:
+            return 'tipo_tramite'
+        return None
+    except:
+        return None
+
 def obtener_metricas_dashboard():
     """Obtiene las métricas para el dashboard"""
     try:
@@ -20,48 +36,60 @@ def obtener_metricas_dashboard():
         
         metricas = {}
         
-        # 1. Total de expediente
+        # 1. Total de expedientes
         cursor.execute("SELECT COUNT(*) FROM expediente")
         metricas['total_expediente'] = cursor.fetchone()[0]
         
-        # 2. expediente por estado (NUEVOS ESTADOS)
+        # 2. Expedientes por estado (basado en la nueva lógica)
+        # ACTIVO PENDIENTE: tienen ingresos/actuaciones sin estados más recientes
         cursor.execute("""
-            SELECT 
-                CASE 
-                    WHEN estado_principal IS NOT NULL AND estado_adicional IS NOT NULL THEN 
-                        CONCAT(estado_principal, ' + ', estado_adicional)
-                    WHEN estado_principal IS NOT NULL THEN estado_principal
-                    WHEN estado_adicional IS NOT NULL THEN estado_adicional
-                    ELSE COALESCE(estado_actual, 'SIN_INFORMACION')
-                END as estado_combinado,
-                COUNT(*) 
-            FROM expediente 
-            GROUP BY estado_combinado
-            ORDER BY COUNT(*) DESC
+            SELECT COUNT(*) FROM expediente e
+            WHERE (EXISTS (SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id)
+                   OR EXISTS (SELECT 1 FROM actuaciones a WHERE a.expediente_id = e.id))
+            AND (NOT EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)
+                 OR GREATEST(
+                     COALESCE((SELECT MAX(i2.fecha_ingreso) FROM ingresos i2 WHERE i2.expediente_id = e.id), DATE '1900-01-01'),
+                     COALESCE((SELECT MAX(a2.fecha_actuacion) FROM actuaciones a2 WHERE a2.expediente_id = e.id), DATE '1900-01-01'),
+                     COALESCE(e.fecha_ingreso, DATE '1900-01-01')
+                 ) > (SELECT MAX(s2.fecha_estado) FROM estados s2 WHERE s2.expediente_id = e.id))
         """)
-        metricas['expediente_por_estado'] = cursor.fetchall()
+        activo_pendiente = cursor.fetchone()[0]
         
-        # 2b. Estadísticas de estados principales
+        # ACTIVO RESUELTO: tienen estados recientes (< 1 año)
         cursor.execute("""
-            SELECT estado_principal, COUNT(*) 
-            FROM expediente 
-            WHERE estado_principal IS NOT NULL
-            GROUP BY estado_principal
-            ORDER BY COUNT(*) DESC
+            SELECT COUNT(*) FROM expediente e
+            WHERE EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)
+            AND (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) > 
+                (CURRENT_DATE - INTERVAL '1 year')
         """)
-        metricas['estados_principales'] = cursor.fetchall()
+        activo_resuelto = cursor.fetchone()[0]
         
-        # 2c. Estadísticas de estados adicionales
+        # INACTIVO RESUELTO: tienen estados antiguos (> 1 año)
         cursor.execute("""
-            SELECT estado_adicional, COUNT(*) 
-            FROM expediente 
-            WHERE estado_adicional IS NOT NULL
-            GROUP BY estado_adicional
-            ORDER BY COUNT(*) DESC
+            SELECT COUNT(*) FROM expediente e
+            WHERE EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)
+            AND (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) <= 
+                (CURRENT_DATE - INTERVAL '1 year')
         """)
-        metricas['estados_adicionales'] = cursor.fetchall()
+        inactivo_resuelto = cursor.fetchone()[0]
         
-        # 3. expediente por responsable
+        # PENDIENTE: sin ingresos, estados ni actuaciones
+        cursor.execute("""
+            SELECT COUNT(*) FROM expediente e
+            WHERE NOT EXISTS (SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id)
+            AND NOT EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)
+            AND NOT EXISTS (SELECT 1 FROM actuaciones a WHERE a.expediente_id = e.id)
+        """)
+        pendiente = cursor.fetchone()[0]
+        
+        metricas['expediente_por_estado'] = [
+            ('Activo Pendiente', activo_pendiente),
+            ('Activo Resuelto', activo_resuelto),
+            ('Inactivo Resuelto', inactivo_resuelto),
+            ('Pendiente', pendiente)
+        ]
+        
+        # 2b. Estadísticas por responsable
         cursor.execute("""
             SELECT responsable, COUNT(*) 
             FROM expediente 
@@ -71,57 +99,38 @@ def obtener_metricas_dashboard():
         """)
         metricas['expediente_por_responsable'] = cursor.fetchall()
         
-        # 4. Ingresos recientes (últimos 30 días)
-        #fecha_limite = datetime.now() - timedelta(days=30)
-        #cursor.execute("""
-        #    SELECT COUNT(*) 
-        #    FROM ingresos_expediente 
-        #    WHERE fecha_ingreso >= %s
-        #""", (fecha_limite.date(),))
-        #metricas['ingresos_recientes'] = cursor.fetchone()[0]
-        
-        # 5. expediente actualizados recientemente (últimos 7 días)
-        #fecha_limite_semana = datetime.now() - timedelta(days=7)
-        #cursor.execute("""
-        #    SELECT COUNT(*) 
-        #    FROM expediente 
-        #    WHERE fecha_ultima_actualizacion >= %s
-        #""", (fecha_limite_semana,))
-        #metricas['actualizados_recientes'] = cursor.fetchone()[0]
-        
-        # 6. Top 5 expediente más recientes
+        # 3. Top 5 expedientes más recientes (ordenados por la fecha máxima de actividad)
         cursor.execute("""
-            SELECT radicado_completo, radicado_corto, demandante, demandado, 
-                   estado_actual, estado_principal, estado_adicional, responsable, fecha_ultima_actualizacion
-            FROM expediente 
-            ORDER BY fecha_ultima_actualizacion DESC NULLS LAST
+            SELECT 
+                e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado, 
+                e.responsable,
+                GREATEST(
+                    COALESCE((SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id), DATE '1900-01-01'),
+                    COALESCE((SELECT MAX(i.fecha_ingreso) FROM ingresos i WHERE i.expediente_id = e.id), DATE '1900-01-01'),
+                    COALESCE((SELECT MAX(a.fecha_actuacion) FROM actuaciones a WHERE a.expediente_id = e.id), DATE '1900-01-01'),
+                    COALESCE(e.fecha_ingreso, CURRENT_DATE)
+                ) as fecha_actividad
+            FROM expediente e
+            ORDER BY fecha_actividad DESC
             LIMIT 5
         """)
         metricas['expediente_recientes'] = cursor.fetchall()
         
-        # 7. Distribución por tipo de proceso
-        cursor.execute("""
-            SELECT tipo_solicitud, COUNT(*) 
-            FROM expediente
-            WHERE tipo_solicitud IS NOT NULL AND tipo_solicitud != ''
-            GROUP BY tipo_solicitud
-            ORDER BY COUNT(*) DESC
-            LIMIT 5
-        """)
-        metricas['tipos_proceso'] = cursor.fetchall()
-        
-        # 8. Actividad por mes (últimos 6 meses)
-        #cursor.execute("""
-        #    SELECT 
-        #        DATE_TRUNC('month', fecha_ingreso) as mes,
-        #        COUNT(*) as ingresos
-        #    FROM ingresos_expediente 
-        #    WHERE fecha_ingreso >= %s
-        #    GROUP BY DATE_TRUNC('month', fecha_ingreso)
-        #    ORDER BY mes DESC
-        #    LIMIT 6
-        #""", ((datetime.now() - timedelta(days=180)).date(),))
-        #metricas['actividad_mensual'] = cursor.fetchall()
+        # 4. Distribución por tipo de proceso
+        tipo_col = _detectar_columna_tipo(cursor)
+        if tipo_col:
+            cursor.execute(f"""
+                SELECT {tipo_col}, COUNT(*) 
+                FROM expediente
+                WHERE {tipo_col} IS NOT NULL AND {tipo_col} != ''
+                GROUP BY {tipo_col}
+                ORDER BY COUNT(*) DESC
+                LIMIT 5
+            """)
+            metricas['tipos_proceso'] = cursor.fetchall()
+        else:
+            # Si no existe la columna, devolver lista vacía
+            metricas['tipos_proceso'] = []
         
         cursor.close()
         conn.close()

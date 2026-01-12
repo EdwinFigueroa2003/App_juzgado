@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/password-validator.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 {% endblock %}
 
 {% block content %}
@@ -103,19 +104,16 @@
                             <table class="table table-striped table-hover" id="tablaUsuarios">
                                 <thead class="table">
                                     <tr>
-                                        <!-- <th>ID</th> -->
                                         <th>Usuario</th>
                                         <th>Correo</th>
-                                        <!-- <th>Rol</th> -->
+                                        <th>Rol</th>
                                         <th>Tipo</th>
-                                        <th>Fecha Registro</th>
                                         <th>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody id="cuerpoTablaUsuarios">
                                     {% for usuario in usuarios %}
                                     <tr>
-                                        <!-- <td>{{ usuario[0] }}</td> -->
                                         <td>
                                             <strong>{{ usuario[1] }}</strong>
                                             {% if usuario[6] %}
@@ -128,13 +126,13 @@
                                             {% endif %}
                                         </td>
                                         <td>{{ usuario[2] }}</td>
-                                        <!-- <td>
+                                        <td>
                                             {% if usuario[5] %}
                                                 <span class="badge bg-info">{{ usuario[5] }}</span>
                                             {% else %}
                                                 <span class="badge bg-secondary">Sin rol</span>
                                             {% endif %}
-                                        </td> -->
+                                        </td>
                                         <td>
                                             {% if usuario[4] %}
                                                 <span class="badge bg-warning text-dark">Administrador</span>
@@ -145,7 +143,6 @@
                                                 <span class="badge bg-danger ms-1">Inactivo</span>
                                             {% endif %}
                                         </td>
-                                        <td>{{ usuario[3].strftime('%d/%m/%Y') if usuario[3] else 'N/A' }}</td>
                                         <td>
                                             <div class="btn-group" role="group">
                                                 <!-- Cambiar contraseña -->
@@ -157,39 +154,30 @@
                                                 </button>
                                                 
                                                 <!-- Cambiar rol -->
-<!--                                                 <button type="button" class="btn btn-sm btn-outline-info btn-cambiar-rol" 
+                                                <button type="button" class="btn btn-sm btn-outline-info btn-cambiar-rol" 
                                                         data-usuario-id="{{ usuario[0] }}"
                                                         data-usuario-nombre="{{ usuario[1] }}"
                                                         data-rol-actual="{{ usuario[5] if usuario[5] else '' }}"
                                                         title="Cambiar rol">
                                                     <i class="fas fa-user-tag"></i>
-                                                </button> -->
+                                                </button>
                                                 
                                                 <!-- Toggle admin -->
-                                                <form method="POST" style="display: inline;" 
-                                                      onsubmit="return confirm('¿Está seguro de cambiar los privilegios de administrador de {{ usuario[1] }}?')">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                    <input type="hidden" name="accion" value="toggle_admin">
-                                                    <input type="hidden" name="usuario_id" value="{{ usuario[0] }}">
-                                                    <button type="submit" class="btn btn-sm btn-outline-warning" 
-                                                            title="{{ 'Quitar admin' if usuario[4] else 'Hacer admin' }}">
-                                                        <i class="fas fa-{{ 'user' if usuario[4] else 'crown' }}"></i>
-                                                    </button>
-                                                </form>
+                                                <button type="button" class="btn btn-sm btn-outline-warning btn-toggle-admin" 
+                                                        data-usuario-id="{{ usuario[0] }}"
+                                                        data-usuario-nombre="{{ usuario[1] }}"
+                                                        data-es-admin="{{ usuario[4] }}"
+                                                        title="{{ 'Quitar admin' if usuario[4] else 'Hacer admin' }}">
+                                                    <i class="fas fa-{{ 'user' if usuario[4] else 'crown' }}"></i>
+                                                </button>
                                                 
                                                 <!-- Eliminar usuario -->
-                                                <form method="POST" style="display: inline;" 
-                                                      onsubmit="return confirm('¿Está COMPLETAMENTE SEGURO de eliminar al usuario {{ usuario[1] }}?\n\nEsta acción NO se puede deshacer.')">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                    <input type="hidden" name="accion" value="eliminar_usuario">
-                                                    <input type="hidden" name="usuario_id" value="{{ usuario[0] }}">
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger" 
-                                                            title="Eliminar usuario">
-                                                        <i class="fas fa-trash"></i>
-                                                    </button>
-                                                </form>
+                                                <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-usuario" 
+                                                        data-usuario-id="{{ usuario[0] }}"
+                                                        data-usuario-nombre="{{ usuario[1] }}"
+                                                        title="Eliminar usuario">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -414,54 +402,5 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/password-validator.js') }}"></script>
-<script>
-// Función para alternar visibilidad de contraseña
-function togglePasswordVisibility(fieldId) {
-    const field = document.getElementById(fieldId);
-    const button = field.parentNode.querySelector('.password-toggle i');
-    
-    if (field.type === 'password') {
-        field.type = 'text';
-        button.className = 'fas fa-eye-slash';
-    } else {
-        field.type = 'password';
-        button.className = 'fas fa-eye';
-    }
-}
-
-// Validar formularios antes del envío
-document.addEventListener('DOMContentLoaded', function() {
-    // Formulario de agregar usuario
-    const formAgregar = document.querySelector('#modalAgregarUsuario form');
-    if (formAgregar) {
-        formAgregar.addEventListener('submit', async function(e) {
-            const passwordField = document.getElementById('password');
-            if (passwordField && passwordField.value) {
-                const isValid = await window.passwordValidator.validateBeforeSubmit('password');
-                if (!isValid) {
-                    e.preventDefault();
-                    alert('Por favor corrija los errores en la contraseña antes de continuar.');
-                    return false;
-                }
-            }
-        });
-    }
-    
-    // Formulario de cambiar contraseña
-    const formCambiar = document.querySelector('#modalCambiarPassword form');
-    if (formCambiar) {
-        formCambiar.addEventListener('submit', async function(e) {
-            const passwordField = document.getElementById('nueva_password');
-            if (passwordField && passwordField.value) {
-                const isValid = await window.passwordValidator.validateBeforeSubmit('nueva_password');
-                if (!isValid) {
-                    e.preventDefault();
-                    alert('Por favor corrija los errores en la contraseña antes de continuar.');
-                    return false;
-                }
-            }
-        });
-    }
-});
-</script>
+<script src="{{ url_for('static', filename='js/usuarios.js') }}"></script>
 {% endblock %}

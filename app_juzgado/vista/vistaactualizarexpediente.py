@@ -39,7 +39,7 @@ def _detectar_columna_tipo(cursor):
     try:
         cursor.execute("""
             SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'expedientes' AND column_name IN ('tipo_solicitud', 'tipo_tramite')
+            WHERE table_name = 'expediente' AND column_name IN ('tipo_solicitud', 'tipo_tramite')
         """)
         cols = [r[0] for r in cursor.fetchall()]
         if 'tipo_solicitud' in cols:
@@ -81,10 +81,10 @@ def buscar_expediente_por_radicado(radicado):
             tipo_expr, tipo_select = _fragmento_tipo_select(cursor, 'e')
             query = f"""
                 SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado_actual, estado_principal, estado_adicional, ubicacion_actual,
-                       {tipo_select}, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                       estado, ubicacion_actual,
+                       {tipo_select}, juzgado_origen, responsable, observaciones,
                        fecha_ultima_actuacion_real
-                FROM expedientes 
+                FROM expediente 
                 WHERE radicado_completo = %s
                    OR REPLACE(radicado_completo, ' ', '') = %s
                    OR radicado_completo LIKE %s
@@ -95,10 +95,10 @@ def buscar_expediente_por_radicado(radicado):
             tipo_expr, tipo_select = _fragmento_tipo_select(cursor, 'e')
             query = f"""
                 SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado_actual, estado_principal, estado_adicional, ubicacion_actual,
-                       {tipo_select}, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                       estado, ubicacion_actual,
+                       {tipo_select}, juzgado_origen, responsable, observaciones,
                        fecha_ultima_actuacion_real
-                FROM expedientes 
+                FROM expediente 
                 WHERE radicado_corto = %s
                 LIMIT 1
             """
@@ -114,15 +114,15 @@ def buscar_expediente_por_radicado(radicado):
                 'demandante': result[3],
                 'demandado': result[4],
                 'estado_actual': result[5],
-                'estado_principal': result[6],
-                'estado_adicional': result[7],
-                'ubicacion_actual': result[8],
-                'tipo_solicitud': result[9],
-                'juzgado_origen': result[10],
-                'responsable': result[11],
-                'observaciones': result[12],
-                'fecha_ultima_actualizacion': result[13],
-                'fecha_ultima_actuacion_real': result[14]
+                'estado_principal': None,
+                'estado_adicional': None,
+                'ubicacion_actual': result[6],
+                'tipo_solicitud': result[7],
+                'juzgado_origen': result[8],
+                'responsable': result[9],
+                'observaciones': result[10],
+                'fecha_ultima_actualizacion': None,
+                'fecha_ultima_actuacion_real': result[11]
             }
             
             # Obtener ingresos con ID para poder eliminarlos
@@ -163,10 +163,10 @@ def buscar_expediente_por_id(expediente_id):
         
         cursor.execute("""
             SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                   estado_actual, estado_principal, estado_adicional, ubicacion_actual, 
-                   , juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                   estado, ubicacion_actual, 
+                   tipo_solicitud, juzgado_origen, responsable, observaciones,
                    fecha_ultima_actuacion_real
-            FROM expedientes 
+            FROM expediente 
             WHERE id = %s
         """, (expediente_id,))
         
@@ -180,15 +180,15 @@ def buscar_expediente_por_id(expediente_id):
                 'demandante': result[3],
                 'demandado': result[4],
                 'estado_actual': result[5],
-                'estado_principal': result[6],
-                'estado_adicional': result[7],
-                'ubicacion_actual': result[8],
-                '': result[9],
-                'juzgado_origen': result[10],
-                'responsable': result[11],
-                'observaciones': result[12],
-                'fecha_ultima_actualizacion': result[13],
-                'fecha_ultima_actuacion_real': result[14]
+                'estado_principal': None,
+                'estado_adicional': None,
+                'ubicacion_actual': result[6],
+                'tipo_solicitud': result[7],
+                'juzgado_origen': result[8],
+                'responsable': result[9],
+                'observaciones': result[10],
+                'fecha_ultima_actualizacion': None,
+                'fecha_ultima_actuacion_real': result[11]
             }
             
             # Obtener ingresos con ID para poder eliminarlos
@@ -290,10 +290,10 @@ def buscar_expediente_para_actualizar():
             # Búsqueda mejorada para radicado completo
             cursor.execute("""
                 SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado_actual, estado_principal, estado_adicional, ubicacion_actual, 
-                       tipo_solicitud, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                       estado, ubicacion_actual, 
+                       tipo_solicitud, juzgado_origen, responsable, observaciones,
                        fecha_ultima_actuacion_real
-                FROM expedientes 
+                FROM expediente 
                 WHERE radicado_completo = %s
                    OR REPLACE(radicado_completo, ' ', '') = %s
                    OR radicado_completo LIKE %s
@@ -301,10 +301,10 @@ def buscar_expediente_para_actualizar():
         else:
             cursor.execute("""
                 SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado_actual, estado_principal, estado_adicional, ubicacion_actual, 
-                       tipo_solicitud, juzgado_origen, responsable, observaciones, fecha_ultima_actualizacion,
+                       estado, ubicacion_actual, 
+                       tipo_solicitud, juzgado_origen, responsable, observaciones,
                        fecha_ultima_actuacion_real
-                FROM expedientes 
+                FROM expediente 
                 WHERE radicado_corto = %s
                 LIMIT 1
             """, (radicado_limpio,))
@@ -319,15 +319,15 @@ def buscar_expediente_para_actualizar():
                 'demandante': result[3],
                 'demandado': result[4],
                 'estado_actual': result[5],
-                'estado_principal': result[6],
-                'estado_adicional': result[7],
-                'ubicacion_actual': result[8],
-                'tipo_solicitud': result[9],
-                'juzgado_origen': result[10],
-                'responsable': result[11],
-                'observaciones': result[12],
-                'fecha_ultima_actualizacion': result[13],
-                'fecha_ultima_actuacion_real': result[14]
+                'estado_principal': None,
+                'estado_adicional': None,
+                'ubicacion_actual': result[6],
+                'tipo_solicitud': result[7],
+                'juzgado_origen': result[8],
+                'responsable': result[9],
+                'observaciones': result[10],
+                'fecha_ultima_actualizacion': None,
+                'fecha_ultima_actuacion_real': result[11]
             }
             
             # Obtener ingresos con ID para poder eliminarlos
@@ -387,11 +387,10 @@ def actualizar_expediente():
         cursor = conn.cursor()
         
         cursor.execute("""
-            UPDATE expedientes 
-            SET demandante = %s, demandado = %s, estado_actual = %s,
+            UPDATE expediente 
+            SET demandante = %s, demandado = %s, estado = %s,
                 ubicacion_actual = %s, tipo_solicitud = %s, juzgado_origen = %s,
-                responsable = %s, observaciones = %s,
-                fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                responsable = %s, observaciones = %s
             WHERE id = %s
         """, (demandante, demandado, estado_actual, ubicacion_actual, 
               tipo_solicitud, juzgado_origen, rol_responsable, observaciones, expediente_id))
@@ -489,8 +488,8 @@ def agregar_estado():
         
         # Actualizar estado actual del expediente
         cursor.execute("""
-            UPDATE expedientes 
-            SET estado_actual = %s, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+            UPDATE expediente 
+            SET estado = %s
             WHERE id = %s
         """, (nuevo_estado, expediente_id))
         
@@ -606,8 +605,8 @@ def quitar_responsable():
         
         # Quitar el responsable (establecer como NULL)
         cursor.execute("""
-            UPDATE expedientes 
-            SET responsable = NULL, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+            UPDATE expediente 
+            SET responsable = NULL
             WHERE id = %s
         """, (expediente_id,))
         
@@ -656,16 +655,16 @@ def asignacion_masiva():
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
             query = """
-                UPDATE expedientes 
-                SET responsable = %s, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
-                WHERE estado_actual = %s
+                UPDATE expediente 
+                SET responsable = %s
+                WHERE estado = %s
             """
             cursor.execute(query, (rol_asignar, valor_criterio))
             
         elif criterio == 'sin_responsable':
             query = """
-                UPDATE expedientes 
-                SET responsable = %s, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                UPDATE expediente 
+                SET responsable = %s
                 WHERE responsable IS NULL OR responsable = ''
             """
             cursor.execute(query, (rol_asignar,))
@@ -680,8 +679,8 @@ def asignacion_masiva():
                 flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             query = f"""
-                UPDATE expedientes 
-                SET responsable = %s, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                UPDATE expediente 
+                SET responsable = %s
                 WHERE {tipo_col} ILIKE %s
             """
             cursor.execute(query, (rol_asignar, f'%{valor_criterio}%'))
@@ -692,8 +691,8 @@ def asignacion_masiva():
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
             query = """
-                UPDATE expedientes 
-                SET responsable = %s, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                UPDATE expediente 
+                SET responsable = %s
                 WHERE juzgado_origen ILIKE %s
             """
             cursor.execute(query, (rol_asignar, f'%{valor_criterio}%'))
@@ -704,8 +703,8 @@ def asignacion_masiva():
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
             query = """
-                UPDATE expedientes 
-                SET responsable = %s, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                UPDATE expediente 
+                SET responsable = %s
             """
             cursor.execute(query, (rol_asignar,))
         
@@ -736,9 +735,9 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
             query = """
-                UPDATE expedientes 
-                SET responsable = NULL, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
-                WHERE estado_actual = %s AND responsable IS NOT NULL
+                UPDATE expediente 
+                SET responsable = NULL
+                WHERE estado = %s AND responsable IS NOT NULL
             """
             cursor.execute(query, (valor_criterio,))
             expedientes_actualizados = cursor.rowcount
@@ -757,8 +756,8 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
                 flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             query = f"""
-                UPDATE expedientes 
-                SET responsable = NULL, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                UPDATE expediente 
+                SET responsable = NULL
                 WHERE {tipo_col} ILIKE %s AND responsable IS NOT NULL
             """
             cursor.execute(query, (f'%{valor_criterio}%',))
@@ -770,8 +769,8 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
             query = """
-                UPDATE expedientes 
-                SET responsable = NULL, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                UPDATE expediente 
+                SET responsable = NULL
                 WHERE juzgado_origen ILIKE %s AND responsable IS NOT NULL
             """
             cursor.execute(query, (f'%{valor_criterio}%',))
@@ -779,8 +778,8 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
             
         elif criterio == 'todos':
             query = """
-                UPDATE expedientes 
-                SET responsable = NULL, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                UPDATE expediente 
+                SET responsable = NULL
                 WHERE responsable IS NOT NULL
             """
             cursor.execute(query)
@@ -800,6 +799,8 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
     except Exception as e:
         flash(f'Error en limpieza masiva: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+
+def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn):
     """Maneja la asignación aleatoria de roles"""
     import random
     
@@ -812,11 +813,11 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
                 flash('Debe especificar un estado para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
-            cursor.execute("SELECT id FROM expedientes WHERE estado_actual = %s", (valor_criterio,))
+            cursor.execute("SELECT id FROM expediente WHERE estado = %s", (valor_criterio,))
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'sin_responsable':
-            cursor.execute("SELECT id FROM expedientes WHERE responsable IS NULL OR responsable = ''")
+            cursor.execute("SELECT id FROM expediente WHERE responsable IS NULL OR responsable = ''")
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'tipo_solicitud':
@@ -827,7 +828,7 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
             if not tipo_col:
                 flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'warning')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            cursor.execute(f"SELECT id FROM expedientes WHERE {tipo_col} ILIKE %s", (f'%{valor_criterio}%',))
+            cursor.execute(f"SELECT id FROM expediente WHERE {tipo_col} ILIKE %s", (f'%{valor_criterio}%',))
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'juzgado_origen':
@@ -835,11 +836,11 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
                 flash('Debe especificar un juzgado de origen para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
-            cursor.execute("SELECT id FROM expedientes WHERE juzgado_origen ILIKE %s", (f'%{valor_criterio}%',))
+            cursor.execute("SELECT id FROM expediente WHERE juzgado_origen ILIKE %s", (f'%{valor_criterio}%',))
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'todos':
-            cursor.execute("SELECT id FROM expedientes")
+            cursor.execute("SELECT id FROM expediente")
             expedientes_ids = [row[0] for row in cursor.fetchall()]
         
         if not expedientes_ids:
@@ -855,8 +856,8 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
             rol_aleatorio = random.choice(roles_disponibles)
             
             cursor.execute("""
-                UPDATE expedientes 
-                SET responsable = %s, fecha_ultima_actualizacion = CURRENT_TIMESTAMP
+                UPDATE expediente 
+                SET responsable = %s
                 WHERE id = %s
             """, (rol_aleatorio, expediente_id))
             
@@ -891,30 +892,24 @@ def obtener_estadisticas_expedientes():
         cursor = conn.cursor()
         
         # Estadísticas generales
-        cursor.execute("SELECT COUNT(*) FROM expedientes")
+        cursor.execute("SELECT COUNT(*) FROM expediente")
         total_expedientes = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM expedientes WHERE responsable IS NULL OR responsable = ''")
+        cursor.execute("SELECT COUNT(*) FROM expediente WHERE responsable IS NULL OR responsable = ''")
         sin_responsable = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM expedientes WHERE responsable = 'ESCRIBIENTE'")
+        cursor.execute("SELECT COUNT(*) FROM expediente WHERE responsable = 'ESCRIBIENTE'")
         escribientes = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM expedientes WHERE responsable = 'SUSTANCIADOR'")
+        cursor.execute("SELECT COUNT(*) FROM expediente WHERE responsable = 'SUSTANCIADOR'")
         sustanciadores = cursor.fetchone()[0]
         
         # Estados más comunes
         cursor.execute("""
             SELECT 
-                CASE 
-                    WHEN estado_principal IS NOT NULL AND estado_adicional IS NOT NULL THEN 
-                        CONCAT(estado_principal, ' + ', estado_adicional)
-                    WHEN estado_principal IS NOT NULL THEN estado_principal
-                    WHEN estado_adicional IS NOT NULL THEN estado_adicional
-                    ELSE COALESCE(estado_actual, 'SIN_INFORMACION')
-                END as estado_combinado,
+                COALESCE(estado, 'SIN_INFORMACION') as estado_combinado,
                 COUNT(*) as cantidad 
-            FROM expedientes 
+            FROM expediente 
             GROUP BY estado_combinado
             ORDER BY cantidad DESC 
             LIMIT 8
