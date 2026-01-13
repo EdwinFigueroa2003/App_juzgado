@@ -206,26 +206,17 @@
                                             <tr>
                                                 <td>
                                                     <small class="font-weight-bold">
-                                                        {{ expediente[0] or expediente[1] or 'N/A' }}
+                                                        {{ expediente[1] or expediente[2] or 'N/A' }}
                                                     </small>
                                                 </td>
-                                                <td>{{ (expediente[2][:20] + '...') if expediente[2] and expediente[2]|length > 20 else (expediente[2] or 'N/A') }}</td>
+                                                <td>{{ (expediente[3][:20] + '...') if expediente[3] and expediente[3]|length > 20 else (expediente[3] or 'N/A') }}</td>
                                                 <td>
-                                                    {% if expediente[5] and expediente[6] %}
-                                                        <span class="badge badge-success">{{ expediente[5] }}</span>
-                                                        <span class="badge badge-info">{{ expediente[6] }}</span>
-                                                    {% elif expediente[5] %}
-                                                        <span class="badge badge-success">{{ expediente[5] }}</span>
-                                                    {% elif expediente[6] %}
-                                                        <span class="badge badge-info">{{ expediente[6] }}</span>
-                                                    {% else %}
-                                                        <span class="badge badge-secondary">{{ expediente[4] or 'Sin estado' }}</span>
-                                                    {% endif %}
+                                                    <span class="badge badge-primary">{{ expediente[7] or 'Sin estado' }}</span>
                                                 </td>
-                                                <td>{{ expediente[7] or 'Sin asignar' }}</td>
+                                                <td>{{ expediente[5] or 'Sin asignar' }}</td>
                                                 <td>
                                                     <small>
-                                                        {{ expediente[8].strftime('%d/%m/%Y') if expediente[8] else 'N/A' }}
+                                                        {{ expediente[6].strftime('%d/%m/%Y') if expediente[6] else 'N/A' }}
                                                     </small>
                                                 </td>
                                             </tr>

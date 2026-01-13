@@ -510,91 +510,51 @@ def buscar_expedientes(radicado):
 
 
 def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, fecha_hasta=None, tipo_fecha='ingreso'):
-    """Filtra expedientes por estado con la nueva lógica de estados"""
+    """Filtra expedientes por estado - ULTRA OPTIMIZADO usando campo estado directo"""
     try:
         conn = obtener_conexion()
         cursor = conn.cursor()
         
-        # Construir la consulta base
+        # Construir la consulta base OPTIMIZADA
         where_conditions = []
         parametros = []
         
-        # Filtro por estado según la nueva lógica
-        if estado == "ACTIVO PENDIENTE" or estado == "ACTIVO":
-            # Expedientes que tienen ingresos o actuaciones (están en trámite)
-            where_conditions.append("""
-                (EXISTS (SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id)
-                 OR EXISTS (SELECT 1 FROM actuaciones a WHERE a.expediente_id = e.id))
-            """)
-            if estado == "ACTIVO PENDIENTE":
-                # Solo los que no tienen estados o el último ingreso/actuación es más reciente que el último estado
-                where_conditions.append("""
-                    (NOT EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)
-                     OR 
-                     GREATEST(
-                         COALESCE((SELECT MAX(i2.fecha_ingreso) FROM ingresos i2 WHERE i2.expediente_id = e.id), DATE '1900-01-01'),
-                         COALESCE((SELECT MAX(a2.fecha_actuacion) FROM actuaciones a2 WHERE a2.expediente_id = e.id), DATE '1900-01-01'),
-                         COALESCE(e.fecha_ingreso, DATE '1900-01-01')
-                     ) > 
-                     (SELECT MAX(s2.fecha_estado) FROM estados s2 WHERE s2.expediente_id = e.id))
-                """)
-        
+        # Filtro por estado DIRECTO desde campo estado (ULTRA RÁPIDO)
+        if estado == "ACTIVO PENDIENTE":
+            where_conditions.append("e.estado = %s")
+            parametros.append("Activo Pendiente")
         elif estado == "ACTIVO RESUELTO":
-            # Expedientes con estados y última fecha de estado < 1 año
-            # Y que no tengan actividad más reciente (ingresos/actuaciones)
-            where_conditions.append("EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)")
-            where_conditions.append("""
-                (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) > 
-                (CURRENT_DATE - INTERVAL '1 year')
-            """)
-            # Verificar que el estado sea más reciente que cualquier actividad
-            where_conditions.append("""
-                (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) >= 
-                COALESCE(
-                    (SELECT MAX(i.fecha_ingreso) FROM ingresos i WHERE i.expediente_id = e.id),
-                    (SELECT MAX(a.fecha_actuacion) FROM actuaciones a WHERE a.expediente_id = e.id),
-                    '1900-01-01'::date
-                )
-            """)
-        
-        elif estado == "INACTIVO RESUELTO" or estado == "INACTIVO":
-            # Expedientes con estados y última fecha de estado > 1 año
-            # Y que no tengan actividad más reciente (ingresos/actuaciones)
-            where_conditions.append("EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)")
-            where_conditions.append("""
-                (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) <= 
-                (CURRENT_DATE - INTERVAL '1 year')
-            """)
-            # Verificar que el estado sea más reciente que cualquier actividad
-            where_conditions.append("""
-                (SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id) >= 
-                COALESCE(
-                    (SELECT MAX(i.fecha_ingreso) FROM ingresos i WHERE i.expediente_id = e.id),
-                    (SELECT MAX(a.fecha_actuacion) FROM actuaciones a WHERE a.expediente_id = e.id),
-                    '1900-01-01'::date
-                )
-            """)
-        
+            where_conditions.append("e.estado = %s")
+            parametros.append("Activo Resuelto")
+        elif estado == "INACTIVO RESUELTO":
+            where_conditions.append("e.estado = %s")
+            parametros.append("Inactivo Resuelto")
         elif estado == "PENDIENTE":
-            # Expedientes sin ingresos, estados ni actuaciones
-            where_conditions.append("NOT EXISTS (SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id)")
-            where_conditions.append("NOT EXISTS (SELECT 1 FROM estados s WHERE s.expediente_id = e.id)")
-            where_conditions.append("NOT EXISTS (SELECT 1 FROM actuaciones a WHERE a.expediente_id = e.id)")
+            where_conditions.append("e.estado = %s")
+            parametros.append("Pendiente")
+        elif estado == "ACTIVO":
+            # Todos los activos (Pendiente + Resuelto)
+            where_conditions.append("e.estado IN (%s, %s)")
+            parametros.extend(["Activo Pendiente", "Activo Resuelto"])
+        elif estado == "INACTIVO":
+            # Todos los inactivos
+            where_conditions.append("e.estado = %s")
+            parametros.append("Inactivo Resuelto")
+        else:
+            # Estado específico exacto
+            where_conditions.append("e.estado = %s")
+            parametros.append(estado)
         
-        # Construir la consulta completa
+        # Construir la consulta completa OPTIMIZADA
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         orden_sql = 'DESC' if orden_fecha == 'DESC' else 'ASC'
         
+        # Consulta ULTRA OPTIMIZADA - sin subconsultas complejas
         query = f"""
             SELECT 
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
                 e.juzgado_origen, e.fecha_ingreso, e.estado,
-                GREATEST(
-                    COALESCE((SELECT MAX(s.fecha_estado) FROM estados s WHERE s.expediente_id = e.id), DATE '1900-01-01'),
-                    COALESCE((SELECT MAX(i.fecha_ingreso) FROM ingresos i WHERE i.expediente_id = e.id), DATE '1900-01-01'),
-                    COALESCE((SELECT MAX(a.fecha_actuacion) FROM actuaciones a WHERE a.expediente_id = e.id), DATE '1900-01-01'),
-                    COALESCE(e.fecha_ingreso, CURRENT_DATE)
-                ) as fecha_orden
+                COALESCE(e.fecha_ingreso, CURRENT_DATE) as fecha_orden
             FROM expediente e
             WHERE {where_clause}
             ORDER BY fecha_orden {orden_sql}
@@ -619,8 +579,8 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 'demandado': row[4],
                 'juzgado_origen': row[5],
                 'fecha_ingreso': row[6],
-                'estado': row[7],  # Estado original de la tabla
-                'fecha_actuacion': row[8],  # Fecha calculada dinámicamente en la consulta
+                'estado': row[7],  # Estado directo de la tabla
+                'fecha_actuacion': row[8],  # Fecha de ingreso como fecha de orden
                 'ingresos': [],
                 'estados': [],
                 'actuaciones': [],
@@ -694,10 +654,9 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 for row in cursor.fetchall()
             ]
             
-            # Calcular estado actual con la nueva lógica
-            estado_actual, descripcion_estado = calcular_estado_expediente(exp_id, cursor)
-            expediente['estado_actual'] = estado_actual
-            expediente['descripcion_estado'] = descripcion_estado
+            # Usar estado directo de la tabla (OPTIMIZADO)
+            expediente['estado_actual'] = expediente['estado'] or 'Sin Estado'
+            expediente['descripcion_estado'] = f"Estado: {expediente['estado'] or 'Sin Estado'}"
             
             # Estadísticas básicas
             expediente['estadisticas'] = {
