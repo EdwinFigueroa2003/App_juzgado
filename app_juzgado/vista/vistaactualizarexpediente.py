@@ -1,7 +1,12 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 import sys
 import os
+import logging
 from datetime import datetime, date
+
+# Configurar logging específico para actualizarexpediente
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,8 +19,10 @@ vistaactualizarexpediente = Blueprint('idvistaactualizarexpediente', __name__, t
 
 def obtener_roles_activos():
     """Obtiene la lista de roles disponibles"""
+    logger.info("=== INICIO obtener_roles_activos ===")
     try:
         conn = obtener_conexion()
+        logger.info("Conexión a BD establecida correctamente")
         cursor = conn.cursor()
         
         cursor.execute("""
@@ -25,13 +32,31 @@ def obtener_roles_activos():
         """)
         
         roles = cursor.fetchall()
+        logger.info(f"Roles obtenidos: {len(roles)} registros")
         cursor.close()
         conn.close()
         
-        return [{'id': r[0], 'nombre_rol': r[1]} for r in roles]
+        result = [{'id': r[0], 'nombre_rol': r[1]} for r in roles]
+        logger.info(f"=== FIN obtener_roles_activos - Retornando {len(result)} roles ===")
+        return result
         
     except Exception as e:
-        print(f"Error obteniendo roles: {e}")
+        logger.error(f"ERROR en obtener_roles_activos: {str(e)}")
+        return []
+
+def _detectar_columnas_disponibles(cursor):
+    """Detecta las columnas disponibles en la tabla expediente"""
+    try:
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'expediente'
+        """)
+        columns = [row[0] for row in cursor.fetchall()]
+        logger.info(f"Columnas disponibles en tabla expediente: {columns}")
+        return columns
+    except Exception as e:
+        logger.error(f"Error detectando columnas: {str(e)}")
         return []
 
 def _detectar_columna_tipo(cursor):
@@ -50,6 +75,64 @@ def _detectar_columna_tipo(cursor):
     except Exception:
         return None
 
+def _detectar_columna_ubicacion(cursor):
+    """Retorna el nombre de la columna existente entre 'ubicacion' y 'ubicacion_actual', o None"""
+    try:
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'expediente' AND column_name IN ('ubicacion', 'ubicacion_actual')
+        """)
+        cols = [r[0] for r in cursor.fetchall()]
+        if 'ubicacion' in cols:
+            return 'ubicacion'
+        if 'ubicacion_actual' in cols:
+            return 'ubicacion_actual'
+        return None
+    except Exception:
+        return None
+
+def _construir_select_expediente(cursor, alias=''):
+    """Construye la parte SELECT para consultas de expediente basado en columnas disponibles"""
+    available_columns = _detectar_columnas_disponibles(cursor)
+    
+    # Si no se proporciona alias, no usar prefijo
+    prefix = f"{alias}." if alias else ""
+    
+    # Columnas base que siempre deben estar
+    base_select = [
+        f"{prefix}id",
+        f"{prefix}radicado_completo", 
+        f"{prefix}radicado_corto",
+        f"{prefix}demandante",
+        f"{prefix}demandado",
+        f"{prefix}estado"
+    ]
+    
+    # Columnas opcionales
+    if 'ubicacion' in available_columns:
+        base_select.append(f"{prefix}ubicacion")
+    elif 'ubicacion_actual' in available_columns:
+        base_select.append(f"{prefix}ubicacion_actual")
+    else:
+        base_select.append("NULL AS ubicacion")
+    
+    # Tipo de solicitud
+    tipo_col = _detectar_columna_tipo(cursor)
+    if tipo_col:
+        base_select.append(f"{prefix}{tipo_col} AS tipo_solicitud")
+    else:
+        base_select.append("NULL AS tipo_solicitud")
+    
+    # Otras columnas opcionales
+    optional_columns = ['juzgado_origen', 'responsable', 'observaciones', 'fecha_ingreso']
+    for col in optional_columns:
+        if col in available_columns:
+            base_select.append(f"{prefix}{col}")
+        else:
+            base_select.append(f"NULL AS {col}")
+    
+    return ", ".join(base_select)
+
 def _fragmento_tipo_select(cursor, alias='e'):
     """Devuelve (tipo_expr, tipo_select) donde tipo_expr es la expresión para GROUP/WHERE y tipo_select es la parte SELECT con alias.
     Ejemplos: ('e.tipo_solicitud', 'e.tipo_solicitud AS tipo_solicitud') o
@@ -66,47 +149,57 @@ def _fragmento_tipo_select(cursor, alias='e'):
 
 def buscar_expediente_por_radicado(radicado):
     """Busca un expediente por radicado y devuelve sus datos completos"""
+    logger.info("=== INICIO buscar_expediente_por_radicado ===")
+    logger.info(f"Radicado a buscar: '{radicado}'")
+    
     try:
         conn = obtener_conexion()
         cursor = conn.cursor()
         
         # Limpiar el radicado: eliminar espacios
         radicado_limpio = radicado.strip() if radicado else ''
+        logger.info(f"Radicado limpio: '{radicado_limpio}'")
         
         # Determinar si es radicado completo o corto
         es_radicado_completo = len(radicado_limpio) > 15
+        logger.info(f"Es radicado completo: {es_radicado_completo}")
+        
+        # Construir SELECT dinámico
+        select_clause = _construir_select_expediente(cursor)
+        logger.info(f"SELECT construido: {select_clause}")
         
         if es_radicado_completo:
             # Búsqueda mejorada para radicado completo
-            tipo_expr, tipo_select = _fragmento_tipo_select(cursor, 'e')
             query = f"""
-                SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado, ubicacion_actual,
-                       {tipo_select}, juzgado_origen, responsable, observaciones,
-                       fecha_ultima_actuacion_real
+                SELECT {select_clause}
                 FROM expediente 
                 WHERE radicado_completo = %s
                    OR REPLACE(radicado_completo, ' ', '') = %s
                    OR radicado_completo LIKE %s
                 LIMIT 1
             """
-            cursor.execute(query, (radicado_limpio, radicado_limpio.replace(' ', ''), f'%{radicado_limpio}%'))
+            params = (radicado_limpio, radicado_limpio.replace(' ', ''), f'%{radicado_limpio}%')
         else:
-            tipo_expr, tipo_select = _fragmento_tipo_select(cursor, 'e')
             query = f"""
-                SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado, ubicacion_actual,
-                       {tipo_select}, juzgado_origen, responsable, observaciones,
-                       fecha_ultima_actuacion_real
+                SELECT {select_clause}
                 FROM expediente 
                 WHERE radicado_corto = %s
                 LIMIT 1
             """
-            cursor.execute(query, (radicado_limpio,))
+            params = (radicado_limpio,)
         
+        logger.info(f"Query: {query}")
+        logger.info(f"Parámetros: {params}")
+        
+        cursor.execute(query, params)
         result = cursor.fetchone()
         
         if result:
+            logger.info(f"Expediente encontrado: {result}")
+            
+            # Mapear resultado dinámicamente
+            available_columns = _detectar_columnas_disponibles(cursor)
+            
             expediente = {
                 'id': result[0],
                 'radicado_completo': result[1],
@@ -116,63 +209,95 @@ def buscar_expediente_por_radicado(radicado):
                 'estado_actual': result[5],
                 'estado_principal': None,
                 'estado_adicional': None,
-                'ubicacion_actual': result[6],
-                'tipo_solicitud': result[7],
-                'juzgado_origen': result[8],
-                'responsable': result[9],
-                'observaciones': result[10],
+                'ubicacion_actual': result[6] if result[6] is not None else '',
+                'tipo_solicitud': result[7] if result[7] is not None else '',
+                'juzgado_origen': result[8] if len(result) > 8 and result[8] is not None else '',
+                'responsable': result[9] if len(result) > 9 and result[9] is not None else '',
+                'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
-                'fecha_ultima_actuacion_real': result[11]
+                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
             }
             
-            # Obtener ingresos con ID para poder eliminarlos
-            cursor.execute("""
-                SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
-                FROM ingresos_expediente 
-                WHERE expediente_id = %s
-                ORDER BY fecha_ingreso DESC
-            """, (expediente['id'],))
-            expediente['ingresos'] = cursor.fetchall()
+            logger.info(f"Expediente mapeado: {expediente}")
             
-            # Obtener estados con ID para poder eliminarlos
+            # Verificar si existen tablas relacionadas
             cursor.execute("""
-                SELECT id, fecha_estado, estado, observaciones
-                FROM estados_expediente 
-                WHERE expediente_id = %s
-                ORDER BY fecha_estado DESC
-            """, (expediente['id'],))
-            expediente['estados'] = cursor.fetchall()
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_name IN ('ingresos_expediente', 'estados_expediente')
+            """)
+            tablas_relacionadas = [row[0] for row in cursor.fetchall()]
+            logger.info(f"Tablas relacionadas encontradas: {tablas_relacionadas}")
+            
+            # Obtener ingresos si la tabla existe
+            if 'ingresos_expediente' in tablas_relacionadas:
+                cursor.execute("""
+                    SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
+                    FROM ingresos_expediente 
+                    WHERE expediente_id = %s
+                    ORDER BY fecha_ingreso DESC
+                """, (expediente['id'],))
+                expediente['ingresos'] = cursor.fetchall()
+                logger.info(f"Ingresos encontrados: {len(expediente['ingresos'])}")
+            else:
+                expediente['ingresos'] = []
+                logger.info("Tabla ingresos_expediente no existe")
+            
+            # Obtener estados si la tabla existe
+            if 'estados_expediente' in tablas_relacionadas:
+                cursor.execute("""
+                    SELECT id, fecha_estado, estado, observaciones
+                    FROM estados_expediente 
+                    WHERE expediente_id = %s
+                    ORDER BY fecha_estado DESC
+                """, (expediente['id'],))
+                expediente['estados'] = cursor.fetchall()
+                logger.info(f"Estados encontrados: {len(expediente['estados'])}")
+            else:
+                expediente['estados'] = []
+                logger.info("Tabla estados_expediente no existe")
             
             cursor.close()
             conn.close()
+            logger.info("=== FIN buscar_expediente_por_radicado - ÉXITO ===")
             return expediente
         else:
             cursor.close()
             conn.close()
+            logger.warning("=== FIN buscar_expediente_por_radicado - NO ENCONTRADO ===")
             return None
             
     except Exception as e:
-        print(f"Error buscando expediente por radicado: {e}")
+        logger.error(f"ERROR en buscar_expediente_por_radicado: {str(e)}")
+        logger.error(f"Tipo de error: {type(e).__name__}")
         return None
 
 def buscar_expediente_por_id(expediente_id):
     """Busca un expediente por ID y devuelve sus datos completos"""
+    logger.info("=== INICIO buscar_expediente_por_id ===")
+    logger.info(f"ID a buscar: {expediente_id}")
+    
     try:
         conn = obtener_conexion()
         cursor = conn.cursor()
         
-        cursor.execute("""
-            SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                   estado, ubicacion_actual, 
-                   tipo_solicitud, juzgado_origen, responsable, observaciones,
-                   fecha_ultima_actuacion_real
+        # Construir SELECT dinámico
+        select_clause = _construir_select_expediente(cursor)
+        
+        query = f"""
+            SELECT {select_clause}
             FROM expediente 
             WHERE id = %s
-        """, (expediente_id,))
+        """
+        
+        logger.info(f"Query: {query}")
+        cursor.execute(query, (expediente_id,))
         
         result = cursor.fetchone()
         
         if result:
+            logger.info(f"Expediente encontrado: {result}")
+            
             expediente = {
                 'id': result[0],
                 'radicado_completo': result[1],
@@ -182,48 +307,67 @@ def buscar_expediente_por_id(expediente_id):
                 'estado_actual': result[5],
                 'estado_principal': None,
                 'estado_adicional': None,
-                'ubicacion_actual': result[6],
-                'tipo_solicitud': result[7],
-                'juzgado_origen': result[8],
-                'responsable': result[9],
-                'observaciones': result[10],
+                'ubicacion_actual': result[6] if result[6] is not None else '',
+                'tipo_solicitud': result[7] if result[7] is not None else '',
+                'juzgado_origen': result[8] if len(result) > 8 and result[8] is not None else '',
+                'responsable': result[9] if len(result) > 9 and result[9] is not None else '',
+                'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
-                'fecha_ultima_actuacion_real': result[11]
+                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
             }
             
-            # Obtener ingresos con ID para poder eliminarlos
+            # Verificar si existen tablas relacionadas
             cursor.execute("""
-                SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
-                FROM ingresos_expediente 
-                WHERE expediente_id = %s
-                ORDER BY fecha_ingreso DESC
-            """, (expediente['id'],))
-            expediente['ingresos'] = cursor.fetchall()
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_name IN ('ingresos_expediente', 'estados_expediente')
+            """)
+            tablas_relacionadas = [row[0] for row in cursor.fetchall()]
             
-            # Obtener estados con ID para poder eliminarlos
-            cursor.execute("""
-                SELECT id, fecha_estado, estado, observaciones
-                FROM estados_expediente 
-                WHERE expediente_id = %s
-                ORDER BY fecha_estado DESC
-            """, (expediente['id'],))
-            expediente['estados'] = cursor.fetchall()
+            # Obtener ingresos si la tabla existe
+            if 'ingresos_expediente' in tablas_relacionadas:
+                cursor.execute("""
+                    SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
+                    FROM ingresos_expediente 
+                    WHERE expediente_id = %s
+                    ORDER BY fecha_ingreso DESC
+                """, (expediente['id'],))
+                expediente['ingresos'] = cursor.fetchall()
+            else:
+                expediente['ingresos'] = []
+            
+            # Obtener estados si la tabla existe
+            if 'estados_expediente' in tablas_relacionadas:
+                cursor.execute("""
+                    SELECT id, fecha_estado, estado, observaciones
+                    FROM estados_expediente 
+                    WHERE expediente_id = %s
+                    ORDER BY fecha_estado DESC
+                """, (expediente['id'],))
+                expediente['estados'] = cursor.fetchall()
+            else:
+                expediente['estados'] = []
             
             cursor.close()
             conn.close()
+            logger.info("=== FIN buscar_expediente_por_id - ÉXITO ===")
             return expediente
         else:
             cursor.close()
             conn.close()
+            logger.warning("=== FIN buscar_expediente_por_id - NO ENCONTRADO ===")
             return None
             
     except Exception as e:
-        print(f"Error buscando expediente por ID: {e}")
+        logger.error(f"ERROR en buscar_expediente_por_id: {str(e)}")
         return None
 
 @vistaactualizarexpediente.route('/actualizarexpediente', methods=['GET', 'POST'])
 @login_required
 def vista_actualizarexpediente():
+    logger.info("=== INICIO vista_actualizarexpediente ===")
+    logger.info(f"Método: {request.method}")
+    
     expediente = None
     roles = obtener_roles_activos()
     estadisticas = obtener_estadisticas_expedientes()
@@ -232,8 +376,11 @@ def vista_actualizarexpediente():
     radicado_get = request.args.get('radicado')
     buscar_id = request.args.get('buscar_id')
     
+    logger.info(f"Parámetros GET - radicado: '{radicado_get}', buscar_id: '{buscar_id}'")
+    
     if request.method == 'POST':
         accion = request.form.get('accion')
+        logger.info(f"Acción POST: '{accion}'")
         
         if accion == 'buscar':
             return buscar_expediente_para_actualizar()
@@ -254,6 +401,7 @@ def vista_actualizarexpediente():
     
     # Si viene un radicado como parámetro GET, buscar automáticamente el expediente
     elif radicado_get:
+        logger.info(f"Buscando expediente automáticamente por radicado: {radicado_get}")
         expediente = buscar_expediente_por_radicado(radicado_get)
         if expediente:
             flash(f'Expediente cargado automáticamente: {expediente["radicado_completo"] or expediente["radicado_corto"]}', 'info')
@@ -262,17 +410,23 @@ def vista_actualizarexpediente():
     
     # Si viene un ID para buscar (después de actualizar)
     elif buscar_id:
+        logger.info(f"Buscando expediente por ID: {buscar_id}")
         expediente = buscar_expediente_por_id(buscar_id)
         if expediente:
             flash(f'Expediente recargado: {expediente["radicado_completo"] or expediente["radicado_corto"]}', 'info')
     
+    logger.info("=== FIN vista_actualizarexpediente - Renderizando template ===")
     return render_template('actualizarexpediente.html', expediente=expediente, roles=roles, estadisticas=estadisticas)
 
 def buscar_expediente_para_actualizar():
     """Busca un expediente para actualizar"""
+    logger.info("=== INICIO buscar_expediente_para_actualizar ===")
+    
     radicado = request.form.get('radicado_buscar', '').strip()
+    logger.info(f"Radicado recibido: '{radicado}'")
     
     if not radicado:
+        logger.warning("No se proporcionó radicado")
         flash('Debe ingresar un radicado para buscar', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
     
@@ -285,33 +439,39 @@ def buscar_expediente_para_actualizar():
         
         # Determinar si es radicado completo o corto
         es_radicado_completo = len(radicado_limpio) > 15
+        logger.info(f"Es radicado completo: {es_radicado_completo}")
+        
+        # Construir SELECT dinámico
+        select_clause = _construir_select_expediente(cursor)
         
         if es_radicado_completo:
             # Búsqueda mejorada para radicado completo
-            cursor.execute("""
-                SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado, ubicacion_actual, 
-                       tipo_solicitud, juzgado_origen, responsable, observaciones,
-                       fecha_ultima_actuacion_real
+            query = f"""
+                SELECT {select_clause}
                 FROM expediente 
                 WHERE radicado_completo = %s
                    OR REPLACE(radicado_completo, ' ', '') = %s
                    OR radicado_completo LIKE %s
-            """, (radicado_limpio, radicado_limpio.replace(' ', ''), f'%{radicado_limpio}%'))
+            """
+            params = (radicado_limpio, radicado_limpio.replace(' ', ''), f'%{radicado_limpio}%')
         else:
-            cursor.execute("""
-                SELECT id, radicado_completo, radicado_corto, demandante, demandado,
-                       estado, ubicacion_actual, 
-                       tipo_solicitud, juzgado_origen, responsable, observaciones,
-                       fecha_ultima_actuacion_real
+            query = f"""
+                SELECT {select_clause}
                 FROM expediente 
                 WHERE radicado_corto = %s
                 LIMIT 1
-            """, (radicado_limpio,))
+            """
+            params = (radicado_limpio,)
         
+        logger.info(f"Query: {query}")
+        logger.info(f"Parámetros: {params}")
+        
+        cursor.execute(query, params)
         result = cursor.fetchone()
         
         if result:
+            logger.info("Expediente encontrado")
+            
             expediente = {
                 'id': result[0],
                 'radicado_completo': result[1],
@@ -321,35 +481,50 @@ def buscar_expediente_para_actualizar():
                 'estado_actual': result[5],
                 'estado_principal': None,
                 'estado_adicional': None,
-                'ubicacion_actual': result[6],
-                'tipo_solicitud': result[7],
-                'juzgado_origen': result[8],
-                'responsable': result[9],
-                'observaciones': result[10],
+                'ubicacion_actual': result[6] if result[6] is not None else '',
+                'tipo_solicitud': result[7] if result[7] is not None else '',
+                'juzgado_origen': result[8] if len(result) > 8 and result[8] is not None else '',
+                'responsable': result[9] if len(result) > 9 and result[9] is not None else '',
+                'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
-                'fecha_ultima_actuacion_real': result[11]
+                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
             }
             
-            # Obtener ingresos con ID para poder eliminarlos
+            # Verificar si existen tablas relacionadas
             cursor.execute("""
-                SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
-                FROM ingresos_expediente 
-                WHERE expediente_id = %s
-                ORDER BY fecha_ingreso DESC
-            """, (expediente['id'],))
-            expediente['ingresos'] = cursor.fetchall()
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_name IN ('ingresos_expediente', 'estados_expediente')
+            """)
+            tablas_relacionadas = [row[0] for row in cursor.fetchall()]
             
-            # Obtener estados con ID para poder eliminarlos
-            cursor.execute("""
-                SELECT id, fecha_estado, estado, observaciones
-                FROM estados_expediente 
-                WHERE expediente_id = %s
-                ORDER BY fecha_estado DESC
-            """, (expediente['id'],))
-            expediente['estados'] = cursor.fetchall()
+            # Obtener ingresos si la tabla existe
+            if 'ingresos_expediente' in tablas_relacionadas:
+                cursor.execute("""
+                    SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
+                    FROM ingresos_expediente 
+                    WHERE expediente_id = %s
+                    ORDER BY fecha_ingreso DESC
+                """, (expediente['id'],))
+                expediente['ingresos'] = cursor.fetchall()
+            else:
+                expediente['ingresos'] = []
+            
+            # Obtener estados si la tabla existe
+            if 'estados_expediente' in tablas_relacionadas:
+                cursor.execute("""
+                    SELECT id, fecha_estado, estado, observaciones
+                    FROM estados_expediente 
+                    WHERE expediente_id = %s
+                    ORDER BY fecha_estado DESC
+                """, (expediente['id'],))
+                expediente['estados'] = cursor.fetchall()
+            else:
+                expediente['estados'] = []
             
             flash(f'Expediente encontrado: {expediente["radicado_completo"] or expediente["radicado_corto"]}', 'success')
         else:
+            logger.warning("Expediente no encontrado")
             flash(f'No se encontró expediente con radicado: {radicado}', 'error')
             expediente = None
         
@@ -358,18 +533,24 @@ def buscar_expediente_para_actualizar():
         
         roles = obtener_roles_activos()
         estadisticas = obtener_estadisticas_expedientes()
+        logger.info("=== FIN buscar_expediente_para_actualizar ===")
         return render_template('actualizarexpediente.html', expediente=expediente, roles=roles, estadisticas=estadisticas)
         
     except Exception as e:
+        logger.error(f"ERROR en buscar_expediente_para_actualizar: {str(e)}")
         flash(f'Error buscando expediente: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
 
 def actualizar_expediente():
     """Actualiza los datos básicos del expediente"""
+    logger.info("=== INICIO actualizar_expediente ===")
+    
     try:
         expediente_id = request.form.get('expediente_id')
+        logger.info(f"ID del expediente: {expediente_id}")
         
         if not expediente_id:
+            logger.warning("ID de expediente no válido")
             flash('ID de expediente no válido', 'error')
             return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
         
@@ -380,32 +561,98 @@ def actualizar_expediente():
         ubicacion_actual = request.form.get('ubicacion_actual', '').strip()
         tipo_solicitud = request.form.get('tipo_solicitud', '').strip()
         juzgado_origen = request.form.get('juzgado_origen', '').strip()
-        rol_responsable = request.form.get('rol_responsable', '').strip()  # Cambio: ahora es rol
+        rol_responsable = request.form.get('rol_responsable', '').strip()
         observaciones = request.form.get('observaciones', '').strip()
+        
+        logger.info("Datos del formulario:")
+        logger.info(f"  - demandante: '{demandante}'")
+        logger.info(f"  - demandado: '{demandado}'")
+        logger.info(f"  - estado_actual: '{estado_actual}'")
+        logger.info(f"  - ubicacion_actual: '{ubicacion_actual}'")
+        logger.info(f"  - tipo_solicitud: '{tipo_solicitud}'")
+        logger.info(f"  - juzgado_origen: '{juzgado_origen}'")
+        logger.info(f"  - rol_responsable: '{rol_responsable}'")
         
         conn = obtener_conexion()
         cursor = conn.cursor()
         
-        cursor.execute("""
-            UPDATE expediente 
-            SET demandante = %s, demandado = %s, estado = %s,
-                ubicacion_actual = %s, tipo_solicitud = %s, juzgado_origen = %s,
-                responsable = %s, observaciones = %s
-            WHERE id = %s
-        """, (demandante, demandado, estado_actual, ubicacion_actual, 
-              tipo_solicitud, juzgado_origen, rol_responsable, observaciones, expediente_id))
+        # Detectar columnas disponibles
+        available_columns = _detectar_columnas_disponibles(cursor)
         
-        conn.commit()
+        # Construir UPDATE dinámicamente
+        update_fields = []
+        update_values = []
+        
+        # Campos base que siempre deben estar
+        base_fields = {
+            'demandante': demandante,
+            'demandado': demandado,
+            'estado': estado_actual,
+            'responsable': rol_responsable
+        }
+        
+        for field, value in base_fields.items():
+            if field in available_columns:
+                update_fields.append(f"{field} = %s")
+                update_values.append(value)
+        
+        # Campos opcionales
+        optional_fields = {}
+        
+        # Ubicación
+        ubicacion_col = _detectar_columna_ubicacion(cursor)
+        if ubicacion_col and ubicacion_actual:
+            optional_fields[ubicacion_col] = ubicacion_actual
+        
+        # Tipo de solicitud
+        tipo_col = _detectar_columna_tipo(cursor)
+        if tipo_col and tipo_solicitud:
+            optional_fields[tipo_col] = tipo_solicitud
+        
+        # Otros campos opcionales
+        if 'juzgado_origen' in available_columns and juzgado_origen:
+            optional_fields['juzgado_origen'] = juzgado_origen
+        
+        if 'observaciones' in available_columns and observaciones:
+            optional_fields['observaciones'] = observaciones
+        
+        # Agregar campos opcionales al UPDATE
+        for field, value in optional_fields.items():
+            update_fields.append(f"{field} = %s")
+            update_values.append(value)
+        
+        # Agregar ID al final
+        update_values.append(expediente_id)
+        
+        if update_fields:
+            query = f"""
+                UPDATE expediente 
+                SET {', '.join(update_fields)}
+                WHERE id = %s
+            """
+            
+            logger.info(f"Query UPDATE: {query}")
+            logger.info(f"Valores: {update_values}")
+            
+            cursor.execute(query, update_values)
+            
+            conn.commit()
+            logger.info("Expediente actualizado correctamente")
+            flash('Expediente actualizado exitosamente', 'success')
+        else:
+            logger.warning("No hay campos válidos para actualizar")
+            flash('No hay campos válidos para actualizar', 'warning')
+        
         cursor.close()
         conn.close()
         
-        flash('Expediente actualizado exitosamente', 'success')
-        
         # Redirigir de vuelta con el expediente cargado
+        logger.info("=== FIN actualizar_expediente - ÉXITO ===")
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
                        f'?buscar_id={expediente_id}')
         
     except Exception as e:
+        logger.error(f"ERROR en actualizar_expediente: {str(e)}")
         flash(f'Error actualizando expediente: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
 

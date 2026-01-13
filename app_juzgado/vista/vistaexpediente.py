@@ -1,7 +1,12 @@
 from flask import Blueprint, render_template, request, flash, jsonify
 import sys
 import os
+import logging
 from datetime import datetime, timedelta, date
+
+# Configurar logging específico para expedientes
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 def parse_date(value):
@@ -263,19 +268,20 @@ def vista_expediente():
 
 def buscar_expedientes(radicado):
     """Busca expedientes por radicado completo o corto con TODA la información relacionada"""
+    logger.info("=== INICIO buscar_expedientes ===")
+    logger.info(f"Radicado a buscar: '{radicado}'")
+    
     try:
-        print(f"DEBUG: Buscando expedientes con radicado: {radicado}")
-        
         conn = obtener_conexion()
         cursor = conn.cursor()
         
         # Limpiar el radicado: eliminar espacios en blanco
         radicado_limpio = radicado.strip() if radicado else ''
-        print(f"DEBUG: Radicado limpio: '{radicado_limpio}'")
+        logger.info(f"Radicado limpio: '{radicado_limpio}'")
         
         # Determinar si es búsqueda por radicado completo o corto
         es_radicado_completo = len(radicado_limpio) > 15  # Los radicados completos son largos
-        print(f"DEBUG: Es radicado completo: {es_radicado_completo}")
+        logger.info(f"Es radicado completo: {es_radicado_completo}")
         
         # Primero obtener los expedientes básicos
         if es_radicado_completo:
@@ -304,15 +310,18 @@ def buscar_expedientes(radicado):
             """
             parametros = (radicado_limpio, f'%{radicado_limpio}%')
         
-        print(f"DEBUG: Ejecutando consulta con parámetros: {parametros}")
+        logger.info(f"Query: {query_expedientes}")
+        logger.info(f"Parámetros: {parametros}")
+        
         cursor.execute(query_expedientes, parametros)
         expedientes_base = cursor.fetchall()
         
-        print(f"DEBUG: Expedientes base encontrados: {len(expedientes_base)}")
+        logger.info(f"Expedientes base encontrados: {len(expedientes_base)}")
         
         if not expedientes_base:
             cursor.close()
             conn.close()
+            logger.warning("=== FIN buscar_expedientes - NO ENCONTRADOS ===")
             return []
         
         # Procesar cada expediente y obtener toda su información relacionada
@@ -320,7 +329,7 @@ def buscar_expedientes(radicado):
         
         for exp_row in expedientes_base:
             exp_id = exp_row[0]
-            print(f"DEBUG: Procesando expediente ID: {exp_id}")
+            logger.info(f"Procesando expediente ID: {exp_id}")
             
             parsed_fecha_ingreso = exp_row[6]  # Usar directamente el valor de la BD
             expediente = {
@@ -350,7 +359,7 @@ def buscar_expedientes(radicado):
                 """, (exp_id,))
                 
                 ingresos_raw = cursor.fetchall()
-                print(f"DEBUG: Ingresos encontrados: {len(ingresos_raw)}")
+                logger.info(f"Ingresos encontrados para expediente {exp_id}: {len(ingresos_raw)}")
                 
                 expediente['ingresos'] = [
                     {
@@ -366,7 +375,7 @@ def buscar_expedientes(radicado):
                     for row in ingresos_raw
                 ]
             except Exception as e:
-                print(f"ERROR obteniendo ingresos para expediente {exp_id}: {e}")
+                logger.error(f"ERROR obteniendo ingresos para expediente {exp_id}: {e}")
                 expediente['ingresos'] = []
             
             # Obtener estados con manejo de errores
@@ -380,7 +389,7 @@ def buscar_expedientes(radicado):
                 """, (exp_id,))
                 
                 estados_raw = cursor.fetchall()
-                print(f"DEBUG: Estados encontrados: {len(estados_raw)}")
+                logger.info(f"Estados encontrados para expediente {exp_id}: {len(estados_raw)}")
                 
                 expediente['estados'] = [
                     {
@@ -398,11 +407,12 @@ def buscar_expedientes(radicado):
                 ]
                 
             except Exception as e:
-                print(f"ERROR obteniendo estados para expediente {exp_id}: {e}")
+                logger.error(f"ERROR obteniendo estados para expediente {exp_id}: {e}")
                 expediente['estados'] = []
             
-            # Obtener actuaciones con manejo de errores
+            # Obtener actuaciones con manejo de errores y logging detallado
             try:
+                logger.info(f"Buscando actuaciones para expediente {exp_id}...")
                 cursor.execute("""
                     SELECT numero_actuacion, descripcion_actuacion, tipo_origen, 
                            archivo_origen, fecha_actuacion
@@ -412,7 +422,12 @@ def buscar_expedientes(radicado):
                 """, (exp_id,))
                 
                 actuaciones_raw = cursor.fetchall()
-                print(f"DEBUG: Actuaciones encontradas: {len(actuaciones_raw)}")
+                logger.info(f"Actuaciones encontradas para expediente {exp_id}: {len(actuaciones_raw)}")
+                
+                if actuaciones_raw:
+                    logger.info("Detalles de actuaciones:")
+                    for i, act in enumerate(actuaciones_raw[:3]):  # Log primeras 3
+                        logger.info(f"  Actuación {i+1}: {act[0]} - {act[1]} - {act[4]}")
                 
                 expediente['actuaciones'] = [
                     {
@@ -426,7 +441,8 @@ def buscar_expedientes(radicado):
                 ]
                 
             except Exception as e:
-                print(f"ERROR obteniendo actuaciones para expediente {exp_id}: {e}")
+                logger.error(f"ERROR obteniendo actuaciones para expediente {exp_id}: {e}")
+                logger.error(f"Tipo de error: {type(e).__name__}")
                 expediente['actuaciones'] = []
             
             # Calcular estado actual con la nueva lógica
@@ -434,9 +450,9 @@ def buscar_expedientes(radicado):
                 estado_actual, descripcion_estado = calcular_estado_expediente(exp_id, cursor)
                 expediente['estado_actual'] = estado_actual
                 expediente['descripcion_estado'] = descripcion_estado
-                print(f"DEBUG: Estado calculado: {estado_actual} - {descripcion_estado}")
+                logger.info(f"Estado calculado para expediente {exp_id}: {estado_actual} - {descripcion_estado}")
             except Exception as e:
-                print(f"ERROR calculando estado para expediente {exp_id}: {e}")
+                logger.error(f"ERROR calculando estado para expediente {exp_id}: {e}")
                 expediente['estado_actual'] = 'Error'
                 expediente['descripcion_estado'] = 'Error al calcular estado'
             
@@ -446,6 +462,8 @@ def buscar_expedientes(radicado):
                 'total_estados': len(expediente['estados']),
                 'total_actuaciones': len(expediente['actuaciones'])
             }
+            
+            logger.info(f"Estadísticas expediente {exp_id}: {expediente['estadisticas']}")
             
             # Calcular fecha de última actuación dinámicamente
             fechas_actuacion = []
@@ -479,11 +497,12 @@ def buscar_expedientes(radicado):
         cursor.close()
         conn.close()
         
-        print(f"DEBUG: Expedientes completos procesados: {len(expedientes_completos)}")
+        logger.info(f"=== FIN buscar_expedientes - {len(expedientes_completos)} expedientes procesados ===")
         return expedientes_completos
         
     except Exception as e:
-        print(f"ERROR en buscar_expedientes: {e}")
+        logger.error(f"ERROR GENERAL en buscar_expedientes: {str(e)}")
+        logger.error(f"Tipo de error: {type(e).__name__}")
         import traceback
         traceback.print_exc()
         # Retornar lista vacía en caso de error para evitar que la aplicación se rompa

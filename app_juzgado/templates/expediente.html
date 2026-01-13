@@ -718,6 +718,32 @@
                                     </div>
                                 </div>
                                 {% endif %}
+
+                                <!-- Tab: Actuaciones -->
+                                {% if expediente.actuaciones %}
+                                <div class="tab-pane fade {% if not expediente.ingresos and not expediente.estados %}show active{% endif %}" id="actuaciones-{{ expediente.id }}" role="tabpanel" aria-labelledby="actuaciones-tab-{{ expediente.id }}">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped table-hover">
+                                            <thead class="thead-light">
+                                                <tr>
+                                                    <th>Tipo</th>
+                                                    <th>Descripción</th>
+                                                    <th>Fecha</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for actuacion in expediente.actuaciones %}
+                                                <tr>
+                                                    <td><small><span class="badge badge-info">{{ actuacion.tipo_origen or '—' }}</span></small></td>
+                                                    <td><small>{{ actuacion.descripcion_actuacion or '—' }}</small></td>
+                                                    <td><small>{{ actuacion.fecha_actuacion.strftime('%d/%m/%Y') if actuacion.fecha_actuacion else 'N/A' }}</small></td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                {% endif %}
                             </div>
 
                             <!-- Pie de página con resumen -->
@@ -727,7 +753,7 @@
                                     <i class="fas fa-id-card"></i> ID: {{ expediente.id }}
                                 </small>
                                 <small class="text-muted">
-                                    <i class="fas fa-list"></i> Resumen: {{ expediente.ingresos|length }} ingreso(s), {{ expediente.estados|length }} estado(s)
+                                    <i class="fas fa-list"></i> Resumen: {{ expediente.ingresos|length }} ingreso(s), {{ expediente.estados|length }} estado(s), {{ expediente.actuaciones|length }} actuación(es)
                                 </small>
                             </div>
                             {% endif %}

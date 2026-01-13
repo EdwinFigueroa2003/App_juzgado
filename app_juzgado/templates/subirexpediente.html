@@ -238,25 +238,27 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="card-text mb-4">Sube un archivo Excel con múltiples expedientes. El archivo debe usar la hoja <strong>"Resumen por Expediente"</strong> y contener las siguientes columnas:</p>
+                        <p class="card-text mb-4">Sube un archivo Excel con múltiples expedientes. El sistema detectará automáticamente la hoja más apropiada y las columnas disponibles:</p>
                         
                         <div class="row mb-4">
                             <div class="col-md-6">
                                 <h6 class="text-primary"><i class="fas fa-list"></i> Columnas Requeridas:</h6>
                                 <ul class="list-group list-group-flush">
-                                    <li class="list-group-item"><strong>RadicadoUnicoLimpio</strong> o <strong>RadicadoUnicoCompleto</strong></li>
-                                    <li class="list-group-item"><strong>DEMANDANTE_HOMOLOGADO</strong></li>
-                                    <li class="list-group-item"><strong>DEMANDADO_HOMOLOGADO</strong></li>
+                                    <li class="list-group-item"><strong>RADICADO COMPLETO</strong></li>
+                                    <li class="list-group-item"><strong>DEMANDANTE</strong></li>
+                                    <li class="list-group-item"><strong>DEMANDADO</strong></li>
                                 </ul>
                             </div>
                             <div class="col-md-6">
                                 <h6 class="text-secondary"><i class="fas fa-list"></i> Columnas Opcionales:</h6>
                                 <ul class="list-group list-group-flush">
-                                    <li class="list-group-item">ESTADO_EXPEDIENTE</li>
+                                    <!-- <li class="list-group-item">ESTADO_EXPEDIENTE</li> -->
                                     <li class="list-group-item">UBICACION</li>
                                     <li class="list-group-item">SOLICITUD</li>
-                                    <li class="list-group-item">JuzgadoOrigen</li>
-                                    <li class="list-group-item">RESPONSABLE <small class="text-muted">(usar: ESCRIBIENTE o SUSTANCIADOR)</small></li>
+                                    <li class="list-group-item">J. ORIGEN</li>
+                                    <li class="list-group-item">FECHA INGRESO</li>
+                                    <li class="list-group-item">SOLICITUD</li>
+                                    <!-- <li class="list-group-item">RESPONSABLE <small class="text-muted">(usar: ESCRIBIENTE o SUSTANCIADOR)</small></li> -->
                                     <li class="list-group-item">OBSERVACIONES</li>
                                 </ul>
                             </div>
@@ -282,7 +284,7 @@
                             
                             <div class="alert alert-info">
                                 <i class="fas fa-lightbulb"></i>
-                                <strong>Importante:</strong> El sistema utilizará automáticamente la hoja <strong>"Resumen por Expediente"</strong> del archivo Excel. Esta hoja contiene los datos únicos sin duplicados (aproximadamente 14,300 expedientes únicos).
+                                <strong>Detección Automática:</strong> El sistema intentará leer automáticamente la hoja más apropiada (Resumen por Expediente, Resumen, Expedientes, Hoja1, etc.) y detectará las columnas disponibles de forma inteligente.
                             </div>
                             
                             <button type="submit" class="btn btn-primary btn-lg">

@@ -328,11 +328,11 @@
                                     <label for="estado_actual">Estado Actual:</label>
                                     <select class="form-control" id="estado_actual" name="estado_actual">
                                         <option value="">Seleccionar estado</option>
-                                        <option value="EN_PROCESO" {{ 'selected' if expediente.estado_actual == 'EN_PROCESO' }}>En Proceso</option>
-                                        <option value="COMPLETADO" {{ 'selected' if expediente.estado_actual == 'COMPLETADO' }}>Completado</option>
-                                        <option value="PROCESADO_AZURE" {{ 'selected' if expediente.estado_actual == 'PROCESADO_AZURE' }}>Procesado Azure</option>
+                                        <option value="ACTIVO PENDIENTE" {{ 'selected' if expediente.estado_actual == 'ACTIVO PENDIENTE' }}>Activo Pendiente</option>
+                                        <option value="ACTIVO RESUELTO" {{ 'selected' if expediente.estado_actual == 'ACTIVO RESUELTO' }}>Activo Resuelto</option>
+                                        <option value="INACTIVO PENDIENTE" {{ 'selected' if expediente.estado_actual == 'INACTIVO PENDIENTE' }}>Inactivo Resuelto</option>
+                                        <option value="INACTIVO RESUELTO" {{ 'selected' if expediente.estado_actual == 'INACTIVO RESUELTO' }}>Inactivo Resuelto</option>
                                         <option value="PENDIENTE" {{ 'selected' if expediente.estado_actual == 'PENDIENTE' }}>Pendiente</option>
-                                        <option value="SALIO" {{ 'selected' if expediente.estado_actual == 'SALIO' }}>Salió</option>
                                     </select>
                                 </div>
                             </div>
