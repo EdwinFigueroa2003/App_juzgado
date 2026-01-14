@@ -207,6 +207,7 @@ def vista_expediente():
     expedientes = []
     radicado_buscar = ""
     estado_filtro = ""
+    solicitud_filtro = ""
     mensaje = ""
     
     if request.method == 'POST':
@@ -257,11 +258,40 @@ def vista_expediente():
             else:
                 mensaje = "Por favor seleccione un estado para filtrar"
                 flash(mensaje, 'warning')
+        
+        elif tipo_busqueda == 'solicitud':
+            # Filtrar por solicitud
+            solicitud_filtro = request.form.get('solicitud_filtro', '').strip()
+            orden_fecha = request.form.get('orden_fecha', 'DESC')
+            limite = int(request.form.get('limite', 50))
+            
+            if solicitud_filtro:
+                try:
+                    expedientes = filtrar_por_solicitud(solicitud_filtro, orden_fecha=orden_fecha, limite=limite)
+                    if not expedientes:
+                        mensaje = f"No se encontraron expedientes con la solicitud: {solicitud_filtro}"
+                    else:
+                        mensaje = f"Se encontraron {len(expedientes)} expedientes con solicitud que contiene: {solicitud_filtro}"
+                        
+                        # Crear resumen_filtro para mostrar el botón "Ver más"
+                        resumen_filtro = {
+                            'solicitud_filtrada': solicitud_filtro,
+                            'total_encontrados': len(expedientes),
+                            'orden': 'Más reciente primero' if orden_fecha == 'DESC' else 'Más antiguo primero',
+                            'limite': limite
+                        }
+                except Exception as e:
+                    mensaje = f"Error en el filtro: {str(e)}"
+                    flash(mensaje, 'error')
+            else:
+                mensaje = "Por favor ingrese una solicitud para filtrar"
+                flash(mensaje, 'warning')
     
     return render_template('expediente.html', 
                          expedientes=expedientes, 
                          radicado_buscar=radicado_buscar,
                          estado_filtro=estado_filtro,
+                         solicitud_filtro=solicitud_filtro,
                          mensaje=mensaje,
                          resumen_filtro=locals().get('resumen_filtro', None))
 
@@ -674,4 +704,143 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
         
     except Exception as e:
         print(f"Error en filtrar_por_estado: {e}")
+        raise e
+
+
+def filtrar_por_solicitud(solicitud, orden_fecha='DESC', limite=50):
+    """Filtra expedientes por solicitud desde la tabla ingresos"""
+    try:
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        # Construir la consulta para buscar en la tabla ingresos
+        orden_sql = 'DESC' if orden_fecha == 'DESC' else 'ASC'
+        
+        # Consulta que busca en la columna solicitud de la tabla ingresos
+        query = f"""
+            SELECT DISTINCT
+                e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
+                e.juzgado_origen, e.fecha_ingreso, e.estado,
+                COALESCE(e.fecha_ingreso, CURRENT_DATE) as fecha_orden
+            FROM expediente e
+            INNER JOIN ingresos i ON e.id = i.expediente_id
+            WHERE i.solicitud ILIKE %s
+            ORDER BY fecha_orden {orden_sql}
+            LIMIT %s
+        """
+        
+        # Usar ILIKE para búsqueda case-insensitive con comodines
+        parametros = [f'%{solicitud}%', limite]
+        cursor.execute(query, parametros)
+        resultados_principales = cursor.fetchall()
+        
+        # Para cada expediente, obtener toda su información relacionada
+        expedientes_completos = []
+        
+        for row in resultados_principales:
+            exp_id = row[0]
+            
+            expediente = {
+                'id': row[0],
+                'radicado_completo': row[1],
+                'radicado_corto': row[2],
+                'demandante': row[3],
+                'demandado': row[4],
+                'juzgado_origen': row[5],
+                'fecha_ingreso': row[6],
+                'estado': row[7],
+                'fecha_actuacion': row[8],
+                'ingresos': [],
+                'estados': [],
+                'actuaciones': [],
+                'estadisticas': {}
+            }
+            
+            # Obtener ingresos
+            cursor.execute("""
+                SELECT fecha_ingreso, observaciones, solicitud, fechas, 
+                       actuacion_id, ubicacion, fecha_estado_auto
+                FROM ingresos 
+                WHERE expediente_id = %s
+                ORDER BY fecha_ingreso ASC
+            """, (exp_id,))
+            
+            expediente['ingresos'] = [
+                {
+                    'fecha_ingreso': row[0],
+                    'observaciones': row[1],
+                    'solicitud': row[2],
+                    'fechas': row[3],
+                    'actuacion_id': row[4],
+                    'ubicacion': row[5],
+                    'fecha_estado_auto': normalize_date(row[6]),
+                    'juzgado_origen': expediente['juzgado_origen']
+                }
+                for row in cursor.fetchall()
+            ]
+            
+            # Obtener estados
+            cursor.execute("""
+                SELECT fecha_estado, clase, auto_anotacion, observaciones, 
+                       actuacion_id, ingresos_id, fecha_auto
+                FROM estados 
+                WHERE expediente_id = %s
+                ORDER BY fecha_estado ASC
+            """, (exp_id,))
+            
+            expediente['estados'] = [
+                {
+                    'fecha_estado': row[0],
+                    'clase': row[1],
+                    'auto_anotacion': row[2],
+                    'observaciones': row[3],
+                    'actuacion_id': row[4],
+                    'ingresos_id': row[5],
+                    'fecha_auto': row[6],
+                    'demandante': expediente['demandante'],
+                    'demandado': expediente['demandado']
+                }
+                for row in cursor.fetchall()
+            ]
+            
+            # Obtener actuaciones
+            cursor.execute("""
+                SELECT numero_actuacion, descripcion_actuacion, tipo_origen, 
+                       archivo_origen, fecha_actuacion
+                FROM actuaciones 
+                WHERE expediente_id = %s
+                ORDER BY tipo_origen, numero_actuacion
+            """, (exp_id,))
+            
+            expediente['actuaciones'] = [
+                {
+                    'numero_actuacion': row[0],
+                    'descripcion_actuacion': row[1],
+                    'tipo_origen': row[2],
+                    'archivo_origen': row[3],
+                    'fecha_actuacion': row[4]
+                }
+                for row in cursor.fetchall()
+            ]
+            
+            # Usar estado directo de la tabla
+            expediente['estado_actual'] = expediente['estado'] or 'Sin Estado'
+            expediente['descripcion_estado'] = f"Estado: {expediente['estado'] or 'Sin Estado'}"
+            
+            # Estadísticas básicas
+            expediente['estadisticas'] = {
+                'total_ingresos': len(expediente['ingresos']),
+                'total_estados': len(expediente['estados']),
+                'total_actuaciones': len(expediente['actuaciones'])
+            }
+            
+            expedientes_completos.append(expediente)
+        
+        cursor.close()
+        conn.close()
+        
+        return expedientes_completos
+        
+    except Exception as e:
+        print(f"Error en filtrar_por_solicitud: {e}")
         raise e
