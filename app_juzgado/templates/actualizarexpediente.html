@@ -397,8 +397,134 @@
                     
                     <hr class="my-4">
                     
-                    <!-- Sección de Ingresos -->
-                    <div class="row">
+                    <!-- Nueva sección: Asignar a Persona Específica (FUERA del formulario principal) -->
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="card border-info mb-3">
+                                    <div class="card-header bg-info text-white">
+                                        <i class="fas fa-user-plus"></i> Asignar a Persona Específica
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="card-text">
+                                            <small class="text-muted">
+                                                <i class="fas fa-info-circle"></i> 
+                                                Escribe el nombre de la persona. Aparecerán sugerencias de personas ya asignadas, o puedes escribir un nombre nuevo.
+                                            </small>
+                                        </p>
+                                        <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" class="form-inline">
+                                            <!-- 🔒 CSRF Protection -->
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <input type="hidden" name="accion" value="asignar_persona_especifica">
+                                            <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+                                            
+                                            <div class="form-group mr-2 flex-grow-1">
+                                                <label for="nombre_persona_especifica" class="sr-only">Nombre de la persona:</label>
+                                                <input type="text" 
+                                                       class="form-control form-control-sm w-100" 
+                                                       id="nombre_persona_especifica" 
+                                                       name="nombre_persona_especifica" 
+                                                       list="lista-personas"
+                                                       placeholder="Escribe el nombre de la persona..."
+                                                       autocomplete="off"
+                                                       required>
+                                                <datalist id="lista-personas">
+                                                    <!-- Las opciones se cargarán dinámicamente -->
+                                                </datalist>
+                                            </div>
+                                            
+                                            <button type="submit" class="btn btn-info btn-sm">
+                                                <i class="fas fa-user-check"></i> Asignar Persona
+                                            </button>
+                                        </form>
+                                        
+                                        {% if expediente.responsable %}
+                                        <div class="mt-2">
+                                            <small class="text-success">
+                                                <i class="fas fa-check-circle"></i> 
+                                                <strong>Responsable actual:</strong> {{ expediente.responsable }}
+                                            </small>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <script>
+                        // Autocompletado de personas usando datalist
+                        (function() {
+                            const input = document.getElementById('nombre_persona_especifica');
+                            const datalist = document.getElementById('lista-personas');
+                            
+                            if (!input || !datalist) return;
+                            
+                            let timeoutId = null;
+                            let personasCache = [];
+                            
+                            // Función para cargar personas desde el servidor
+                            function cargarPersonas(query) {
+                                if (query.length < 2) {
+                                    return;
+                                }
+                                
+                                fetch(`{{ url_for('idvistaactualizarexpediente.api_buscar_personas') }}?q=${encodeURIComponent(query)}`)
+                                    .then(response => response.json())
+                                    .then(personas => {
+                                        personasCache = personas;
+                                        actualizarDatalist(personas);
+                                    })
+                                    .catch(error => {
+                                        console.error('Error cargando personas:', error);
+                                    });
+                            }
+                            
+                            // Función para actualizar el datalist
+                            function actualizarDatalist(personas) {
+                                // Limpiar opciones existentes
+                                datalist.innerHTML = '';
+                                
+                                // Agregar nuevas opciones
+                                personas.forEach(persona => {
+                                    const option = document.createElement('option');
+                                    option.value = persona;
+                                    datalist.appendChild(option);
+                                });
+                            }
+                            
+                            // Event listener para el input con debouncing
+                            input.addEventListener('input', function() {
+                                clearTimeout(timeoutId);
+                                const query = this.value.trim();
+                                
+                                if (query.length < 2) {
+                                    datalist.innerHTML = '';
+                                    return;
+                                }
+                                
+                                // Debounce: esperar 300ms después de que el usuario deje de escribir
+                                timeoutId = setTimeout(() => {
+                                    cargarPersonas(query);
+                                }, 300);
+                            });
+                            
+                            // Cargar personas iniciales al enfocar el campo
+                            input.addEventListener('focus', function() {
+                                if (datalist.children.length === 0 && this.value.length >= 2) {
+                                    cargarPersonas(this.value);
+                                }
+                            });
+                        })();
+                        </script>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <hr class="my-4">
+        
+        <!-- Sección de Ingresos -->
+        <div class="row">
                         <div class="col-md-6">
                             <h6 class="text-primary"><i class="fas fa-calendar-plus"></i> Historial de Ingresos</h6>
                             {% if expediente.ingresos %}

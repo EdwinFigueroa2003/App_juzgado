@@ -212,7 +212,7 @@ def buscar_expediente_por_radicado(radicado):
                 'ubicacion_actual': result[6] if result[6] is not None else '',
                 'tipo_solicitud': result[7] if result[7] is not None else '',
                 'juzgado_origen': result[8] if len(result) > 8 and result[8] is not None else '',
-                'responsable': result[9] if len(result) > 9 and result[9] is not None else '',
+                'responsable': result[9] if len(result) > 9 else None,  # Mantener None si no hay responsable
                 'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
                 'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
@@ -310,7 +310,7 @@ def buscar_expediente_por_id(expediente_id):
                 'ubicacion_actual': result[6] if result[6] is not None else '',
                 'tipo_solicitud': result[7] if result[7] is not None else '',
                 'juzgado_origen': result[8] if len(result) > 8 and result[8] is not None else '',
-                'responsable': result[9] if len(result) > 9 and result[9] is not None else '',
+                'responsable': result[9] if len(result) > 9 else None,  # Mantener None si no hay responsable
                 'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
                 'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
@@ -396,6 +396,8 @@ def vista_actualizarexpediente():
             return eliminar_estado()
         elif accion == 'quitar_responsable':
             return quitar_responsable()
+        elif accion == 'asignar_persona_especifica':
+            return asignar_persona_especifica()
         elif accion == 'asignacion_masiva':
             return asignacion_masiva()
     
@@ -417,6 +419,59 @@ def vista_actualizarexpediente():
     
     logger.info("=== FIN vista_actualizarexpediente - Renderizando template ===")
     return render_template('actualizarexpediente.html', expediente=expediente, roles=roles, estadisticas=estadisticas)
+
+@vistaactualizarexpediente.route('/api/buscar_personas', methods=['GET'])
+@login_required
+def api_buscar_personas():
+    """API para buscar personas (usuarios) con autocompletado"""
+    try:
+        query = request.args.get('q', '').strip()
+        
+        if not query or len(query) < 2:
+            return jsonify([])
+        
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        # Buscar usuarios que coincidan con la búsqueda (por nombre o usuario)
+        cursor.execute("""
+            SELECT DISTINCT nombre
+            FROM usuarios
+            WHERE (nombre IS NOT NULL AND nombre != '' AND nombre ILIKE %s)
+               OR (usuario IS NOT NULL AND usuario != '' AND usuario ILIKE %s)
+            ORDER BY nombre
+            LIMIT 20
+        """, (f'%{query}%', f'%{query}%'))
+        
+        personas = [row[0] for row in cursor.fetchall() if row[0]]
+        
+        # También incluir responsables únicos de expedientes que no estén en usuarios
+        cursor.execute("""
+            SELECT DISTINCT responsable
+            FROM expediente
+            WHERE responsable IS NOT NULL 
+              AND responsable != ''
+              AND responsable ILIKE %s
+              AND responsable NOT IN (SELECT nombre FROM usuarios WHERE nombre IS NOT NULL)
+            ORDER BY responsable
+            LIMIT 10
+        """, (f'%{query}%',))
+        
+        responsables_adicionales = [row[0] for row in cursor.fetchall()]
+        
+        # Combinar ambas listas sin duplicados
+        todas_personas = list(dict.fromkeys(personas + responsables_adicionales))
+        
+        cursor.close()
+        conn.close()
+        
+        logger.info(f"API buscar_personas: query='{query}', resultados={len(todas_personas)}")
+        
+        return jsonify(todas_personas[:20])  # Limitar a 20 resultados totales
+        
+    except Exception as e:
+        logger.error(f"Error en api_buscar_personas: {str(e)}")
+        return jsonify([]), 500
 
 def buscar_expediente_para_actualizar():
     """Busca un expediente para actualizar"""
@@ -484,7 +539,7 @@ def buscar_expediente_para_actualizar():
                 'ubicacion_actual': result[6] if result[6] is not None else '',
                 'tipo_solicitud': result[7] if result[7] is not None else '',
                 'juzgado_origen': result[8] if len(result) > 8 and result[8] is not None else '',
-                'responsable': result[9] if len(result) > 9 and result[9] is not None else '',
+                'responsable': result[9] if len(result) > 9 else None,  # Mantener None si no hay responsable
                 'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
                 'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
@@ -869,6 +924,76 @@ def quitar_responsable():
         
     except Exception as e:
         flash(f'Error removiendo responsable: {str(e)}', 'error')
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+
+def asignar_persona_especifica():
+    """Asigna un expediente a una persona específica (nombre libre, sin importar rol)"""
+    logger.info("=== INICIO asignar_persona_especifica ===")
+    
+    try:
+        expediente_id = request.form.get('expediente_id')
+        nombre_persona = request.form.get('nombre_persona_especifica', '').strip()
+        
+        logger.info(f"ID expediente: {expediente_id}")
+        logger.info(f"Nombre persona: '{nombre_persona}'")
+        
+        if not expediente_id:
+            flash('ID de expediente no válido', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        if not nombre_persona:
+            flash('Debe ingresar el nombre de la persona a asignar', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
+                           f'?buscar_id={expediente_id}')
+        
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        # Verificar responsable actual antes de actualizar
+        cursor.execute("SELECT responsable FROM expediente WHERE id = %s", (expediente_id,))
+        responsable_anterior = cursor.fetchone()
+        logger.info(f"Responsable anterior: {responsable_anterior[0] if responsable_anterior else 'N/A'}")
+        
+        # Asignar la persona específica al expediente
+        cursor.execute("""
+            UPDATE expediente 
+            SET responsable = %s
+            WHERE id = %s
+        """, (nombre_persona, expediente_id))
+        
+        if cursor.rowcount > 0:
+            conn.commit()
+            logger.info(f"✓ UPDATE ejecutado: {cursor.rowcount} fila(s) afectada(s)")
+            
+            # Verificar que se guardó correctamente
+            cursor.execute("SELECT responsable FROM expediente WHERE id = %s", (expediente_id,))
+            responsable_nuevo = cursor.fetchone()
+            logger.info(f"Responsable después de UPDATE: {responsable_nuevo[0] if responsable_nuevo else 'N/A'}")
+            
+            if responsable_nuevo and responsable_nuevo[0] == nombre_persona:
+                logger.info(f"✅ Expediente {expediente_id} asignado a '{nombre_persona}' exitosamente")
+                flash(f'Expediente asignado exitosamente a: {nombre_persona}', 'success')
+            else:
+                logger.error(f"⚠️ El responsable no coincide después del UPDATE")
+                flash(f'Advertencia: La asignación puede no haberse guardado correctamente', 'warning')
+        else:
+            logger.warning(f"No se pudo actualizar el expediente {expediente_id}")
+            flash('No se pudo asignar el expediente', 'warning')
+        
+        cursor.close()
+        conn.close()
+        
+        logger.info("=== FIN asignar_persona_especifica - ÉXITO ===")
+        
+        # Redirigir de vuelta con el expediente cargado
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
+                       f'?buscar_id={expediente_id}')
+        
+    except Exception as e:
+        logger.error(f"ERROR en asignar_persona_especifica: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        flash(f'Error asignando persona: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
 
 def asignacion_masiva():
