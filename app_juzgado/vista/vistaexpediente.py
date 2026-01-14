@@ -495,32 +495,36 @@ def buscar_expedientes(radicado):
             
             logger.info(f"Estadísticas expediente {exp_id}: {expediente['estadisticas']}")
             
-            # Calcular fecha de última actuación dinámicamente
-            fechas_actuacion = []
+            # LÓGICA CORREGIDA DE FECHAS:
+            # 1. Fecha de registro: Primera fecha de ingreso SOLO de tabla ingresos (archivo ingresos_al_despacho_act.xlsx)
+            # 2. Fecha de actuación: Última fecha de estado válida
+            # 3. Si no hay ingresos en la tabla → fecha_registro = None
+            # 4. Si no hay estados → fecha_actuacion = None (N/A, "para resolver")
             
-            # Agregar fechas de ingresos
+            # Calcular fecha de registro (primera fecha de ingreso SOLO de tabla ingresos)
+            fechas_ingreso = []
             for ingreso in expediente['ingresos']:
                 fecha_normalizada = normalize_date(ingreso['fecha_ingreso'])
                 if fecha_normalizada:
-                    fechas_actuacion.append(fecha_normalizada)
+                    fechas_ingreso.append(fecha_normalizada)
             
-            # Agregar fechas de estados
+            if fechas_ingreso:
+                expediente['fecha_registro'] = min(fechas_ingreso)  # Primera fecha de ingreso
+            else:
+                # Si no hay ingresos en la tabla, fecha_registro = None
+                expediente['fecha_registro'] = None
+            
+            # Calcular fecha de actuación (última fecha de estado válida)
+            fechas_estado = []
             for estado in expediente['estados']:
                 fecha_normalizada = normalize_date(estado['fecha_estado'])
                 if fecha_normalizada:
-                    fechas_actuacion.append(fecha_normalizada)
+                    fechas_estado.append(fecha_normalizada)
             
-            # Agregar fechas de actuaciones
-            for actuacion in expediente['actuaciones']:
-                fecha_normalizada = normalize_date(actuacion['fecha_actuacion'])
-                if fecha_normalizada:
-                    fechas_actuacion.append(fecha_normalizada)
-            
-            # Establecer la fecha de última actuación
-            if fechas_actuacion:
-                expediente['fecha_actuacion'] = max(fechas_actuacion)
+            if fechas_estado:
+                expediente['fecha_actuacion'] = max(fechas_estado)  # Última fecha de estado
             else:
-                expediente['fecha_actuacion'] = normalize_date(expediente['fecha_ingreso'])  # Fallback
+                expediente['fecha_actuacion'] = None  # N/A - "para resolver"
             
             expedientes_completos.append(expediente)
         
@@ -695,6 +699,37 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 'total_actuaciones': len(expediente['actuaciones'])
             }
             
+            # LÓGICA CORREGIDA DE FECHAS:
+            # 1. Fecha de registro: Primera fecha de ingreso SOLO de tabla ingresos (archivo ingresos_al_despacho_act.xlsx)
+            # 2. Fecha de actuación: Última fecha de estado válida
+            # 3. Si no hay ingresos en la tabla → fecha_registro = None
+            # 4. Si no hay estados → fecha_actuacion = None (N/A, "para resolver")
+            
+            # Calcular fecha de registro (primera fecha de ingreso SOLO de tabla ingresos)
+            fechas_ingreso = []
+            for ingreso in expediente['ingresos']:
+                fecha_normalizada = normalize_date(ingreso['fecha_ingreso'])
+                if fecha_normalizada:
+                    fechas_ingreso.append(fecha_normalizada)
+            
+            if fechas_ingreso:
+                expediente['fecha_registro'] = min(fechas_ingreso)  # Primera fecha de ingreso
+            else:
+                # Si no hay ingresos en la tabla, fecha_registro = None
+                expediente['fecha_registro'] = None
+            
+            # Calcular fecha de actuación (última fecha de estado válida)
+            fechas_estado = []
+            for estado in expediente['estados']:
+                fecha_normalizada = normalize_date(estado['fecha_estado'])
+                if fecha_normalizada:
+                    fechas_estado.append(fecha_normalizada)
+            
+            if fechas_estado:
+                expediente['fecha_actuacion'] = max(fechas_estado)  # Última fecha de estado
+            else:
+                expediente['fecha_actuacion'] = None  # N/A - "para resolver"
+            
             expedientes_completos.append(expediente)
         
         cursor.close()
@@ -833,6 +868,37 @@ def filtrar_por_solicitud(solicitud, orden_fecha='DESC', limite=50):
                 'total_estados': len(expediente['estados']),
                 'total_actuaciones': len(expediente['actuaciones'])
             }
+            
+            # LÓGICA CORREGIDA DE FECHAS:
+            # 1. Fecha de registro: Primera fecha de ingreso SOLO de tabla ingresos (archivo ingresos_al_despacho_act.xlsx)
+            # 2. Fecha de actuación: Última fecha de estado válida
+            # 3. Si no hay ingresos en la tabla → fecha_registro = None
+            # 4. Si no hay estados → fecha_actuacion = None (N/A, "para resolver")
+            
+            # Calcular fecha de registro (primera fecha de ingreso SOLO de tabla ingresos)
+            fechas_ingreso = []
+            for ingreso in expediente['ingresos']:
+                fecha_normalizada = normalize_date(ingreso['fecha_ingreso'])
+                if fecha_normalizada:
+                    fechas_ingreso.append(fecha_normalizada)
+            
+            if fechas_ingreso:
+                expediente['fecha_registro'] = min(fechas_ingreso)  # Primera fecha de ingreso
+            else:
+                # Si no hay ingresos en la tabla, fecha_registro = None
+                expediente['fecha_registro'] = None
+            
+            # Calcular fecha de actuación (última fecha de estado válida)
+            fechas_estado = []
+            for estado in expediente['estados']:
+                fecha_normalizada = normalize_date(estado['fecha_estado'])
+                if fecha_normalizada:
+                    fechas_estado.append(fecha_normalizada)
+            
+            if fechas_estado:
+                expediente['fecha_actuacion'] = max(fechas_estado)  # Última fecha de estado
+            else:
+                expediente['fecha_actuacion'] = None  # N/A - "para resolver"
             
             expedientes_completos.append(expediente)
         
