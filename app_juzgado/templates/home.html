@@ -255,15 +255,18 @@
                                 </a>
                                 <a href="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" 
                                    class="btn btn-warning btn-block">
-                                    <i class="fas fa-edit"></i> Actualizar Expedientes
+                                    <i class="fas fa-edit"></i> Actualizar Expe.
                                 </a>
+                                <!-- Solo administradores pueden ver gestión de usuarios -->
+                                {% if session.administrador %}
                                 <a href="{{ url_for('idvistaroles.vista_roles') }}" 
                                    class="btn btn-warning btn-block">
                                     <i class="fa-solid fa-users"></i> Gestionar roles
                                 </a>
+                                {% endif %}
                                 <a href="{{ url_for('idvistaasignacion.vista_asignacion') }}" 
                                    class="btn btn-warning btn-block">
-                                    <i class="fa-solid fa-folder"></i> Gestionar expediente
+                                    <i class="fa-solid fa-folder"></i> Expedientes asig.
                                 </a>
                             </div>
                         </div>
