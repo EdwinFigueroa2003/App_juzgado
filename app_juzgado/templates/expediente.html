@@ -1031,7 +1031,37 @@
         </div>
     </div>
 
-    
+    <!-- Botón de Descarga en Excel -->
+    {% if expedientes %}
+    <div class="row mt-4 mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-center gap-2">
+                <form method="POST" action="{{ url_for('idvistaexpediente.descargar_excel_expedientes') }}" style="display: inline;">
+                    <!-- 🔒 CSRF Protection -->
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <input type="hidden" name="tipo_busqueda" value="{{ paginacion.tipo_busqueda if paginacion else 'radicado' }}">
+                    
+                    {% if paginacion.tipo_busqueda == 'radicado' or radicado_buscar %}
+                        <input type="hidden" name="radicado" value="{{ radicado_buscar }}">
+                    {% elif paginacion.tipo_busqueda == 'estado' or estado_filtro and not solicitud_filtro %}
+                        <input type="hidden" name="estado" value="{{ estado_filtro }}">
+                        <input type="hidden" name="orden_fecha" value="{{ paginacion.orden if paginacion else 'DESC' }}">
+                        <input type="hidden" name="limite" value="{{ paginacion.limite if paginacion else 50 }}">
+                    {% elif paginacion.tipo_busqueda == 'solicitud' or solicitud_filtro %}
+                        <input type="hidden" name="solicitud" value="{{ solicitud_filtro }}">
+                        <input type="hidden" name="estado_filtro" value="{{ estado_filtro }}">
+                        <input type="hidden" name="orden_fecha" value="{{ paginacion.orden if paginacion else 'DESC' }}">
+                        <input type="hidden" name="limite" value="{{ paginacion.limite if paginacion else 50 }}">
+                    {% endif %}
+                    
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="fas fa-download"></i> Descargar en Excel
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Indicador para JavaScript si se debe activar la pestaña de filtros -->
     {% if estado_filtro %}

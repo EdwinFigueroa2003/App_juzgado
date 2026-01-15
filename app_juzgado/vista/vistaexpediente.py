@@ -1,8 +1,11 @@
-from flask import Blueprint, render_template, request, flash, jsonify
+from flask import Blueprint, render_template, request, flash, jsonify, send_file, redirect, url_for
 import sys
 import os
 import logging
 from datetime import datetime, timedelta, date
+from io import BytesIO
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 # Configurar logging específico para expedientes
 logging.basicConfig(level=logging.DEBUG)
@@ -1011,3 +1014,170 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
     except Exception as e:
         print(f"Error en filtrar_por_solicitud: {e}")
         raise e
+
+
+def generar_excel_expedientes(expedientes):
+    """Genera un archivo Excel con los expedientes y sus datos"""
+    try:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Expedientes"
+        
+        # Definir estilos
+        header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Encabezados
+        headers = [
+            "Radicado Completo",
+            "Radicado Corto",
+            "Demandante",
+            "Demandado",
+            "Fecha de Ingreso",
+            "Última Actuación",
+            "Estado Actual",
+            "Total Ingresos",
+            "Total Estados",
+            "Total Actuaciones"
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+            cell.border = border
+        
+        # Datos
+        row = 2
+        for expediente in expedientes:
+            # Calcular fecha de ingreso (última)
+            fecha_ingreso = "N/A"
+            if expediente.get('ingresos'):
+                fechas = [ing['fecha_ingreso'] for ing in expediente['ingresos'] if ing.get('fecha_ingreso')]
+                if fechas:
+                    fechas_sorted = sorted(fechas)
+                    ultima = fechas_sorted[-1]
+                    fecha_ingreso = ultima.strftime('%d/%m/%Y') if isinstance(ultima, date) else str(ultima)
+            elif expediente.get('fecha_ingreso'):
+                fecha_ingreso = expediente['fecha_ingreso'].strftime('%d/%m/%Y') if isinstance(expediente['fecha_ingreso'], date) else str(expediente['fecha_ingreso'])
+            
+            # Calcular última actuación
+            fecha_actuacion = "N/A"
+            if expediente.get('estados'):
+                fechas = [est['fecha_estado'] for est in expediente['estados'] if est.get('fecha_estado')]
+                if fechas:
+                    fechas_sorted = sorted(fechas)
+                    ultima = fechas_sorted[-1]
+                    fecha_actuacion = ultima.strftime('%d/%m/%Y') if isinstance(ultima, date) else str(ultima)
+            elif expediente.get('fecha_actuacion'):
+                fecha_actuacion = expediente['fecha_actuacion'].strftime('%d/%m/%Y') if isinstance(expediente['fecha_actuacion'], date) else str(expediente['fecha_actuacion'])
+            
+            datos = [
+                expediente.get('radicado_completo', 'N/A'),
+                expediente.get('radicado_corto', 'N/A'),
+                expediente.get('demandante', 'N/A'),
+                expediente.get('demandado', 'N/A'),
+                fecha_ingreso,
+                fecha_actuacion,
+                expediente.get('estado_actual', 'N/A'),
+                len(expediente.get('ingresos', [])),
+                len(expediente.get('estados', [])),
+                len(expediente.get('actuaciones', []))
+            ]
+            
+            for col, valor in enumerate(datos, 1):
+                cell = ws.cell(row=row, column=col)
+                cell.value = valor
+                cell.border = border
+                if col in [5, 6]:  # Columnas de fecha
+                    cell.alignment = Alignment(horizontal="center")
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+            
+            row += 1
+        
+        # Ajustar ancho de columnas
+        ws.column_dimensions['A'].width = 20
+        ws.column_dimensions['B'].width = 15
+        ws.column_dimensions['C'].width = 20
+        ws.column_dimensions['D'].width = 20
+        ws.column_dimensions['E'].width = 15
+        ws.column_dimensions['F'].width = 15
+        ws.column_dimensions['G'].width = 18
+        ws.column_dimensions['H'].width = 12
+        ws.column_dimensions['I'].width = 12
+        ws.column_dimensions['J'].width = 12
+        
+        # Altura de encabezado
+        ws.row_dimensions[1].height = 30
+        
+        # Guardar en BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return output
+        
+    except Exception as e:
+        print(f"Error generando Excel: {e}")
+        raise e
+
+
+@vistaexpediente.route('/expediente/descargar-excel', methods=['POST'])
+def descargar_excel_expedientes():
+    """Descarga los resultados de expedientes en Excel"""
+    try:
+        # Obtener los expedientes de la sesión o recrearlos
+        tipo_busqueda = request.form.get('tipo_busqueda', 'radicado')
+        expedientes = []
+        
+        if tipo_busqueda == 'radicado':
+            radicado = request.form.get('radicado', '').strip()
+            if radicado:
+                expedientes = buscar_expedientes(radicado)
+        
+        elif tipo_busqueda == 'estado':
+            estado = request.form.get('estado', '').strip()
+            orden = request.form.get('orden_fecha', 'DESC')
+            limite = int(request.form.get('limite', 50))
+            if estado:
+                expedientes = filtrar_por_estado(estado, orden_fecha=orden, limite=limite)
+        
+        elif tipo_busqueda == 'solicitud':
+            solicitud = request.form.get('solicitud', '').strip()
+            estado = request.form.get('estado_filtro', '').strip()
+            orden = request.form.get('orden_fecha', 'DESC')
+            limite = int(request.form.get('limite', 50))
+            if solicitud:
+                expedientes = filtrar_por_solicitud(solicitud, estado_filtro=estado, orden_fecha=orden, limite=limite)
+        
+        if not expedientes:
+            flash('No hay datos para descargar', 'warning')
+            return redirect(request.referrer or url_for('idvistaexpediente.vista_expediente'))
+        
+        # Generar Excel
+        excel_file = generar_excel_expedientes(expedientes)
+        
+        # Determinar nombre del archivo
+        fecha_actual = datetime.now().strftime('%Y%m%d_%H%M%S')
+        nombre_archivo = f"expedientes_{tipo_busqueda}_{fecha_actual}.xlsx"
+        
+        return send_file(
+            excel_file,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=nombre_archivo
+        )
+        
+    except Exception as e:
+        logger.error(f"Error descargando Excel: {str(e)}")
+        flash(f"Error al descargar: {str(e)}", 'error')
+        return redirect(request.referrer or url_for('idvistaexpediente.vista_expediente'))
