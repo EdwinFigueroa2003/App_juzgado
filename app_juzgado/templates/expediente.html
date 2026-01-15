@@ -177,6 +177,46 @@
                                 <div class="row">
                                     <div class="col-md-4">
                                         <div class="form-group">
+                                            <label for="estado_filtro" class="form-label">Estado del Expediente (Opcional):</label>
+                                            <select class="form-select form-select-lg" id="estado_filtro"
+                                                name="estado_filtro">
+                                                <option value="">Todos los estados</option>
+
+                                                <!-- Estados Principales para filtro de solicitud-->
+                                                <optgroup label="Estados Principales">
+                                                    <option value="ACTIVO PENDIENTE" {{ 'selected' if
+                                                        estado_filtro=='ACTIVO PENDIENTE' }}>
+                                                        Activo Pendiente (en trámite)
+                                                    </option>
+                                                    <option value="ACTIVO RESUELTO" {{ 'selected' if
+                                                        estado_filtro=='ACTIVO RESUELTO' }}>
+                                                        Activo Resuelto (≤1 año desde resolución)
+                                                    </option>
+                                                    <option value="INACTIVO RESUELTO" {{ 'selected' if
+                                                        estado_filtro=='INACTIVO RESUELTO' }}>
+                                                        Inactivo Resuelto (>1 año desde resolución)
+                                                    </option>
+                                                    <option value="PENDIENTE" {{ 'selected' if
+                                                        estado_filtro=='PENDIENTE' }}>
+                                                        Pendiente (sin movimiento)
+                                                    </option>
+                                                </optgroup>
+
+                                                <!-- Estados Agrupados -->
+                                                <optgroup label="Estados Agrupados">
+                                                    <option value="ACTIVO" {{ 'selected' if estado_filtro=='ACTIVO' }}>
+                                                        Todos los Activos (Pendiente + Resuelto)
+                                                    </option>
+                                                    <option value="INACTIVO" {{ 'selected' if estado_filtro=='INACTIVO'
+                                                        }}>
+                                                        Todos los Inactivos (Resuelto >1 año)
+                                                    </option>
+                                                </optgroup>
+                                            </select>
+                                        </div>
+
+                                    
+                                        <div class="form-group">
                                             <label for="solicitud_filtro" class="form-label">Solicitud:</label>
                                             <input type="text" class="form-control form-control-lg" id="solicitud_filtro"
                                                 name="solicitud_filtro" value="{{ solicitud_filtro }}"
@@ -937,7 +977,7 @@
                                 <li class="page-item {{ 'disabled' if not paginacion.tiene_anterior }}">
                                     {% if paginacion.tiene_anterior %}
                                     <a class="page-link"
-                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_anterior }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}"
+                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_anterior }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}"
                                         aria-label="Anterior">
                                         <span aria-hidden="true">&laquo; Anterior</span>
                                     </a>
@@ -953,7 +993,7 @@
                                     <span class="page-link">{{ num_pagina }}</span>
                                     {% else %}
                                     <a class="page-link"
-                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ num_pagina }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}">{{
+                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ num_pagina }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}">{{
                                         num_pagina }}</a>
                                     {% endif %}
                                 </li>
@@ -963,7 +1003,7 @@
                                 <li class="page-item {{ 'disabled' if not paginacion.tiene_siguiente }}">
                                     {% if paginacion.tiene_siguiente %}
                                     <a class="page-link"
-                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_siguiente }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}"
+                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_siguiente }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}"
                                         aria-label="Siguiente">
                                         <span aria-hidden="true">Siguiente &raquo;</span>
                                     </a>
@@ -990,6 +1030,8 @@
             </div>
         </div>
     </div>
+
+    
 
     <!-- Indicador para JavaScript si se debe activar la pestaña de filtros -->
     {% if estado_filtro %}

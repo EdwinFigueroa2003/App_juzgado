@@ -209,8 +209,37 @@ def vista_expediente():
     estado_filtro = ""
     solicitud_filtro = ""
     mensaje = ""
+    paginacion = None
+    resumen_filtro = None
     
-    if request.method == 'POST':
+    # Capturar parámetro de paginación (puede venir por GET o POST)
+    pagina_actual = request.args.get('pagina', 1, type=int)
+    pagina_actual = max(1, pagina_actual)  # Asegurar que sea al menos 1
+    
+    # Si viene por GET con parámetros de paginación, reconstruir los filtros
+    if request.method == 'GET' and pagina_actual > 1:
+        radicado_buscar = request.args.get('radicado', '').strip()
+        estado_filtro = request.args.get('estado', '').strip()
+        solicitud_filtro = request.args.get('solicitud', '').strip()
+        
+        # Determinar tipo de búsqueda
+        if radicado_buscar:
+            request.form = request.form.copy()
+            request.form['tipo_busqueda'] = 'radicado'
+            request.form['radicado'] = radicado_buscar
+            expedientes = buscar_expedientes(radicado_buscar)
+        elif estado_filtro:
+            orden_fecha = request.args.get('orden', 'DESC')
+            limite = int(request.args.get('limite', 50))
+            expedientes = filtrar_por_estado(estado_filtro, orden_fecha=orden_fecha, limite=limite)
+        elif solicitud_filtro:
+            estado_filtro_val = request.args.get('estado_filtro', '').strip()
+            orden_fecha = request.args.get('orden', 'DESC')
+            limite = int(request.args.get('limite', 50))
+            expedientes = filtrar_por_solicitud(solicitud_filtro, estado_filtro=estado_filtro_val, orden_fecha=orden_fecha, limite=limite)
+            estado_filtro = estado_filtro_val
+    
+    elif request.method == 'POST':
         tipo_busqueda = request.form.get('tipo_busqueda', 'radicado')
         
         if tipo_busqueda == 'radicado':
@@ -262,20 +291,27 @@ def vista_expediente():
         elif tipo_busqueda == 'solicitud':
             # Filtrar por solicitud
             solicitud_filtro = request.form.get('solicitud_filtro', '').strip()
+            estado_filtro = request.form.get('estado_filtro', '').strip()  # Obtener también el estado
             orden_fecha = request.form.get('orden_fecha', 'DESC')
             limite = int(request.form.get('limite', 50))
             
             if solicitud_filtro:
                 try:
-                    expedientes = filtrar_por_solicitud(solicitud_filtro, orden_fecha=orden_fecha, limite=limite)
+                    # Pasar tanto solicitud como estado al filtro
+                    expedientes = filtrar_por_solicitud(solicitud_filtro, estado_filtro=estado_filtro, orden_fecha=orden_fecha, limite=limite)
                     if not expedientes:
                         mensaje = f"No se encontraron expedientes con la solicitud: {solicitud_filtro}"
+                        if estado_filtro:
+                            mensaje += f" y estado: {estado_filtro}"
                     else:
                         mensaje = f"Se encontraron {len(expedientes)} expedientes con solicitud que contiene: {solicitud_filtro}"
+                        if estado_filtro:
+                            mensaje += f" y estado: {estado_filtro}"
                         
                         # Crear resumen_filtro para mostrar el botón "Ver más"
                         resumen_filtro = {
                             'solicitud_filtrada': solicitud_filtro,
+                            'estado_filtrado': estado_filtro if estado_filtro else 'Todos',
                             'total_encontrados': len(expedientes),
                             'orden': 'Más reciente primero' if orden_fecha == 'DESC' else 'Más antiguo primero',
                             'limite': limite
@@ -287,13 +323,59 @@ def vista_expediente():
                 mensaje = "Por favor ingrese una solicitud para filtrar"
                 flash(mensaje, 'warning')
     
+    # ===== PAGINACIÓN =====
+    expedientes_por_pagina = 10
+    if expedientes:
+        total_expedientes = len(expedientes)
+        total_paginas = (total_expedientes + expedientes_por_pagina - 1) // expedientes_por_pagina
+        
+        # Validar página actual
+        pagina_actual = max(1, min(pagina_actual, total_paginas))
+        
+        # Calcular índices
+        inicio_idx = (pagina_actual - 1) * expedientes_por_pagina
+        fin_idx = inicio_idx + expedientes_por_pagina
+        
+        # Obtener expedientes de esta página
+        expedientes = expedientes[inicio_idx:fin_idx]
+        
+        # Calcular páginas a mostrar (máximo 5 páginas en la paginación)
+        paginas_inicio = max(1, pagina_actual - 2)
+        paginas_fin = min(total_paginas, pagina_actual + 2)
+        paginas_mostrar = list(range(paginas_inicio, paginas_fin + 1))
+        
+        # Determinar tipo_busqueda
+        tipo_busqueda = 'radicado' if radicado_buscar else ('estado' if estado_filtro and not solicitud_filtro else 'solicitud')
+        
+        # Construir diccionario de paginación
+        paginacion = {
+            'pagina_actual': pagina_actual,
+            'total_paginas': total_paginas,
+            'total_items': total_expedientes,
+            'inicio_item': inicio_idx + 1,
+            'fin_item': min(fin_idx, total_expedientes),
+            'tiene_anterior': pagina_actual > 1,
+            'tiene_siguiente': pagina_actual < total_paginas,
+            'pagina_anterior': pagina_actual - 1,
+            'pagina_siguiente': pagina_actual + 1,
+            'paginas_mostrar': paginas_mostrar,
+            'tipo_busqueda': tipo_busqueda,
+            'radicado': radicado_buscar,
+            'estado': estado_filtro if tipo_busqueda == 'estado' else '',
+            'solicitud': solicitud_filtro,
+            'estado_filtro': estado_filtro if tipo_busqueda == 'solicitud' else '',
+            'orden': request.args.get('orden', request.form.get('orden_fecha', 'DESC')),
+            'limite': request.args.get('limite', request.form.get('limite', 50))
+        }
+    
     return render_template('expediente.html', 
                          expedientes=expedientes, 
                          radicado_buscar=radicado_buscar,
                          estado_filtro=estado_filtro,
                          solicitud_filtro=solicitud_filtro,
                          mensaje=mensaje,
-                         resumen_filtro=locals().get('resumen_filtro', None))
+                         resumen_filtro=resumen_filtro,
+                         paginacion=paginacion)
 
 
 def buscar_expedientes(radicado):
@@ -742,8 +824,8 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
         raise e
 
 
-def filtrar_por_solicitud(solicitud, orden_fecha='DESC', limite=50):
-    """Filtra expedientes por solicitud desde la tabla ingresos"""
+def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limite=50):
+    """Filtra expedientes por solicitud desde la tabla ingresos Y opcionalmente por estado"""
     try:
         conn = obtener_conexion()
         cursor = conn.cursor()
@@ -759,13 +841,32 @@ def filtrar_por_solicitud(solicitud, orden_fecha='DESC', limite=50):
                 COALESCE(e.fecha_ingreso, CURRENT_DATE) as fecha_orden
             FROM expediente e
             INNER JOIN ingresos i ON e.id = i.expediente_id
-            WHERE i.solicitud ILIKE %s
-            ORDER BY fecha_orden {orden_sql}
-            LIMIT %s
-        """
+            WHERE i.solicitud ILIKE %s"""
         
-        # Usar ILIKE para búsqueda case-insensitive con comodines
-        parametros = [f'%{solicitud}%', limite]
+        parametros = [f'%{solicitud}%']
+        
+        # Agregar filtro de estado si se proporciona
+        if estado_filtro:
+            # Mapear valores del filtro a valores de BD
+            if estado_filtro == "ACTIVO PENDIENTE":
+                query += " AND e.estado = %s"
+                parametros.append("Activo Pendiente")
+            elif estado_filtro == "ACTIVO RESUELTO":
+                query += " AND e.estado = %s"
+                parametros.append("Activo Resuelto")
+            elif estado_filtro == "INACTIVO RESUELTO":
+                query += " AND e.estado = %s"
+                parametros.append("Inactivo Resuelto")
+            elif estado_filtro == "PENDIENTE":
+                query += " AND e.estado = %s"
+                parametros.append("Pendiente")
+            else:
+                # Estado específico exacto
+                query += " AND e.estado = %s"
+                parametros.append(estado_filtro)
+        
+        query += f" ORDER BY fecha_orden {orden_sql} LIMIT %s"
+        parametros.append(limite)
         cursor.execute(query, parametros)
         resultados_principales = cursor.fetchall()
         
