@@ -8,55 +8,74 @@ En Railway, configura las siguientes variables de entorno:
 
 ```bash
 # Flask
-SECRET_KEY=tu_secret_key_aqui
-CSRF_SECRET_KEY=tu_csrf_secret_key_aqui
+SECRET_KEY=80dd31050215cc24bff484e16c187285cde3c343a2fa19209907fa1d7633f376
+CSRF_SECRET_KEY=d0fe14792ad9b5bc127c544422862fb1133da22f75fc035c6338567f90b24b93
 FLASK_ENV=production
 
 # Base de Datos (Railway PostgreSQL)
-DATABASE_URL=postgresql://usuario:password@host:puerto/database
+# DATABASE_URL se genera automáticamente cuando agregas PostgreSQL
 ```
 
-### 2. Servicios Necesarios
+### 2. Pasos de Despliegue
 
-1. **PostgreSQL Database**: Agrega un servicio de PostgreSQL en Railway
-2. **Web Service**: Tu aplicación Flask
+#### Paso 1: Crear Proyecto en Railway
+1. Ve a [railway.app](https://railway.app)
+2. Crea un nuevo proyecto
+3. Conecta tu repositorio de GitHub
 
-### 3. Pasos de Despliegue
+#### Paso 2: Agregar Base de Datos
+1. En tu proyecto Railway, haz clic en "Add Service"
+2. Selecciona "PostgreSQL"
+3. Railway generará automáticamente `DATABASE_URL`
 
-1. **Conectar Repositorio**:
-   - Conecta tu repositorio de GitHub a Railway
-   - Railway detectará automáticamente el `Procfile`
+#### Paso 3: Configurar Variables de Entorno
+En la sección "Variables" de tu servicio web, agrega:
+```
+SECRET_KEY=80dd31050215cc24bff484e16c187285cde3c343a2fa19209907fa1d7633f376
+CSRF_SECRET_KEY=d0fe14792ad9b5bc127c544422862fb1133da22f75fc035c6338567f90b24b93
+FLASK_ENV=production
+```
 
-2. **Configurar Base de Datos**:
-   - Agrega un servicio PostgreSQL
-   - Railway generará automáticamente `DATABASE_URL`
+#### Paso 4: Desplegar
+Railway desplegará automáticamente usando el `Procfile`
 
-3. **Variables de Entorno**:
-   ```bash
-   SECRET_KEY=80dd31050215cc24bff484e16c187285cde3c343a2fa19209907fa1d7633f376
-   CSRF_SECRET_KEY=d0fe14792ad9b5bc127c544422862fb1133da22f75fc035c6338567f90b24b93
-   FLASK_ENV=production
-   ```
+#### Paso 5: ⚠️ IMPORTANTE - Crear Tablas
+**Después del primer despliegue, DEBES ejecutar este comando UNA SOLA VEZ:**
 
-4. **Deploy**:
-   - Railway desplegará automáticamente usando el `Procfile`
-   - Usará Gunicorn como servidor WSGI
+En la consola de Railway (o localmente):
+```bash
+python railway_setup.py
+```
+
+Este script:
+- ✅ Crea todas las tablas necesarias
+- ✅ Crea roles básicos (ESCRIBIENTE, SUSTANCIADOR, ADMINISTRADOR)
+- ✅ Crea usuario administrador inicial
+- ✅ Configura índices para mejor rendimiento
+
+### 3. Acceso Inicial
+
+Después de ejecutar `railway_setup.py`:
+
+**Usuario Administrador:**
+- Usuario: `admin`
+- Contraseña: `admin123`
+- ⚠️ **CAMBIA LA CONTRASEÑA** después del primer login
 
 ### 4. Estructura del Proyecto
 
 ```
 app_juzgado/
-├── app_juzgado/           # Código principal de la aplicación
+├── app_juzgado/           # Código principal
 │   ├── main.py           # Punto de entrada
-│   ├── modelo/           # Modelos y configuración BD
-│   ├── vista/            # Controladores/Vistas
+│   ├── modelo/           # Configuración BD
+│   ├── vista/            # Controladores
 │   ├── templates/        # Templates HTML
-│   └── static/           # Archivos estáticos
-├── requirements.txt      # Dependencias Python
+│   └── static/           # CSS/JS
+├── requirements.txt      # Dependencias
 ├── Procfile             # Configuración Railway
-├── gunicorn.conf.py     # Configuración Gunicorn
-├── railway.toml         # Configuración Railway
-└── .gitignore           # Archivos a ignorar
+├── railway_setup.py     # Script de inicialización
+└── gunicorn.conf.py     # Configuración servidor
 ```
 
 ### 5. Comandos Útiles
@@ -65,44 +84,63 @@ app_juzgado/
 # Desarrollo local
 python app_juzgado/main.py
 
-# Producción con Gunicorn
-cd app_juzgado && gunicorn --config ../gunicorn.conf.py main:app
+# Configurar BD en Railway (UNA SOLA VEZ)
+python railway_setup.py
+
+# Ver logs en Railway
+railway logs
+
+# Conectar a BD en Railway
+railway connect
 ```
 
 ### 6. Características
 
-- ✅ Flask con Gunicorn
-- ✅ PostgreSQL
+- ✅ Flask con Gunicorn (producción)
+- ✅ PostgreSQL con índices optimizados
 - ✅ Protección CSRF
 - ✅ Headers de seguridad
-- ✅ Variables de entorno
-- ✅ Logging configurado
-- ✅ Auto-scaling en Railway
+- ✅ Auto-scaling
+- ✅ SSL automático
+- ✅ Dominio personalizable
 
-### 7. Monitoreo
+### 7. Troubleshooting
+
+#### ❌ "No hay tablas en la BD"
+**Solución:** Ejecuta `python railway_setup.py` UNA VEZ después del despliegue
+
+#### ❌ Error de conexión a BD
+- Verifica que el servicio PostgreSQL esté activo
+- `DATABASE_URL` se genera automáticamente
+
+#### ❌ Error 500 en la aplicación
+- Revisa los logs: `railway logs`
+- Verifica que todas las variables de entorno estén configuradas
+
+#### ❌ No puedo hacer login
+- Usuario: `admin`, Contraseña: `admin123`
+- Si no funciona, ejecuta `railway_setup.py` de nuevo
+
+### 8. Monitoreo
 
 Railway proporciona:
-- Logs en tiempo real
-- Métricas de CPU/RAM
-- Reinicio automático en caso de fallo
-- Health checks
+- 📊 Logs en tiempo real
+- 📈 Métricas CPU/RAM
+- 🔄 Reinicio automático
+- 🏥 Health checks
+- 🌐 Dominio: `tu-app.up.railway.app`
 
-### 8. Dominios
+### 9. Seguridad
 
-Railway asigna automáticamente:
-- Subdominio: `tu-app.up.railway.app`
-- Puedes configurar un dominio personalizado
+- 🔒 HTTPS automático
+- 🛡️ Headers de seguridad configurados
+- 🔐 Protección CSRF
+- 👤 Sistema de usuarios y roles
+- 🚫 Variables sensibles en entorno
 
-## 🔧 Troubleshooting
+## 📞 Soporte
 
-### Error de Conexión a BD
-- Verifica que `DATABASE_URL` esté configurada
-- Asegúrate de que el servicio PostgreSQL esté activo
-
-### Error de Variables de Entorno
-- Verifica que todas las variables estén configuradas en Railway
-- No incluyas comillas en los valores
-
-### Error de Puerto
-- Railway asigna automáticamente el puerto via `PORT` env var
-- No hardcodees el puerto en el código
+Si tienes problemas:
+1. Revisa los logs: `railway logs`
+2. Verifica variables de entorno
+3. Asegúrate de haber ejecutado `railway_setup.py`

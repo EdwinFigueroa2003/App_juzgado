@@ -1,11 +1,19 @@
 [build]
 builder = "nixpacks"
+buildCommand = "pip install -r requirements.txt"
 
 [deploy]
+startCommand = "cd app_juzgado && gunicorn --config ../gunicorn.conf.py main:app"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
 
 [environments.production]
-variables = { }
+# Variables de entorno requeridas en Railway
+# Configúralas directamente en el panel de Railway o descomenta aquí
+# variables = {
+#   FLASK_ENV = "production",
+#   SECRET_KEY = "80dd31050215cc24bff484e16c187285cde3c343a2fa19209907fa1d7633f376",
+#   CSRF_SECRET_KEY = "d0fe14792ad9b5bc127c544422862fb1133da22f75fc035c6338567f90b24b93"
+# }
