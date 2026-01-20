@@ -1,0 +1,1 @@
+web: cd app_juzgado && gunicorn --config ../gunicorn.conf.py main:app
