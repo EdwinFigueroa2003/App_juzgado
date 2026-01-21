@@ -404,7 +404,7 @@ def buscar_expedientes(radicado):
             query_expedientes = """
                 SELECT 
                     e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
-                    e.juzgado_origen, e.fecha_ingreso, e.estado
+                    e.juzgado_origen, e.fecha_ingreso, e.estado, e.turno
                 FROM expediente e
                 WHERE e.radicado_completo = %s
                    OR REPLACE(e.radicado_completo, ' ', '') = %s
@@ -418,7 +418,7 @@ def buscar_expedientes(radicado):
             query_expedientes = """
                 SELECT 
                     e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
-                    e.juzgado_origen, e.fecha_ingreso, e.estado
+                    e.juzgado_origen, e.fecha_ingreso, e.estado, e.turno
                 FROM expediente e
                 WHERE e.radicado_corto = %s OR e.radicado_completo LIKE %s
                 ORDER BY e.radicado_completo NULLS LAST
@@ -456,6 +456,7 @@ def buscar_expedientes(radicado):
                 'juzgado_origen': exp_row[5],
                 'fecha_ingreso': parsed_fecha_ingreso,
                 'estado': exp_row[7],  # Estado original de la tabla
+                'turno': exp_row[8],   # Campo turno de la tabla
                 'fecha_actuacion': None,  # Se calculará dinámicamente
                 'ingresos': [],
                 'estados': [],
@@ -672,7 +673,7 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
         query = f"""
             SELECT 
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
-                e.juzgado_origen, e.fecha_ingreso, e.estado,
+                e.juzgado_origen, e.fecha_ingreso, e.estado, e.turno,
                 COALESCE(e.fecha_ingreso, CURRENT_DATE) as fecha_orden
             FROM expediente e
             WHERE {where_clause}
@@ -699,7 +700,8 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 'juzgado_origen': row[5],
                 'fecha_ingreso': row[6],
                 'estado': row[7],  # Estado directo de la tabla
-                'fecha_actuacion': row[8],  # Fecha de ingreso como fecha de orden
+                'turno': row[8],   # Campo turno de la tabla
+                'fecha_actuacion': row[9],  # Fecha de ingreso como fecha de orden
                 'ingresos': [],
                 'estados': [],
                 'actuaciones': [],
@@ -840,7 +842,7 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
         query = f"""
             SELECT DISTINCT
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
-                e.juzgado_origen, e.fecha_ingreso, e.estado,
+                e.juzgado_origen, e.fecha_ingreso, e.estado, e.turno,
                 COALESCE(e.fecha_ingreso, CURRENT_DATE) as fecha_orden
             FROM expediente e
             INNER JOIN ingresos i ON e.id = i.expediente_id
@@ -888,7 +890,8 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
                 'juzgado_origen': row[5],
                 'fecha_ingreso': row[6],
                 'estado': row[7],
-                'fecha_actuacion': row[8],
+                'turno': row[8],   # Campo turno de la tabla
+                'fecha_actuacion': row[9],
                 'ingresos': [],
                 'estados': [],
                 'actuaciones': [],

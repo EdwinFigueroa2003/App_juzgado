@@ -177,7 +177,8 @@
                                 <div class="row">
                                     <div class="col-md-4">
                                         <div class="form-group">
-                                            <label for="estado_filtro" class="form-label">Estado del Expediente (Opcional):</label>
+                                            <label for="estado_filtro" class="form-label">Estado del Expediente
+                                                (Opcional):</label>
                                             <select class="form-select form-select-lg" id="estado_filtro"
                                                 name="estado_filtro">
                                                 <option value="">Todos los estados</option>
@@ -215,11 +216,12 @@
                                             </select>
                                         </div>
 
-                                    
+
                                         <div class="form-group">
                                             <label for="solicitud_filtro" class="form-label">Solicitud:</label>
-                                            <input type="text" class="form-control form-control-lg" id="solicitud_filtro"
-                                                name="solicitud_filtro" value="{{ solicitud_filtro }}"
+                                            <input type="text" class="form-control form-control-lg"
+                                                id="solicitud_filtro" name="solicitud_filtro"
+                                                value="{{ solicitud_filtro }}"
                                                 placeholder="Ej: Conciliación, Audiencia, Notificación" required>
                                             <small class="form-text text-muted">
                                                 Puede buscar por términos parciales relacionados con la solicitud.
@@ -228,7 +230,8 @@
                                     </div>
                                     <div class="col-md-4">
                                         <div class="form-group">
-                                            <label for="orden_fecha_solicitud" class="form-label">Ordenar por Fecha:</label>
+                                            <label for="orden_fecha_solicitud" class="form-label">Ordenar por
+                                                Fecha:</label>
                                             <select class="form-select form-select-lg" id="orden_fecha_solicitud"
                                                 name="orden_fecha">
                                                 <option value="DESC" {{ 'selected' if orden_fecha=='DESC' }}>Más
@@ -241,7 +244,8 @@
                                     <div class="col-md-2">
                                         <div class="form-group">
                                             <label for="limite_solicitud" class="form-label">Mostrar:</label>
-                                            <select class="form-select form-select-lg" id="limite_solicitud" name="limite">
+                                            <select class="form-select form-select-lg" id="limite_solicitud"
+                                                name="limite">
                                                 <option value="50" {{ 'selected' if limite=='50' }}>50</option>
                                                 <option value="100" {{ 'selected' if limite=='100' }}>100</option>
                                                 <option value="200" {{ 'selected' if limite=='200' }}>200</option>
@@ -479,20 +483,13 @@
                                     <div class="row mb-3 pb-3 border-bottom">
                                         <div class="col-md-3">
                                             <small class="text-muted d-block">Radicado Completo</small>
-                                            <strong class="text-dark">{{ expediente.radicado_completo or 'N/A'}}</strong>
+                                            <strong class="text-dark">{{ expediente.radicado_completo or
+                                                'N/A'}}</strong>
                                         </div>
                                         <div class="col-md-3">
                                             <small class="text-muted d-block">Radicado Corto</small>
                                             <strong class="text-dark">{{ expediente.radicado_corto or 'N/A' }}</strong>
                                         </div>
-<!--                                         <div class="col-md-3">
-                                            <small class="text-muted d-block">Juzgado de Origen</small>
-                                            <strong class="text-dark">{{ expediente.juzgado_origen or 'N/A' }}</strong>
-                                        </div> 
-                                        <div class="col-md-3">
-                                            <small class="text-muted d-block">ID</small>
-                                            <strong class="text-dark">#{{ expediente.id }}</strong>
-                                        </div>-->
                                     </div>
 
                                     <!-- Partes del Proceso -->
@@ -515,10 +512,13 @@
                                             <small class="text-muted d-block">Fecha de Ingreso</small>
                                             <strong class="text-dark">
                                                 {% if expediente.ingresos %}
-                                                    {% set ultima_fecha = expediente.ingresos | map(attribute='fecha_ingreso') | select('ne', None) | list | sort | last %}
-                                                    {{ ultima_fecha.strftime('%d/%m/%Y') if ultima_fecha else 'N/A' }}
+                                                {% set ultima_fecha = expediente.ingresos |
+                                                map(attribute='fecha_ingreso') | select('ne', None) | list | sort | last
+                                                %}
+                                                {{ ultima_fecha.strftime('%d/%m/%Y') if ultima_fecha else 'N/A' }}
                                                 {% else %}
-                                                    {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') if expediente.fecha_ingreso else 'N/A' }}
+                                                {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') if
+                                                expediente.fecha_ingreso else 'N/A' }}
                                                 {% endif %}
                                             </strong>
                                         </div>
@@ -526,13 +526,19 @@
                                             <small class="text-muted d-block">Última Actuación</small>
                                             <strong class="text-dark">
                                                 {% if expediente.estados %}
-                                                    {% set ultima_estado = expediente.estados | map(attribute='fecha_estado') | select('ne', None) | list | sort | last %}
-                                                    {{ ultima_estado.strftime('%d/%m/%Y') if ultima_estado else 'N/A' }}
+                                                {% set ultima_estado = expediente.estados |
+                                                map(attribute='fecha_estado') | select('ne', None) | list | sort | last
+                                                %}
+                                                {{ ultima_estado.strftime('%d/%m/%Y') if ultima_estado else 'N/A' }}
                                                 {% else %}
-                                                    {{ expediente.fecha_actuacion.strftime('%d/%m/%Y') if expediente.fecha_actuacion else 'N/A' }}
+                                                {{ expediente.fecha_actuacion.strftime('%d/%m/%Y') if
+                                                expediente.fecha_actuacion else 'N/A' }}
                                                 {% endif %}
                                             </strong>
                                         </div>
+                                    </div>
+                                    <!-- Estados y turnos -->
+                                    <div class="row mb-3 pb-3 border-bottom">
                                         <div class="col-md-4">
                                             <small class="text-muted d-block">Estado Actual</small>
                                             <div>
@@ -563,239 +569,25 @@
                                                 {% endif %}
                                             </div>
                                         </div>
-                                    </div>
-
-                                    <!-- Historiales en Tabs - Compactos -->
-                                    <div class="mt-3">
-                                        <ul class="nav nav-tabs nav-fill" id="tabs-{{ expediente.id }}" role="tablist">
-                                            {% if expediente.ingresos %}
-                                            <li class="nav-item" role="presentation">
-                                                <a class="nav-link active" id="ingresos-tab-{{ expediente.id }}"
-                                                    data-bs-toggle="tab" href="#ingresos-{{ expediente.id }}"
-                                                    role="tab">
-                                                    <i class="fas fa-calendar-plus"></i> Ingresos ({{
-                                                    expediente.ingresos|length }})
-                                                </a>
-                                            </li>
-                                            {% endif %}
-                                            {% if expediente.estados %}
-                                            <li class="nav-item" role="presentation">
-                                                <a class="nav-link {% if not expediente.ingresos %}active{% endif %}"
-                                                    id="estados-tab-{{ expediente.id }}" data-bs-toggle="tab"
-                                                    href="#estados-{{ expediente.id }}" role="tab">
-                                                    <i class="fas fa-history"></i> Estados ({{ expediente.estados|length
-                                                    }})
-                                                </a>
-                                            </li>
-                                            {% endif %}
-                                            {% if expediente.actuaciones %}
-                                            <li class="nav-item" role="presentation">
-                                                <a class="nav-link {% if not expediente.ingresos and not expediente.estados %}active{% endif %}"
-                                                    id="actuaciones-tab-{{ expediente.id }}" data-bs-toggle="tab"
-                                                    href="#actuaciones-{{ expediente.id }}" role="tab">
-                                                    <i class="fas fa-tasks"></i> Actuaciones ({{
-                                                    expediente.actuaciones|length }})
-                                                </a>
-                                            </li>
-                                            {% endif %}
-                                        </ul>
-
-                                        <div class="tab-content mt-2" id="content-tabs-{{ expediente.id }}">
-                                            <!-- Tab: Ingresos -->
-                                            {% if expediente.ingresos %}
-                                            <div class="tab-pane fade show active" id="ingresos-{{ expediente.id }}"
-                                                role="tabpanel">
-                                                <div class="table-responsive">
-                                                    <table class="table table-sm table-striped mb-0">
-                                                        <thead class="thead-light">
-                                                            <tr>
-                                                                <th style="width: 12%;">Fecha</th>
-                                                                <th style="width: 20%;">Observaciones</th>
-                                                                <th style="width: 20%;">Solicitud</th>
-                                                                <th style="width: 15%;">Fechas</th>
-                                                                <!-- <th style="width: 10%;">Actuación ID</th> -->
-                                                                <!-- <th style="width: 13%;">Ubicación</th> -->
-                                                                <th style="width: 10%;">Fecha Estado/Auto</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {% for ingreso in expediente.ingresos %}
-                                                            <tr>
-                                                                <td><small>{{ ingreso.fecha_ingreso.strftime('%d/%m/%Y')
-                                                                        if ingreso.fecha_ingreso else 'N/A' }}</small>
-                                                                </td>
-                                                                <td><small>{{ ingreso.observaciones or '—' }}</small>
-                                                                </td>
-                                                                <td><small>{{ ingreso.solicitud or '—' }}</small></td>
-                                                                <td><small>{{ ingreso.fechas or '—' }}</small></td>
-                                                                <!-- <td><small>{{ ingreso.actuacion_id or '—' }}</small></td> -->
-                                                                <!-- <td><small>{{ ingreso.ubicacion or '—' }}</small></td> -->
-                                                                <td><small>{{
-                                                                        ingreso.fecha_estado_auto.strftime('%d/%m/%Y')
-                                                                        if ingreso.fecha_estado_auto else '—' }}</small>
-                                                                </td>
-                                                            </tr>
-                                                            {% endfor %}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                            {% endif %}
-
-                                            <!-- Tab: Estados -->
-                                            {% if expediente.estados %}
-                                            <div class="tab-pane fade {% if not expediente.ingresos %}show active{% endif %}"
-                                                id="estados-{{ expediente.id }}" role="tabpanel">
-                                                <div class="table-responsive">
-                                                    <table class="table table-sm table-striped mb-0">
-                                                        <thead class="thead-light">
-                                                            <tr>
-                                                                <th style="width: 12%;">Fecha Estado</th>
-                                                                <th style="width: 12%;">Fecha Auto</th>
-                                                                <th style="width: 15%;">Clase</th>
-                                                                <th style="width: 25%;">Auto/Anotación</th>
-                                                                <th style="width: 20%;">Observaciones</th>
-                                                                <th style="width: 8%;">Act. ID</th>
-                                                                <th style="width: 8%;">Ing. ID</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {% for estado in expediente.estados %}
-                                                            <tr>
-                                                                <td><small>{{ estado.fecha_estado.strftime('%d/%m/%Y')
-                                                                        if estado.fecha_estado else 'N/A' }}</small>
-                                                                </td>
-                                                                <td><small>{{ estado.fecha_auto.strftime('%d/%m/%Y') if
-                                                                        estado.fecha_auto else '—' }}</small></td>
-                                                                <td><small><span class="badge badge-secondary">{{
-                                                                            estado.clase or '—' }}</span></small></td>
-                                                                <td><small>{{ estado.auto_anotacion or '—' }}</small>
-                                                                </td>
-                                                                <td><small>{{ estado.observaciones or '—' }}</small>
-                                                                </td>
-                                                                <td><small>{{ estado.actuacion_id or '—' }}</small></td>
-                                                                <td><small>{{ estado.ingresos_id or '—' }}</small></td>
-                                                            </tr>
-                                                            {% endfor %}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                            {% endif %}
-
-                                            <!-- Tab: Actuaciones -->
-                                            {% if expediente.actuaciones %}
-                                            <div class="tab-pane fade {% if not expediente.ingresos and not expediente.estados %}show active{% endif %}"
-                                                id="actuaciones-{{ expediente.id }}" role="tabpanel">
-                                                <div class="table-responsive">
-                                                    <table class="table table-sm table-striped mb-0">
-                                                        <thead class="thead-light">
-                                                            <tr>
-                                                                <!-- <th style="width: 10%;">Número</th> -->
-                                                                <th style="width: 15%;">Tipo</th>
-                                                                <!-- <th style="width: 50%;">Descripción</th> -->
-                                                                <th>Descripción</th>
-                                                                <!-- <th style="width: 15%;">Archivo</th> -->
-                                                                <!-- <th style="width: 10%;">Fecha</th> -->
-                                                                <th>Fecha</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {% for actuacion in expediente.actuaciones %}
-                                                            <tr>
-                                                                <!-- <td><small><span class="badge badge-primary">{{ actuacion.numero_actuacion or '—' }}</span></small></td> -->
-                                                                <td><small><span class="badge badge-info">{{
-                                                                            actuacion.tipo_origen or '—'
-                                                                            }}</span></small></td>
-                                                                <td><small>{{ actuacion.descripcion_actuacion or '—'
-                                                                        }}</small></td>
-                                                                <!-- <td><small>{{ actuacion.archivo_origen or '—' }}</small></td> -->
-                                                                <td><small>{{
-                                                                        actuacion.fecha_actuacion.strftime('%d/%m/%Y')
-                                                                        if actuacion.fecha_actuacion else 'N/A'
-                                                                        }}</small></td>
-                                                            </tr>
-                                                            {% endfor %}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                            {% endif %}
+                                        <div class="col-md-4">
+                                            <small class="text-muted d-block">Turno</small>
+                                            <strong class="text-dark">
+                                                {{ expediente.turno if expediente.turno else 'No disponible' }}
+                                            </strong>
                                         </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                {% else %}
-                                <!-- VISTA PARA MÚLTIPLES EXPEDIENTES (ORIGINAL) -->
-                                <!-- Información básica consolidada -->
-                                <div class="row mb-4">
-                                    <div class="col-md-3">
-                                        <h6 class="text-muted small">Radicado Completo</h6>
-                                        <p class="mb-3"><strong>{{ expediente.radicado_completo or 'No disponible'
-                                                }}</strong></p>
-
-                                        <h6 class="text-muted small">Radicado Corto</h6>
-                                        <p class="mb-3"><strong>{{ expediente.radicado_corto or 'No disponible'
-                                                }}</strong></p>
-                                    </div>
-
-                                    <div class="col-md-3">
-                                        <h6 class="text-muted small">Demandante</h6>
-                                        <p class="mb-3"><strong>{{ expediente.demandante or 'No especificado'
-                                                }}</strong></p>
-
-                                        <h6 class="text-muted small">Demandado</h6>
-                                        <p class="mb-3"><strong>{{ expediente.demandado or 'No especificado' }}</strong>
-                                        </p>
-                                    </div>
-
-                                    <div class="col-md-3">
-                                        <!--<h6 class="text-muted small">Juzgado de Origen</h6>
-                                        <p class="mb-3"><strong>{{ expediente.juzgado_origen or 'No especificado'
-                                                }}</strong></p> -->
-
-                                        <h6 class="text-muted small">Estado Actual</h6>
-                                        <p class="mb-3">
-                                            <span class="badge badge-secondary">{{ expediente.estado_actual or 'Sin
-                                                estado' }}</span>
-                                        </p> 
-                                    </div>
-
-                                    <div class="col-md-3">
-                                        <h6 class="text-muted small">Fecha de Ingreso</h6>
-                                        <p class="mb-3"><strong>
-                                            {% if expediente.ingresos %}
-                                                {% set ultima_fecha = expediente.ingresos | map(attribute='fecha_ingreso') | select('ne', None) | list | sort | last %}
-                                                {{ ultima_fecha.strftime('%d/%m/%Y') if ultima_fecha else 'No disponible' }}
-                                            {% else %}
-                                                {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') if expediente.fecha_ingreso else 'No disponible' }}
-                                            {% endif %}
-                                        </strong></p>
-
-                                        <h6 class="text-muted small">Última Actuación</h6>
-                                         <p class="mb-3"><strong>
-                                            {% if expediente.estados %}
-                                                {% set ultima_estado = expediente.estados | map(attribute='fecha_estado') | select('ne', None) | list | sort | last %}
-                                                {{ ultima_estado.strftime('%d/%m/%Y') if ultima_estado else 'No disponible' }}
-                                            {% else %}
-                                                {{ expediente.fecha_actuacion.strftime('%d/%m/%Y') if expediente.fecha_actuacion else 'No disponible' }}
-                                            {% endif %}
-                                        </strong></p>
-                                    </div>
-                                </div>
-
-                                <!-- Línea divisoria -->
-                                <hr class="my-4">
-
-                                <!-- Tabs para los historiales -->
-                                <ul class="nav nav-tabs nav-fill mb-3" id="tabs-{{ expediente.id }}" role="tablist">
+                            <!-- Historiales en Tabs - Compactos -->
+                            <div class="mt-3">
+                                <ul class="nav nav-tabs nav-fill" id="tabs-{{ expediente.id }}" role="tablist">
                                     {% if expediente.ingresos %}
                                     <li class="nav-item" role="presentation">
                                         <a class="nav-link active" id="ingresos-tab-{{ expediente.id }}"
-                                            data-bs-toggle="tab" href="#ingresos-{{ expediente.id }}" role="tab"
-                                            aria-controls="ingresos-{{ expediente.id }}" aria-selected="true">
-                                            <i class="fas fa-calendar-plus"></i> Ingresos ({{ expediente.ingresos|length
-                                            }})
+                                            data-bs-toggle="tab" href="#ingresos-{{ expediente.id }}" role="tab">
+                                            <i class="fas fa-calendar-plus"></i> Ingresos ({{
+                                            expediente.ingresos|length }})
                                         </a>
                                     </li>
                                     {% endif %}
@@ -803,10 +595,9 @@
                                     <li class="nav-item" role="presentation">
                                         <a class="nav-link {% if not expediente.ingresos %}active{% endif %}"
                                             id="estados-tab-{{ expediente.id }}" data-bs-toggle="tab"
-                                            href="#estados-{{ expediente.id }}" role="tab"
-                                            aria-controls="estados-{{ expediente.id }}"
-                                            aria-selected="{% if expediente.ingresos %}false{% else %}true{% endif %}">
-                                            <i class="fas fa-history"></i> Estados ({{ expediente.estados|length }})
+                                            href="#estados-{{ expediente.id }}" role="tab">
+                                            <i class="fas fa-history"></i> Estados ({{ expediente.estados|length
+                                            }})
                                         </a>
                                     </li>
                                     {% endif %}
@@ -814,48 +605,48 @@
                                     <li class="nav-item" role="presentation">
                                         <a class="nav-link {% if not expediente.ingresos and not expediente.estados %}active{% endif %}"
                                             id="actuaciones-tab-{{ expediente.id }}" data-bs-toggle="tab"
-                                            href="#actuaciones-{{ expediente.id }}" role="tab"
-                                            aria-controls="actuaciones-{{ expediente.id }}"
-                                            aria-selected="{% if not expediente.ingresos and not expediente.estados %}true{% else %}false{% endif %}">
-                                            <i class="fas fa-tasks"></i> Actuaciones ({{ expediente.actuaciones|length
-                                            }})
+                                            href="#actuaciones-{{ expediente.id }}" role="tab">
+                                            <i class="fas fa-tasks"></i> Actuaciones ({{
+                                            expediente.actuaciones|length }})
                                         </a>
                                     </li>
                                     {% endif %}
                                 </ul>
 
-                                <!-- Contenido de tabs -->
-                                <div class="tab-content" id="content-tabs-{{ expediente.id }}">
+                                <div class="tab-content mt-2" id="content-tabs-{{ expediente.id }}">
                                     <!-- Tab: Ingresos -->
                                     {% if expediente.ingresos %}
                                     <div class="tab-pane fade show active" id="ingresos-{{ expediente.id }}"
-                                        role="tabpanel" aria-labelledby="ingresos-tab-{{ expediente.id }}">
+                                        role="tabpanel">
                                         <div class="table-responsive">
-                                            <table class="table table-sm table-striped table-hover">
+                                            <table class="table table-sm table-striped mb-0">
                                                 <thead class="thead-light">
                                                     <tr>
-                                                        <th>Fecha</th>
-                                                        <th>Observaciones</th>
-                                                        <th>Solicitud</th>
-                                                        <th>Fechas</th>
-                                                        <!-- <th>Actuación ID</th> -->
-                                                        <!-- <th>Ubicación</th> -->
-                                                        <th>Fecha Estado/Auto</th>
+                                                        <th style="width: 12%;">Fecha</th>
+                                                        <th style="width: 20%;">Observaciones</th>
+                                                        <th style="width: 20%;">Solicitud</th>
+                                                        <th style="width: 15%;">Fechas</th>
+                                                        <!-- <th style="width: 10%;">Actuación ID</th> -->
+                                                        <!-- <th style="width: 13%;">Ubicación</th> -->
+                                                        <th style="width: 10%;">Fecha Estado/Auto</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {% for ingreso in expediente.ingresos %}
                                                     <tr>
-                                                        <td><strong>{{ ingreso.fecha_ingreso.strftime('%d/%m/%Y') if
-                                                                ingreso.fecha_ingreso else 'No disponible' }}</strong>
+                                                        <td><small>{{ ingreso.fecha_ingreso.strftime('%d/%m/%Y')
+                                                                if ingreso.fecha_ingreso else 'N/A' }}</small>
                                                         </td>
-                                                        <td>{{ ingreso.observaciones or '—' }}</td>
-                                                        <td>{{ ingreso.solicitud or '—' }}</td>
+                                                        <td><small>{{ ingreso.observaciones or '—' }}</small>
+                                                        </td>
+                                                        <td><small>{{ ingreso.solicitud or '—' }}</small></td>
                                                         <td><small>{{ ingreso.fechas or '—' }}</small></td>
-                                                        <!-- <td><span class="badge badge-info">{{ ingreso.actuacion_id or '—' }}</span></td> -->
-                                                        <!--  <td>{{ ingreso.ubicacion or '—' }}</td> -->
-                                                        <td><strong>{{ ingreso.fecha_estado_auto.strftime('%d/%m/%Y') if
-                                                                ingreso.fecha_estado_auto else '—' }}</strong></td>
+                                                        <!-- <td><small>{{ ingreso.actuacion_id or '—' }}</small></td> -->
+                                                        <!-- <td><small>{{ ingreso.ubicacion or '—' }}</small></td> -->
+                                                        <td><small>{{
+                                                                ingreso.fecha_estado_auto.strftime('%d/%m/%Y')
+                                                                if ingreso.fecha_estado_auto else '—' }}</small>
+                                                        </td>
                                                     </tr>
                                                     {% endfor %}
                                                 </tbody>
@@ -867,37 +658,36 @@
                                     <!-- Tab: Estados -->
                                     {% if expediente.estados %}
                                     <div class="tab-pane fade {% if not expediente.ingresos %}show active{% endif %}"
-                                        id="estados-{{ expediente.id }}" role="tabpanel"
-                                        aria-labelledby="estados-tab-{{ expediente.id }}">
+                                        id="estados-{{ expediente.id }}" role="tabpanel">
                                         <div class="table-responsive">
-                                            <table class="table table-sm table-striped table-hover">
+                                            <table class="table table-sm table-striped mb-0">
                                                 <thead class="thead-light">
                                                     <tr>
-                                                        <th>Fecha Estado</th>
-                                                        <th>Fecha Auto</th>
-                                                        <th>Clase</th>
-                                                        <th>Auto/Anotación</th>
-                                                        <th>Observaciones</th>
-                                                        <th>Act. ID</th>
-                                                        <th>Ing. ID</th>
+                                                        <th style="width: 12%;">Fecha Estado</th>
+                                                        <th style="width: 12%;">Fecha Auto</th>
+                                                        <th style="width: 15%;">Clase</th>
+                                                        <th style="width: 25%;">Auto/Anotación</th>
+                                                        <th style="width: 20%;">Observaciones</th>
+                                                        <th style="width: 8%;">Act. ID</th>
+                                                        <th style="width: 8%;">Ing. ID</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {% for estado in expediente.estados %}
                                                     <tr>
-                                                        <td><strong>{{ estado.fecha_estado.strftime('%d/%m/%Y') if
-                                                                estado.fecha_estado else 'No disponible' }}</strong>
+                                                        <td><small>{{ estado.fecha_estado.strftime('%d/%m/%Y')
+                                                                if estado.fecha_estado else 'N/A' }}</small>
                                                         </td>
-                                                        <td><strong>{{ estado.fecha_auto.strftime('%d/%m/%Y') if
-                                                                estado.fecha_auto else '—' }}</strong></td>
-                                                        <td><span class="badge badge-secondary">{{ estado.clase or 'Sin
-                                                                clase' }}</span></td>
-                                                        <td>{{ estado.auto_anotacion or '—' }}</td>
-                                                        <td><small>{{ estado.observaciones or '—' }}</small></td>
-                                                        <td><span class="badge badge-info">{{ estado.actuacion_id or '—'
-                                                                }}</span></td>
-                                                        <td><span class="badge badge-success">{{ estado.ingresos_id or
-                                                                '—' }}</span></td>
+                                                        <td><small>{{ estado.fecha_auto.strftime('%d/%m/%Y') if
+                                                                estado.fecha_auto else '—' }}</small></td>
+                                                        <td><small><span class="badge badge-secondary">{{
+                                                                    estado.clase or '—' }}</span></small></td>
+                                                        <td><small>{{ estado.auto_anotacion or '—' }}</small>
+                                                        </td>
+                                                        <td><small>{{ estado.observaciones or '—' }}</small>
+                                                        </td>
+                                                        <td><small>{{ estado.actuacion_id or '—' }}</small></td>
+                                                        <td><small>{{ estado.ingresos_id or '—' }}</small></td>
                                                     </tr>
                                                     {% endfor %}
                                                 </tbody>
@@ -909,26 +699,34 @@
                                     <!-- Tab: Actuaciones -->
                                     {% if expediente.actuaciones %}
                                     <div class="tab-pane fade {% if not expediente.ingresos and not expediente.estados %}show active{% endif %}"
-                                        id="actuaciones-{{ expediente.id }}" role="tabpanel"
-                                        aria-labelledby="actuaciones-tab-{{ expediente.id }}">
+                                        id="actuaciones-{{ expediente.id }}" role="tabpanel">
                                         <div class="table-responsive">
-                                            <table class="table table-sm table-striped table-hover">
+                                            <table class="table table-sm table-striped mb-0">
                                                 <thead class="thead-light">
                                                     <tr>
-                                                        <th>Tipo</th>
+                                                        <!-- <th style="width: 10%;">Número</th> -->
+                                                        <th style="width: 15%;">Tipo</th>
+                                                        <!-- <th style="width: 50%;">Descripción</th> -->
                                                         <th>Descripción</th>
+                                                        <!-- <th style="width: 15%;">Archivo</th> -->
+                                                        <!-- <th style="width: 10%;">Fecha</th> -->
                                                         <th>Fecha</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {% for actuacion in expediente.actuaciones %}
                                                     <tr>
+                                                        <!-- <td><small><span class="badge badge-primary">{{ actuacion.numero_actuacion or '—' }}</span></small></td> -->
                                                         <td><small><span class="badge badge-info">{{
-                                                                    actuacion.tipo_origen or '—' }}</span></small></td>
-                                                        <td><small>{{ actuacion.descripcion_actuacion or '—' }}</small>
-                                                        </td>
-                                                        <td><small>{{ actuacion.fecha_actuacion.strftime('%d/%m/%Y') if
-                                                                actuacion.fecha_actuacion else 'N/A' }}</small></td>
+                                                                    actuacion.tipo_origen or '—'
+                                                                    }}</span></small></td>
+                                                        <td><small>{{ actuacion.descripcion_actuacion or '—'
+                                                                }}</small></td>
+                                                        <!-- <td><small>{{ actuacion.archivo_origen or '—' }}</small></td> -->
+                                                        <td><small>{{
+                                                                actuacion.fecha_actuacion.strftime('%d/%m/%Y')
+                                                                if actuacion.fecha_actuacion else 'N/A'
+                                                                }}</small></td>
                                                     </tr>
                                                     {% endfor %}
                                                 </tbody>
@@ -937,174 +735,401 @@
                                     </div>
                                     {% endif %}
                                 </div>
-
-                                <!-- Pie de página con resumen -->
-                                <hr class="my-3">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small class="text-muted">
-                                        <i class="fas fa-id-card"></i> ID: {{ expediente.id }}
-                                    </small>
-                                    <small class="text-muted">
-                                        <i class="fas fa-list"></i> Resumen: {{ expediente.ingresos|length }}
-                                        ingreso(s), {{ expediente.estados|length }} estado(s), {{
-                                        expediente.actuaciones|length }} actuación(es)
-                                    </small>
-                                </div>
-                                {% endif %}
                             </div>
                         </div>
-                    </div>
-                    {% endfor %}
-                </div>
 
-                <!-- Paginación -->
-                {% if paginacion and paginacion.total_paginas > 1 %}
-                <div class="row mt-4">
-                    <div class="col-12">
-                        <nav aria-label="Paginación de expedientes">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <div>
-                                    <small class="text-muted">Mostrando {{ paginacion.inicio_item }} - {{
-                                        paginacion.fin_item }} de {{ paginacion.total_items }} expedientes</small>
-                                </div>
-                                <div>
-                                    <small class="text-muted">Página {{ paginacion.pagina_actual }} de {{
-                                        paginacion.total_paginas }}</small>
+                        {% else %}
+                        <!-- VISTA PARA MÚLTIPLES EXPEDIENTES (ORIGINAL) -->
+                        <!-- Información básica consolidada -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <h6 class="text-muted small">Radicado Completo</h6>
+                                <p class="mb-3"><strong>{{ expediente.radicado_completo or 'No disponible'
+                                        }}</strong></p>
+
+                                <h6 class="text-muted small">Radicado Corto</h6>
+                                <p class="mb-3"><strong>{{ expediente.radicado_corto or 'No disponible'
+                                        }}</strong></p>
+                            </div>
+
+                            <div class="col-md-3">
+                                <h6 class="text-muted small">Demandante</h6>
+                                <p class="mb-3"><strong>{{ expediente.demandante or 'No especificado'
+                                        }}</strong></p>
+
+                                <h6 class="text-muted small">Demandado</h6>
+                                <p class="mb-3"><strong>{{ expediente.demandado or 'No especificado' }}</strong>
+                                </p>
+                            </div>
+
+                            <div class="col-md-3">
+                                <h6 class="text-muted small">Estado Actual</h6>
+                                <p class="mb-3">
+                                    <span class="badge badge-secondary">{{ expediente.estado_actual or 'Sin estado' }}
+                                    </span>
+                                </p>
+                                <!-- <div class="col-md-4"> -->
+                                <h6 class="text-muted small">Turno</h6>
+                                <p class="mb-3">
+                                    <span class="badge bagde-secondary">{{ expediente.turno if expediente.turno else 'No disponible' }}
+                                        </span>
+                                </p>
+                            </div>
+
+                            <div class="col-md-3">
+                                <h6 class="text-muted small">Fecha de Ingreso</h6>
+                                <p class="mb-3"><strong>
+                                        {% if expediente.ingresos %}
+                                        {% set ultima_fecha = expediente.ingresos |
+                                        map(attribute='fecha_ingreso') | select('ne', None) | list | sort | last
+                                        %}
+                                        {{ ultima_fecha.strftime('%d/%m/%Y') if ultima_fecha else 'No
+                                        disponible' }}
+                                        {% else %}
+                                        {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') if
+                                        expediente.fecha_ingreso else 'No disponible' }}
+                                        {% endif %}
+                                    </strong></p>
+
+                                <h6 class="text-muted small">Última Actuación</h6>
+                                <p class="mb-3"><strong>
+                                        {% if expediente.estados %}
+                                        {% set ultima_estado = expediente.estados |
+                                        map(attribute='fecha_estado') | select('ne', None) | list | sort | last
+                                        %}
+                                        {{ ultima_estado.strftime('%d/%m/%Y') if ultima_estado else 'No
+                                        disponible' }}
+                                        {% else %}
+                                        {{ expediente.fecha_actuacion.strftime('%d/%m/%Y') if
+                                        expediente.fecha_actuacion else 'No disponible' }}
+                                        {% endif %}
+                                    </strong></p>
+                            </div>
+                        </div>
+
+                        <!-- Línea divisoria -->
+                        <hr class="my-4">
+
+                        <!-- Tabs para los historiales -->
+                        <ul class="nav nav-tabs nav-fill mb-3" id="tabs-{{ expediente.id }}" role="tablist">
+                            {% if expediente.ingresos %}
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link active" id="ingresos-tab-{{ expediente.id }}" data-bs-toggle="tab"
+                                    href="#ingresos-{{ expediente.id }}" role="tab"
+                                    aria-controls="ingresos-{{ expediente.id }}" aria-selected="true">
+                                    <i class="fas fa-calendar-plus"></i> Ingresos ({{ expediente.ingresos|length
+                                    }})
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% if expediente.estados %}
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link {% if not expediente.ingresos %}active{% endif %}"
+                                    id="estados-tab-{{ expediente.id }}" data-bs-toggle="tab"
+                                    href="#estados-{{ expediente.id }}" role="tab"
+                                    aria-controls="estados-{{ expediente.id }}"
+                                    aria-selected="{% if expediente.ingresos %}false{% else %}true{% endif %}">
+                                    <i class="fas fa-history"></i> Estados ({{ expediente.estados|length }})
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% if expediente.actuaciones %}
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link {% if not expediente.ingresos and not expediente.estados %}active{% endif %}"
+                                    id="actuaciones-tab-{{ expediente.id }}" data-bs-toggle="tab"
+                                    href="#actuaciones-{{ expediente.id }}" role="tab"
+                                    aria-controls="actuaciones-{{ expediente.id }}"
+                                    aria-selected="{% if not expediente.ingresos and not expediente.estados %}true{% else %}false{% endif %}">
+                                    <i class="fas fa-tasks"></i> Actuaciones ({{ expediente.actuaciones|length
+                                    }})
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+
+                        <!-- Contenido de tabs -->
+                        <div class="tab-content" id="content-tabs-{{ expediente.id }}">
+                            <!-- Tab: Ingresos -->
+                            {% if expediente.ingresos %}
+                            <div class="tab-pane fade show active" id="ingresos-{{ expediente.id }}" role="tabpanel"
+                                aria-labelledby="ingresos-tab-{{ expediente.id }}">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped table-hover">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>Fecha</th>
+                                                <th>Observaciones</th>
+                                                <th>Solicitud</th>
+                                                <th>Fechas</th>
+                                                <!-- <th>Actuación ID</th> -->
+                                                <!-- <th>Ubicación</th> -->
+                                                <th>Fecha Estado/Auto</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for ingreso in expediente.ingresos %}
+                                            <tr>
+                                                <td><strong>{{ ingreso.fecha_ingreso.strftime('%d/%m/%Y') if
+                                                        ingreso.fecha_ingreso else 'No disponible' }}</strong>
+                                                </td>
+                                                <td>{{ ingreso.observaciones or '—' }}</td>
+                                                <td>{{ ingreso.solicitud or '—' }}</td>
+                                                <td><small>{{ ingreso.fechas or '—' }}</small></td>
+                                                <!-- <td><span class="badge badge-info">{{ ingreso.actuacion_id or '—' }}</span></td> -->
+                                                <!--  <td>{{ ingreso.ubicacion or '—' }}</td> -->
+                                                <td><strong>{{ ingreso.fecha_estado_auto.strftime('%d/%m/%Y') if
+                                                        ingreso.fecha_estado_auto else '—' }}</strong></td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                            <ul class="pagination justify-content-center">
-                                <!-- Botón Anterior -->
-                                <li class="page-item {{ 'disabled' if not paginacion.tiene_anterior }}">
-                                    {% if paginacion.tiene_anterior %}
-                                    <a class="page-link"
-                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_anterior }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}"
-                                        aria-label="Anterior">
-                                        <span aria-hidden="true">&laquo; Anterior</span>
-                                    </a>
-                                    {% else %}
-                                    <span class="page-link">&laquo; Anterior</span>
-                                    {% endif %}
-                                </li>
+                            {% endif %}
 
-                                <!-- Números de página -->
-                                {% for num_pagina in paginacion.paginas_mostrar %}
-                                <li class="page-item {{ 'active' if num_pagina == paginacion.pagina_actual }}">
-                                    {% if num_pagina == paginacion.pagina_actual %}
-                                    <span class="page-link">{{ num_pagina }}</span>
-                                    {% else %}
-                                    <a class="page-link"
-                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ num_pagina }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}">{{
-                                        num_pagina }}</a>
-                                    {% endif %}
-                                </li>
-                                {% endfor %}
+                            <!-- Tab: Estados -->
+                            {% if expediente.estados %}
+                            <div class="tab-pane fade {% if not expediente.ingresos %}show active{% endif %}"
+                                id="estados-{{ expediente.id }}" role="tabpanel"
+                                aria-labelledby="estados-tab-{{ expediente.id }}">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped table-hover">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>Fecha Estado</th>
+                                                <th>Fecha Auto</th>
+                                                <th>Clase</th>
+                                                <th>Auto/Anotación</th>
+                                                <th>Observaciones</th>
+                                                <th>Act. ID</th>
+                                                <th>Ing. ID</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for estado in expediente.estados %}
+                                            <tr>
+                                                <td><strong>{{ estado.fecha_estado.strftime('%d/%m/%Y') if
+                                                        estado.fecha_estado else 'No disponible' }}</strong>
+                                                </td>
+                                                <td><strong>{{ estado.fecha_auto.strftime('%d/%m/%Y') if
+                                                        estado.fecha_auto else '—' }}</strong></td>
+                                                <td><span class="badge badge-secondary">{{ estado.clase or 'Sin
+                                                        clase' }}</span></td>
+                                                <td>{{ estado.auto_anotacion or '—' }}</td>
+                                                <td><small>{{ estado.observaciones or '—' }}</small></td>
+                                                <td><span class="badge badge-info">{{ estado.actuacion_id or '—'
+                                                        }}</span></td>
+                                                <td><span class="badge badge-success">{{ estado.ingresos_id or
+                                                        '—' }}</span></td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {% endif %}
 
-                                <!-- Botón Siguiente -->
-                                <li class="page-item {{ 'disabled' if not paginacion.tiene_siguiente }}">
-                                    {% if paginacion.tiene_siguiente %}
-                                    <a class="page-link"
-                                        href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_siguiente }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}"
-                                        aria-label="Siguiente">
-                                        <span aria-hidden="true">Siguiente &raquo;</span>
-                                    </a>
-                                    {% else %}
-                                    <span class="page-link">Siguiente &raquo;</span>
-                                    {% endif %}
-                                </li>
-                            </ul>
-                        </nav>
+                            <!-- Tab: Actuaciones -->
+                            {% if expediente.actuaciones %}
+                            <div class="tab-pane fade {% if not expediente.ingresos and not expediente.estados %}show active{% endif %}"
+                                id="actuaciones-{{ expediente.id }}" role="tabpanel"
+                                aria-labelledby="actuaciones-tab-{{ expediente.id }}">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped table-hover">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>Tipo</th>
+                                                <th>Descripción</th>
+                                                <th>Fecha</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for actuacion in expediente.actuaciones %}
+                                            <tr>
+                                                <td><small><span class="badge badge-info">{{
+                                                            actuacion.tipo_origen or '—' }}</span></small></td>
+                                                <td><small>{{ actuacion.descripcion_actuacion or '—' }}</small>
+                                                </td>
+                                                <td><small>{{ actuacion.fecha_actuacion.strftime('%d/%m/%Y') if
+                                                        actuacion.fecha_actuacion else 'N/A' }}</small></td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Pie de página con resumen -->
+                        <hr class="my-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <i class="fas fa-id-card"></i> ID: {{ expediente.id }}
+                            </small>
+                            <small class="text-muted">
+                                <i class="fas fa-list"></i> Resumen: {{ expediente.ingresos|length }}
+                                ingreso(s), {{ expediente.estados|length }} estado(s), {{
+                                expediente.actuaciones|length }} actuación(es)
+                            </small>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
-                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
 
-                {% elif radicado_buscar or estado_filtro %}
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    {% if radicado_buscar %}
-                    No se encontraron expedientes con el radicado: <strong>{{ radicado_buscar }}</strong>
-                    {% elif estado_filtro %}
-                    No se encontraron expedientes con el estado: <strong>{{ estado_filtro }}</strong>
-                    {% endif %}
-                </div>
-                {% endif %}
+        <!-- Paginación -->
+        {% if paginacion and paginacion.total_paginas > 1 %}
+        <div class="row mt-4">
+            <div class="col-12">
+                <nav aria-label="Paginación de expedientes">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <small class="text-muted">Mostrando {{ paginacion.inicio_item }} - {{
+                                paginacion.fin_item }} de {{ paginacion.total_items }} expedientes</small>
+                        </div>
+                        <div>
+                            <small class="text-muted">Página {{ paginacion.pagina_actual }} de {{
+                                paginacion.total_paginas }}</small>
+                        </div>
+                    </div>
+                    <ul class="pagination justify-content-center">
+                        <!-- Botón Anterior -->
+                        <li class="page-item {{ 'disabled' if not paginacion.tiene_anterior }}">
+                            {% if paginacion.tiene_anterior %}
+                            <a class="page-link"
+                                href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_anterior }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}"
+                                aria-label="Anterior">
+                                <span aria-hidden="true">&laquo; Anterior</span>
+                            </a>
+                            {% else %}
+                            <span class="page-link">&laquo; Anterior</span>
+                            {% endif %}
+                        </li>
+
+                        <!-- Números de página -->
+                        {% for num_pagina in paginacion.paginas_mostrar %}
+                        <li class="page-item {{ 'active' if num_pagina == paginacion.pagina_actual }}">
+                            {% if num_pagina == paginacion.pagina_actual %}
+                            <span class="page-link">{{ num_pagina }}</span>
+                            {% else %}
+                            <a class="page-link"
+                                href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ num_pagina }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}">{{
+                                num_pagina }}</a>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+
+                        <!-- Botón Siguiente -->
+                        <li class="page-item {{ 'disabled' if not paginacion.tiene_siguiente }}">
+                            {% if paginacion.tiene_siguiente %}
+                            <a class="page-link"
+                                href="{{ url_for('idvistaexpediente.vista_expediente') }}?pagina={{ paginacion.pagina_siguiente }}{% if paginacion.tipo_busqueda == 'radicado' %}&radicado={{ paginacion.radicado }}{% elif paginacion.tipo_busqueda == 'estado' %}&estado={{ paginacion.estado }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% elif paginacion.tipo_busqueda == 'solicitud' %}&solicitud={{ paginacion.solicitud }}&estado_filtro={{ paginacion.estado_filtro }}&orden={{ paginacion.orden }}&limite={{ paginacion.limite }}{% endif %}"
+                                aria-label="Siguiente">
+                                <span aria-hidden="true">Siguiente &raquo;</span>
+                            </a>
+                            {% else %}
+                            <span class="page-link">Siguiente &raquo;</span>
+                            {% endif %}
+                        </li>
+                    </ul>
+                </nav>
             </div>
         </div>
-    </div>
+        {% endif %}
 
-    <!-- Botón de Descarga en Excel -->
-    {% if expedientes %}
-    <div class="row mt-4 mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-center gap-2">
-                <form method="POST" action="{{ url_for('idvistaexpediente.descargar_excel_expedientes') }}" style="display: inline;">
-                    <!-- 🔒 CSRF Protection -->
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                    <input type="hidden" name="tipo_busqueda" value="{{ paginacion.tipo_busqueda if paginacion else 'radicado' }}">
-                    
-                    {% if paginacion.tipo_busqueda == 'radicado' or radicado_buscar %}
-                        <input type="hidden" name="radicado" value="{{ radicado_buscar }}">
-                    {% elif paginacion.tipo_busqueda == 'estado' or estado_filtro and not solicitud_filtro %}
-                        <input type="hidden" name="estado" value="{{ estado_filtro }}">
-                        <input type="hidden" name="orden_fecha" value="{{ paginacion.orden if paginacion else 'DESC' }}">
-                        <input type="hidden" name="limite" value="{{ paginacion.limite if paginacion else 50 }}">
-                    {% elif paginacion.tipo_busqueda == 'solicitud' or solicitud_filtro %}
-                        <input type="hidden" name="solicitud" value="{{ solicitud_filtro }}">
-                        <input type="hidden" name="estado_filtro" value="{{ estado_filtro }}">
-                        <input type="hidden" name="orden_fecha" value="{{ paginacion.orden if paginacion else 'DESC' }}">
-                        <input type="hidden" name="limite" value="{{ paginacion.limite if paginacion else 50 }}">
-                    {% endif %}
-                    
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <i class="fas fa-download"></i> Descargar en Excel
-                    </button>
-                </form>
-            </div>
+        {% elif radicado_buscar or estado_filtro %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            {% if radicado_buscar %}
+            No se encontraron expedientes con el radicado: <strong>{{ radicado_buscar }}</strong>
+            {% elif estado_filtro %}
+            No se encontraron expedientes con el estado: <strong>{{ estado_filtro }}</strong>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+</div>
+
+<!-- Botón de Descarga en Excel -->
+{% if expedientes %}
+<div class="row mt-4 mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-center gap-2">
+            <form method="POST" action="{{ url_for('idvistaexpediente.descargar_excel_expedientes') }}"
+                style="display: inline;">
+                <!-- 🔒 CSRF Protection -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <input type="hidden" name="tipo_busqueda"
+                    value="{{ paginacion.tipo_busqueda if paginacion else 'radicado' }}">
+
+                {% if paginacion.tipo_busqueda == 'radicado' or radicado_buscar %}
+                <input type="hidden" name="radicado" value="{{ radicado_buscar }}">
+                {% elif paginacion.tipo_busqueda == 'estado' or estado_filtro and not solicitud_filtro %}
+                <input type="hidden" name="estado" value="{{ estado_filtro }}">
+                <input type="hidden" name="orden_fecha" value="{{ paginacion.orden if paginacion else 'DESC' }}">
+                <input type="hidden" name="limite" value="{{ paginacion.limite if paginacion else 50 }}">
+                {% elif paginacion.tipo_busqueda == 'solicitud' or solicitud_filtro %}
+                <input type="hidden" name="solicitud" value="{{ solicitud_filtro }}">
+                <input type="hidden" name="estado_filtro" value="{{ estado_filtro }}">
+                <input type="hidden" name="orden_fecha" value="{{ paginacion.orden if paginacion else 'DESC' }}">
+                <input type="hidden" name="limite" value="{{ paginacion.limite if paginacion else 50 }}">
+                {% endif %}
+
+                <button type="submit" class="btn btn-success btn-lg">
+                    <i class="fas fa-download"></i> Descargar en Excel
+                </button>
+            </form>
         </div>
     </div>
-    {% endif %}
+</div>
+{% endif %}
 
-    <!-- Indicador para JavaScript si se debe activar la pestaña de filtros -->
-    {% if estado_filtro %}
-    <div data-activar-filtros="true" style="display: none;"></div>
-    {% endif %}
+<!-- Indicador para JavaScript si se debe activar la pestaña de filtros -->
+{% if estado_filtro %}
+<div data-activar-filtros="true" style="display: none;"></div>
+{% endif %}
 
-    <!-- JavaScript consolidado en base.js -->
-    <script>
-        function limpiarFiltrosFecha() {
-            document.getElementById('fecha_desde').value = '';
-            document.getElementById('fecha_hasta').value = '';
-            document.getElementById('tipo_fecha').value = 'ingreso';
+<!-- JavaScript consolidado en base.js -->
+<script>
+    function limpiarFiltrosFecha() {
+        document.getElementById('fecha_desde').value = '';
+        document.getElementById('fecha_hasta').value = '';
+        document.getElementById('tipo_fecha').value = 'ingreso';
+    }
+
+    // Función para establecer fechas rápidas
+    function establecerFechaRapida(dias) {
+        const hoy = new Date();
+        const fechaHasta = hoy.toISOString().split('T')[0];
+        const fechaDesde = new Date();
+        fechaDesde.setDate(hoy.getDate() - dias);
+        const fechaDesdeStr = fechaDesde.toISOString().split('T')[0];
+
+        document.getElementById('fecha_desde').value = fechaDesdeStr;
+        document.getElementById('fecha_hasta').value = fechaHasta;
+    }
+
+    function copiarRadicado(radicado) {
+        navigator.clipboard.writeText(radicado).then(function () {
+            // Mostrar notificación de éxito
+            alert('Radicado copiado: ' + radicado);
+        });
+    }
+
+    function toggleExpedienteDetails(expedienteId) {
+        const element = document.querySelector(`[data-expediente-id="${expedienteId}"]`);
+        if (element) {
+            element.classList.toggle('expediente-details-hidden');
         }
+    }
 
-        // Función para establecer fechas rápidas
-        function establecerFechaRapida(dias) {
-            const hoy = new Date();
-            const fechaHasta = hoy.toISOString().split('T')[0];
-            const fechaDesde = new Date();
-            fechaDesde.setDate(hoy.getDate() - dias);
-            const fechaDesdeStr = fechaDesde.toISOString().split('T')[0];
+    function scrollToDetails() {
+        document.getElementById('resultados-expedientes').scrollIntoView({ behavior: 'smooth' });
+    }
+</script>
 
-            document.getElementById('fecha_desde').value = fechaDesdeStr;
-            document.getElementById('fecha_hasta').value = fechaHasta;
-        }
-
-        function copiarRadicado(radicado) {
-            navigator.clipboard.writeText(radicado).then(function () {
-                // Mostrar notificación de éxito
-                alert('Radicado copiado: ' + radicado);
-            });
-        }
-
-        function toggleExpedienteDetails(expedienteId) {
-            const element = document.querySelector(`[data-expediente-id="${expedienteId}"]`);
-            if (element) {
-                element.classList.toggle('expediente-details-hidden');
-            }
-        }
-
-        function scrollToDetails() {
-            document.getElementById('resultados-expedientes').scrollIntoView({ behavior: 'smooth' });
-        }
-    </script>
-
-    {% endblock %}
+{% endblock %}
