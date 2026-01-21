@@ -3,16 +3,58 @@ import os
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
-# Cargar variables de entorno desde .env (solo en desarrollo local)
-load_dotenv()
+# Cargar variables de entorno desde múltiples ubicaciones posibles
+load_dotenv()  # Busca .env en directorio actual
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))  # app_juzgado/.env
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'))  # raíz/.env
 
 def obtener_conexion():
     """Conexión que funciona tanto en desarrollo como en producción (Railway)"""
     try:
-        # Intentar usar DATABASE_URL primero (Railway/producción)
+        # Verificar si estamos en modo desarrollo
+        flask_env = os.getenv('FLASK_ENV', '').lower()
+        is_development = flask_env == 'development'
+        
+        # En desarrollo, forzar uso de configuración local
+        if is_development:
+            print("🏠 Modo desarrollo: Usando configuración local (.env)")
+            
+            # Obtener credenciales de variables de entorno (SIN valores por defecto)
+            db_host = os.getenv('DB_HOST', 'localhost')
+            db_name = os.getenv('DB_NAME')
+            db_user = os.getenv('DB_USER')
+            db_password = os.getenv('DB_PASSWORD')
+            db_port = os.getenv('DB_PORT', '5432')
+            
+            # Verificar que las credenciales críticas estén configuradas
+            if not db_password:
+                raise Exception("❌ DB_PASSWORD no configurada en variables de entorno (.env)")
+            if not db_name:
+                raise Exception("❌ DB_NAME no configurada en variables de entorno (.env)")
+            if not db_user:
+                raise Exception("❌ DB_USER no configurada en variables de entorno (.env)")
+            
+            db_config = {
+                'host': db_host,
+                'database': db_name,
+                'user': db_user,
+                'password': db_password,
+                'port': db_port,
+                'client_encoding': 'utf8'
+            }
+            
+            #print(f"   Host: {db_config['host']}")
+            #print(f"   Database: {db_config['database']}")
+            #print(f"   User: {db_config['user']}")
+            #print(f"   Port: {db_config['port']}")
+            
+            return psycopg2.connect(**db_config)
+        
+        # En producción, usar DATABASE_URL
         database_url = os.environ.get('DATABASE_URL')
         
         if database_url:
+            print("� Usando DATABASE_URL (Railway/Producción)")
             # Parsear la URL de la base de datos
             url = urlparse(database_url)
             return psycopg2.connect(
@@ -24,15 +66,46 @@ def obtener_conexion():
                 client_encoding='utf8'
             )
         else:
-            # Usar variables de entorno individuales (desarrollo local)
-            return psycopg2.connect(
-                host=os.getenv('DB_HOST', 'localhost'),
-                database=os.getenv('DB_NAME'),
-                user=os.getenv('DB_USER'),
-                password=os.getenv('DB_PASSWORD'),
-                port=os.getenv('DB_PORT', '5432'),
-                client_encoding='utf8'
-            )
+            # Fallback a configuración local (pero sin credenciales hardcodeadas)
+            print("🏠 Fallback: Usando configuración local (.env)")
+            
+            # Obtener credenciales de variables de entorno (SIN valores por defecto)
+            db_host = os.getenv('DB_HOST', 'localhost')
+            db_name = os.getenv('DB_NAME')
+            db_user = os.getenv('DB_USER')
+            db_password = os.getenv('DB_PASSWORD')
+            db_port = os.getenv('DB_PORT', '5432')
+            
+            # Verificar que las credenciales críticas estén configuradas
+            if not db_password:
+                raise Exception("❌ DB_PASSWORD no configurada en variables de entorno")
+            if not db_name:
+                raise Exception("❌ DB_NAME no configurada en variables de entorno")
+            if not db_user:
+                raise Exception("❌ DB_USER no configurada en variables de entorno")
+            
+            db_config = {
+                'host': db_host,
+                'database': db_name,
+                'user': db_user,
+                'password': db_password,
+                'port': db_port,
+                'client_encoding': 'utf8'
+            }
+            
+            return psycopg2.connect(**db_config)
+            
     except Exception as e:
-        print(f"Error conectando a BD: {e}")
+        #print(f"❌ Error conectando a BD: {e}")
+        #print("🔍 Variables de entorno disponibles:")
+        #print(f"   FLASK_ENV: {os.getenv('FLASK_ENV', 'No configurada')}")
+        #print(f"   DATABASE_URL: {'✅ Configurada' if os.environ.get('DATABASE_URL') else '❌ No configurada'}")
+        #print(f"   DB_HOST: {os.getenv('DB_HOST', 'No configurada')}")
+        #print(f"   DB_NAME: {'✅ Configurada' if os.getenv('DB_NAME') else '❌ No configurada'}")
+        #print(f"   DB_USER: {'✅ Configurada' if os.getenv('DB_USER') else '❌ No configurada'}")
+        #print(f"   DB_PASSWORD: {'✅ Configurada' if os.getenv('DB_PASSWORD') else '❌ No configurada'}")
+        #print("\n💡 Solución:")
+        #print("   1. Crea un archivo .env con tus credenciales")
+        #print("   2. O configura las variables de entorno del sistema")
+        #rint("   3. Ver CONFIGURACION.md para más detalles")
         raise

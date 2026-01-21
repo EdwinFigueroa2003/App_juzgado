@@ -4,6 +4,9 @@ from flask_wtf.csrf import CSRFProtect
 from dotenv import load_dotenv
 import os
 
+# Cargar variables de entorno ANTES de importar otros módulos
+load_dotenv()  # Busca .env en directorio actual
+load_dotenv(dotenv_path='app_juzgado/.env')  # También busca en app_juzgado/.env
 
 from vista.vistahome import vistahome
 from vista.vistaexpediente import vistaexpediente
@@ -15,16 +18,17 @@ from vista.vistaasignacion import vistaasignacion
 from vista.vistausuarios import vistausuarios
 from vista.vistasecurity import vistasecurity
 
-# Cargar variables de entorno
-load_dotenv()
-
 app = Flask(__name__)
-#secret_key = secrets.token_hex(32)
-#app.secret_key = secret_key
+
 # Configuración desde variables de entorno
 app.secret_key = os.getenv('SECRET_KEY')
 app.config['WTF_CSRF_SECRET_KEY'] = os.getenv('CSRF_SECRET_KEY')
 
+# Debug info para desarrollo
+if os.getenv('FLASK_ENV') == 'development':
+    print("🔧 Modo desarrollo activado")
+    print(f"   SECRET_KEY: {'✅ Configurada' if app.secret_key else '❌ No configurada'}")
+    print(f"   CSRF_SECRET_KEY: {'✅ Configurada' if app.config.get('WTF_CSRF_SECRET_KEY') else '❌ No configurada'}")
 
 # 🔒 SEGURIDAD: Protección CSRF
 csrf = CSRFProtect(app)

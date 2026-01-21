@@ -10,13 +10,33 @@ import psycopg2
 from urllib.parse import urlparse
 
 def get_local_connection():
-    """Conexión a base de datos local"""
+    """Conexión a base de datos local usando variables de entorno"""
+    # Cargar variables de entorno
+    from dotenv import load_dotenv
+    load_dotenv()
+    load_dotenv(dotenv_path='app_juzgado/.env')
+    
+    # Obtener credenciales de variables de entorno
+    db_host = os.getenv('DB_HOST', 'localhost')
+    db_name = os.getenv('DB_NAME')
+    db_user = os.getenv('DB_USER')
+    db_password = os.getenv('DB_PASSWORD')
+    db_port = os.getenv('DB_PORT', '5432')
+    
+    # Verificar que las credenciales estén configuradas
+    if not db_name:
+        raise Exception("❌ DB_NAME no configurada en variables de entorno")
+    if not db_user:
+        raise Exception("❌ DB_USER no configurada en variables de entorno")
+    if not db_password:
+        raise Exception("❌ DB_PASSWORD no configurada en variables de entorno")
+    
     return psycopg2.connect(
-        host='localhost',
-        database='app_juzgado',
-        user='postgres',
-        password='figueroa2345',
-        port='5432',
+        host=db_host,
+        database=db_name,
+        user=db_user,
+        password=db_password,
+        port=db_port,
         client_encoding='utf8'
     )
 
@@ -44,22 +64,50 @@ def migrate_table(table_name, local_conn, railway_conn, batch_size=1000):
         local_cursor = local_conn.cursor()
         railway_cursor = railway_conn.cursor()
         
-        # Obtener estructura de la tabla
+        # Obtener estructura de la tabla LOCAL
         local_cursor.execute(f"""
             SELECT column_name, data_type 
             FROM information_schema.columns 
             WHERE table_name = '{table_name}' 
             ORDER BY ordinal_position
         """)
-        columns_info = local_cursor.fetchall()
+        local_columns_info = local_cursor.fetchall()
         
-        if not columns_info:
+        if not local_columns_info:
             print(f"   ⚠️  Tabla '{table_name}' no encontrada en BD local")
             return 0
         
-        columns = [col[0] for col in columns_info]
-        columns_str = ', '.join(columns)
-        placeholders = ', '.join(['%s'] * len(columns))
+        # Obtener estructura de la tabla RAILWAY
+        railway_cursor.execute(f"""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = '{table_name}' 
+            ORDER BY ordinal_position
+        """)
+        railway_columns_info = railway_cursor.fetchall()
+        
+        if not railway_columns_info:
+            print(f"   ⚠️  Tabla '{table_name}' no encontrada en BD Railway")
+            return 0
+        
+        # Obtener solo las columnas que existen en AMBAS tablas
+        local_columns = [col[0] for col in local_columns_info]
+        railway_columns = [col[0] for col in railway_columns_info]
+        
+        # Columnas comunes (intersección)
+        common_columns = [col for col in local_columns if col in railway_columns]
+        
+        if not common_columns:
+            print(f"   ⚠️  No hay columnas comunes entre BD local y Railway para '{table_name}'")
+            return 0
+        
+        print(f"   📊 Columnas a migrar: {len(common_columns)} de {len(local_columns)} disponibles")
+        if len(common_columns) < len(local_columns):
+            excluded = [col for col in local_columns if col not in railway_columns]
+            print(f"   ⚠️  Columnas excluidas: {', '.join(excluded)}")
+        
+        columns_str = ', '.join(common_columns)
+        placeholders = ', '.join(['%s'] * len(common_columns))
         
         # Contar registros totales
         local_cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
@@ -76,41 +124,54 @@ def migrate_table(table_name, local_conn, railway_conn, batch_size=1000):
         offset = 0
         
         while offset < total_records:
-            # Leer lote de la BD local
-            local_cursor.execute(f"""
-                SELECT {columns_str} 
-                FROM {table_name} 
-                ORDER BY id 
-                LIMIT {batch_size} OFFSET {offset}
-            """)
-            
-            batch = local_cursor.fetchall()
-            
-            if not batch:
-                break
-            
-            # Insertar lote en Railway
-            insert_query = f"""
-                INSERT INTO {table_name} ({columns_str}) 
-                VALUES ({placeholders})
-                ON CONFLICT DO NOTHING
-            """
-            
-            railway_cursor.executemany(insert_query, batch)
-            railway_conn.commit()
-            
-            migrated += len(batch)
-            offset += batch_size
-            
-            # Mostrar progreso
-            progress = (migrated / total_records) * 100
-            print(f"   📈 Progreso: {migrated:,}/{total_records:,} ({progress:.1f}%)")
+            try:
+                # Leer lote de la BD local (solo columnas comunes)
+                local_cursor.execute(f"""
+                    SELECT {columns_str} 
+                    FROM {table_name} 
+                    ORDER BY id 
+                    LIMIT {batch_size} OFFSET {offset}
+                """)
+                
+                batch = local_cursor.fetchall()
+                
+                if not batch:
+                    break
+                
+                # Insertar lote en Railway
+                insert_query = f"""
+                    INSERT INTO {table_name} ({columns_str}) 
+                    VALUES ({placeholders})
+                    ON CONFLICT DO NOTHING
+                """
+                
+                railway_cursor.executemany(insert_query, batch)
+                railway_conn.commit()
+                
+                migrated += len(batch)
+                offset += batch_size
+                
+                # Mostrar progreso
+                progress = (migrated / total_records) * 100
+                print(f"   📈 Progreso: {migrated:,}/{total_records:,} ({progress:.1f}%)")
+                
+            except Exception as batch_error:
+                print(f"   ⚠️  Error en lote {offset}-{offset+batch_size}: {batch_error}")
+                # Continuar con el siguiente lote
+                offset += batch_size
+                railway_conn.rollback()  # Rollback solo este lote
+                continue
         
         print(f"   ✅ Migración completada: {migrated:,} registros")
         return migrated
         
     except Exception as e:
         print(f"   ❌ Error migrando '{table_name}': {e}")
+        # Rollback de la transacción completa
+        try:
+            railway_conn.rollback()
+        except:
+            pass
         return 0
 
 def reset_sequences(railway_conn, tables):
@@ -176,7 +237,7 @@ def main():
     if not os.environ.get('DATABASE_URL'):
         print("❌ ERROR: Variable DATABASE_URL no encontrada")
         print("Configúrala con la URL de tu base de datos Railway:")
-        print("export DATABASE_URL='postgresql://usuario:password@host:puerto/database'")
+        print("set DATABASE_URL='postgresql://usuario:password@host:puerto/database'")
         sys.exit(1)
     
     # Confirmar migración

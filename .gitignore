@@ -1,9 +1,16 @@
 # Python
 __pycache__/
 *.py[cod]
+__pycache__
 *$py.class
 *.so
 .Python
+.env
+*.env
+*.venv
+env/
+venv/
+ENV/
 build/
 develop-eggs/
 dist/
@@ -19,51 +26,53 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# Virtual environments
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Flask
+instance/
+.webassets-cache
 
 # Environment variables
 .env
 .env.local
-.env.production
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
-app_juzgado/logs/
-
 # Database
 *.db
+*.sqlite
 *.sqlite3
 
-# Temporary files
-*.tmp
-*.temp
+# Logs
+*.log
 
-# Excel files (opcional - si no quieres subir los archivos de datos)
-# *.xlsx
-# *.xls
+requirements.txt
+verificaciones/
+Archivos/
+archivos/
 
-# Cache
-.pytest_cache/
-.coverage
-htmlcov/
+link_temporal/
 
-# Railway
-.railway/
+logs/
+
+utils/
+__pycache__/
+*.py[cod]
+
+gunicorn.conf.py
+migrate_data_fixed.py
+README_SETUP_RAILWAY.txt
+migrar_a_railway.bat
+test_conexion.py
+verificar_seguridad.py
+migrate_data_fixed.py
+migrate_data_to_railway.py
+README_SETUP_RAILWAY.txt
