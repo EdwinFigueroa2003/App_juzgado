@@ -76,3 +76,5 @@ verificar_seguridad.py
 migrate_data_fixed.py
 migrate_data_to_railway.py
 README_SETUP_RAILWAY.txt
+backup.sql
+.env.example
