@@ -8,8 +8,8 @@ load_dotenv()  # Busca .env en directorio actual
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))  # app_juzgado/.env
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'))  # raíz/.env
 
-def obtener_conexion():
-    """Conexión que funciona tanto en desarrollo como en producción (Railway)"""
+""" def obtener_conexion():
+    #Conexión que funciona tanto en desarrollo como en producción (Railway)
     try:
         # Verificar si estamos en modo desarrollo
         flask_env = os.getenv('FLASK_ENV', '').lower()
@@ -108,4 +108,45 @@ def obtener_conexion():
         #print("   1. Crea un archivo .env con tus credenciales")
         #print("   2. O configura las variables de entorno del sistema")
         #rint("   3. Ver CONFIGURACION.md para más detalles")
+        raise """
+
+def obtener_conexion():
+    """Conexión que funciona tanto en desarrollo como en producción (Railway)"""
+    try:
+        # 👉 PRIORIDAD 1: Producción (Railway)
+        database_url = os.environ.get('DATABASE_URL')
+
+        if database_url:
+            print("🚀 Producción: Usando DATABASE_URL (Railway)")
+            url = urlparse(database_url)
+            return psycopg2.connect(
+                host=url.hostname,
+                database=url.path[1:],
+                user=url.username,
+                password=url.password,
+                port=url.port or 5432,
+                client_encoding='utf8'
+            )
+
+        # 👉 PRIORIDAD 2: Desarrollo local (.env)
+        print("🏠 Desarrollo: Usando configuración local (.env)")
+
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'database': os.getenv('DB_NAME'),
+            'user': os.getenv('DB_USER'),
+            'password': os.getenv('DB_PASSWORD'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'client_encoding': 'utf8'
+        }
+
+        # Validaciones
+        for key in ['database', 'user', 'password']:
+            if not db_config[key]:
+                raise Exception(f"❌ Variable {key.upper()} no configurada")
+
+        return psycopg2.connect(**db_config)
+
+    except Exception as e:
+        print(f"❌ Error conectando a BD: {e}")
         raise
