@@ -67,7 +67,7 @@ utils/
 __pycache__/
 *.py[cod]
 
-gunicorn.conf.py
+
 migrate_data_fixed.py
 README_SETUP_RAILWAY.txt
 migrar_a_railway.bat
