@@ -561,16 +561,10 @@ def buscar_expedientes(radicado):
                 logger.error(f"Tipo de error: {type(e).__name__}")
                 expediente['actuaciones'] = []
             
-            # Calcular estado actual con la nueva lógica
-            try:
-                estado_actual, descripcion_estado = calcular_estado_expediente(exp_id, cursor)
-                expediente['estado_actual'] = estado_actual
-                expediente['descripcion_estado'] = descripcion_estado
-                logger.info(f"Estado calculado para expediente {exp_id}: {estado_actual} - {descripcion_estado}")
-            except Exception as e:
-                logger.error(f"ERROR calculando estado para expediente {exp_id}: {e}")
-                expediente['estado_actual'] = 'Error'
-                expediente['descripcion_estado'] = 'Error al calcular estado'
+            # Usar estado directo de la tabla (OPTIMIZADO - igual que filtros)
+            expediente['estado_actual'] = expediente['estado'] or 'Sin Estado'
+            expediente['descripcion_estado'] = f"Estado: {expediente['estado'] or 'Sin Estado'}"
+            logger.info(f"Estado directo para expediente {exp_id}: {expediente['estado_actual']}")
             
             # Calcular estadísticas del expediente
             expediente['estadisticas'] = {
