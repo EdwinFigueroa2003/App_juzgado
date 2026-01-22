@@ -659,11 +659,23 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
             where_conditions.append("e.estado = %s")
             parametros.append(estado)
         
-        # Construir la consulta completa OPTIMIZADA
+        # Construir la consulta completa OPTIMIZADA con ordenamiento especial para Activo Pendiente
         where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
         orden_sql = 'DESC' if orden_fecha == 'DESC' else 'ASC'
         
-        # Consulta ULTRA OPTIMIZADA - sin subconsultas complejas
+        # Ordenamiento especial para 'Activo Pendiente': por turno (más antiguo primero)
+        if estado == "ACTIVO PENDIENTE":
+            if orden_fecha == 'ASC':
+                # ASC = más antiguo primero = turno más bajo primero
+                order_clause = "ORDER BY e.turno ASC NULLS LAST, e.fecha_ingreso ASC"
+            else:
+                # DESC = más reciente primero = turno más alto primero  
+                order_clause = "ORDER BY e.turno DESC NULLS LAST, e.fecha_ingreso DESC"
+        else:
+            # Para otros estados, usar ordenamiento por fecha normal
+            order_clause = f"ORDER BY COALESCE(e.fecha_ingreso, CURRENT_DATE) {orden_sql}"
+        
+        # Consulta ULTRA OPTIMIZADA - con ordenamiento especial para Activo Pendiente
         query = f"""
             SELECT 
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
@@ -671,7 +683,7 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 COALESCE(e.fecha_ingreso, CURRENT_DATE) as fecha_orden
             FROM expediente e
             WHERE {where_clause}
-            ORDER BY fecha_orden {orden_sql}
+            {order_clause}
             LIMIT %s
         """
         
@@ -864,7 +876,19 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
                 query += " AND e.estado = %s"
                 parametros.append(estado_filtro)
         
-        query += f" ORDER BY fecha_orden {orden_sql} LIMIT %s"
+        # Ordenamiento especial para 'Activo Pendiente': por turno (más antiguo primero)
+        if estado_filtro == "ACTIVO PENDIENTE":
+            if orden_fecha == 'ASC':
+                # ASC = más antiguo primero = turno más bajo primero
+                order_clause = "ORDER BY e.turno ASC NULLS LAST, e.fecha_ingreso ASC"
+            else:
+                # DESC = más reciente primero = turno más alto primero  
+                order_clause = "ORDER BY e.turno DESC NULLS LAST, e.fecha_ingreso DESC"
+        else:
+            # Para otros estados, usar ordenamiento por fecha normal
+            order_clause = f"ORDER BY fecha_orden {orden_sql}"
+        
+        query += f" {order_clause} LIMIT %s"
         parametros.append(limite)
         cursor.execute(query, parametros)
         resultados_principales = cursor.fetchall()

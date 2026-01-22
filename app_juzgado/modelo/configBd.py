@@ -8,7 +8,7 @@ load_dotenv()  # Busca .env en directorio actual
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))  # app_juzgado/.env
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'))  # raíz/.env
 
-""" def obtener_conexion():
+def obtener_conexion():
     #Conexión que funciona tanto en desarrollo como en producción (Railway)
     try:
         # Verificar si estamos en modo desarrollo
@@ -96,22 +96,10 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.en
             return psycopg2.connect(**db_config)
             
     except Exception as e:
-        #print(f"❌ Error conectando a BD: {e}")
-        #print("🔍 Variables de entorno disponibles:")
-        #print(f"   FLASK_ENV: {os.getenv('FLASK_ENV', 'No configurada')}")
-        #print(f"   DATABASE_URL: {'✅ Configurada' if os.environ.get('DATABASE_URL') else '❌ No configurada'}")
-        #print(f"   DB_HOST: {os.getenv('DB_HOST', 'No configurada')}")
-        #print(f"   DB_NAME: {'✅ Configurada' if os.getenv('DB_NAME') else '❌ No configurada'}")
-        #print(f"   DB_USER: {'✅ Configurada' if os.getenv('DB_USER') else '❌ No configurada'}")
-        #print(f"   DB_PASSWORD: {'✅ Configurada' if os.getenv('DB_PASSWORD') else '❌ No configurada'}")
-        #print("\n💡 Solución:")
-        #print("   1. Crea un archivo .env con tus credenciales")
-        #print("   2. O configura las variables de entorno del sistema")
-        #rint("   3. Ver CONFIGURACION.md para más detalles")
-        raise """
+        raise 
 
-def obtener_conexion():
-    """Conexión que funciona tanto en desarrollo como en producción (Railway)"""
+"""def obtener_conexion():
+   #Conexión que funciona tanto en desarrollo como en producción (Railway)
     try:
         # 👉 PRIORIDAD 1: Producción (Railway)
         database_url = os.environ.get('DATABASE_URL')
@@ -150,3 +138,4 @@ def obtener_conexion():
     except Exception as e:
         print(f"❌ Error conectando a BD: {e}")
         raise
+"""
