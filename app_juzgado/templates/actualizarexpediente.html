@@ -279,7 +279,7 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label>Rol Responsable Actual:</label>
+                                    <label>Rol/Responsable Actual:</label>
                                     <div class="form-control-plaintext">
                                         {% if expediente.responsable %}
                                             {% if expediente.responsable == 'ESCRIBIENTE' %}
@@ -298,6 +298,45 @@
                                         {% else %}
                                             <span class="badge badge-warning badge-lg">
                                                 <i class="fas fa-exclamation-triangle"></i> Sin Asignar
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Estado Actual:</label>
+                                    <div class="form-control-plaintext">
+                                        {% if expediente.estado_actual %}
+                                            {% if expediente.estado_actual == 'Activo Pendiente' %}
+                                                <span class="badge badge-warning badge-lg">
+                                                    <i class="fas fa-clock"></i> Activo Pendiente
+                                                </span>
+                                                {% if expediente.turno %}
+                                                    <br><small class="text-muted mt-1">
+                                                        <i class="fas fa-sort-numeric-up"></i> Turno: {{ expediente.turno }}
+                                                    </small>
+                                                {% endif %}
+                                            {% elif expediente.estado_actual == 'Activo Resuelto' %}
+                                                <span class="badge badge-success badge-lg">
+                                                    <i class="fas fa-check-circle"></i> Activo Resuelto
+                                                </span>
+                                            {% elif expediente.estado_actual == 'Inactivo Resuelto' %}
+                                                <span class="badge badge-secondary badge-lg">
+                                                    <i class="fas fa-archive"></i> Inactivo Resuelto
+                                                </span>
+                                            {% elif expediente.estado_actual == 'Pendiente' %}
+                                                <span class="badge badge-light badge-lg">
+                                                    <i class="fas fa-pause-circle"></i> Pendiente
+                                                </span>
+                                            {% else %}
+                                                <span class="badge badge-info badge-lg">
+                                                    <i class="fas fa-info-circle"></i> {{ expediente.estado_actual }}
+                                                </span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge badge-danger badge-lg">
+                                                <i class="fas fa-question-circle"></i> Sin Estado
                                             </span>
                                         {% endif %}
                                     </div>
@@ -338,7 +377,7 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="rol_responsable">Rol Responsable:</label>
+                                    <label for="rol_responsable">Rol/Responsable:</label>
                                     <div class="input-group">
                                         <select class="form-control" id="rol_responsable" name="rol_responsable">
                                             <option value="">Sin Asignar</option>
@@ -533,8 +572,9 @@
                                         <thead>
                                             <tr>
                                                 <th>Fecha</th>
-                                                <th>Motivo</th>
+                                                <th>Solicitud</th>
                                                 <th>Observaciones</th>
+                                                <!-- <th>Ubicación</th> -->
                                                 <th width="60">Acciones</th>
                                             </tr>
                                         </thead>
@@ -542,13 +582,13 @@
                                             {% for ingreso in expediente.ingresos[:2] %}
                                             <tr>
                                                 <td><small>{{ ingreso[1].strftime('%d/%m/%Y') if ingreso[1] else 'N/A' }}</small></td>
-                                                <td><small>{{ ingreso[2][:30] + '...' if ingreso[2] and ingreso[2]|length > 30 else (ingreso[2] or 'Sin motivo') }}</small></td>
+                                                <td><small>{{ ingreso[3][:30] + '...' if ingreso[3] and ingreso[3]|length > 30 else (ingreso[3] or 'Sin solicitud') }}</small></td>
                                                 <td>
-                                                    {% if ingreso[3] and ingreso[3]|length > 100 %}
+                                                    {% if ingreso[2] and ingreso[2]|length > 50 %}
                                                         <div class="observaciones-ingreso-container">
-                                                            <small class="observaciones-ingreso-preview">{{ ingreso[3][:100] }}...</small>
+                                                            <small class="observaciones-ingreso-preview">{{ ingreso[2][:50] }}...</small>
                                                             <div class="observaciones-ingreso-full" style="display: none;">
-                                                                <small>{{ ingreso[3] }}</small>
+                                                                <small>{{ ingreso[2] }}</small>
                                                             </div>
                                                             <br>
                                                             <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-ingreso" 
@@ -557,9 +597,10 @@
                                                             </button>
                                                         </div>
                                                     {% else %}
-                                                        <small>{{ ingreso[3] or 'Sin observaciones' }}</small>
+                                                        <small>{{ ingreso[2] or 'Sin observaciones' }}</small>
                                                     {% endif %}
                                                 </td>
+                                                <!-- <td><small>{{ ingreso[5] or 'N/A' }}</small></td> -->
                                                 <td>
                                                     <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" 
                                                           class="form-inline-display" 
@@ -583,13 +624,13 @@
                                                 {% for ingreso in expediente.ingresos[2:] %}
                                                 <tr>
                                                     <td><small>{{ ingreso[1].strftime('%d/%m/%Y') if ingreso[1] else 'N/A' }}</small></td>
-                                                    <td><small>{{ ingreso[2][:30] + '...' if ingreso[2] and ingreso[2]|length > 30 else (ingreso[2] or 'Sin motivo') }}</small></td>
+                                                    <td><small>{{ ingreso[3][:30] + '...' if ingreso[3] and ingreso[3]|length > 30 else (ingreso[3] or 'Sin solicitud') }}</small></td>
                                                     <td>
-                                                        {% if ingreso[3] and ingreso[3]|length > 100 %}
+                                                        {% if ingreso[2] and ingreso[2]|length > 50 %}
                                                             <div class="observaciones-ingreso-container">
-                                                                <small class="observaciones-ingreso-preview">{{ ingreso[3][:100] }}...</small>
+                                                                <small class="observaciones-ingreso-preview">{{ ingreso[2][:50] }}...</small>
                                                                 <div class="observaciones-ingreso-full" style="display: none;">
-                                                                    <small>{{ ingreso[3] }}</small>
+                                                                    <small>{{ ingreso[2] }}</small>
                                                                 </div>
                                                                 <br>
                                                                 <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-ingreso" 
@@ -598,9 +639,10 @@
                                                                 </button>
                                                             </div>
                                                         {% else %}
-                                                            <small>{{ ingreso[3] or 'Sin observaciones' }}</small>
+                                                            <small>{{ ingreso[2] or 'Sin observaciones' }}</small>
                                                         {% endif %}
                                                     </td>
+                                                    <td><small>{{ ingreso[5] or 'N/A' }}</small></td>
                                                     <td>
                                                         <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" 
                                                               style="display: inline;" 
@@ -681,7 +723,8 @@
                                         <thead>
                                             <tr>
                                                 <th>Fecha</th>
-                                                <th>Estado</th>
+                                                <th>Clase</th>
+                                                <th>Auto/Anotación</th>
                                                 <th>Observaciones</th>
                                                 <th width="60">Acciones</th>
                                             </tr>
@@ -690,13 +733,30 @@
                                             {% for estado in expediente.estados[:2] %}
                                             <tr>
                                                 <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
-                                                <td><span class="badge badge-info badge-sm">{{ estado[2][:15] + '...' if estado[2] and estado[2]|length > 15 else (estado[2] or 'Sin estado') }}</span></td>
+                                                <td><span class="badge badge-info badge-sm">{{ estado[2][:20] + '...' if estado[2] and estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
                                                 <td>
-                                                    {% if estado[3] and estado[3]|length > 100 %}
-                                                        <div class="observaciones-estado-container">
-                                                            <small class="observaciones-estado-preview">{{ estado[3][:100] }}...</small>
-                                                            <div class="observaciones-estado-full" style="display: none;">
+                                                    {% if estado[3] and estado[3]|length > 50 %}
+                                                        <div class="auto-anotacion-container">
+                                                            <small class="auto-anotacion-preview">{{ estado[3][:50] }}...</small>
+                                                            <div class="auto-anotacion-full" style="display: none;">
                                                                 <small>{{ estado[3] }}</small>
+                                                            </div>
+                                                            <br>
+                                                            <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-auto-anotacion" 
+                                                                    onclick="toggleAutoAnotacionText(this)">
+                                                                <i class="fas fa-expand"></i> Ver completo
+                                                            </button>
+                                                        </div>
+                                                    {% else %}
+                                                        <small>{{ estado[3] or 'Sin auto/anotación' }}</small>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if estado[4] and estado[4]|length > 50 %}
+                                                        <div class="observaciones-estado-container">
+                                                            <small class="observaciones-estado-preview">{{ estado[4][:50] }}...</small>
+                                                            <div class="observaciones-estado-full" style="display: none;">
+                                                                <small>{{ estado[4] }}</small>
                                                             </div>
                                                             <br>
                                                             <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-estado" 
@@ -705,7 +765,7 @@
                                                             </button>
                                                         </div>
                                                     {% else %}
-                                                        <small>{{ estado[3] or 'Sin observaciones' }}</small>
+                                                        <small>{{ estado[4] or 'Sin observaciones' }}</small>
                                                     {% endif %}
                                                 </td>
                                                 <td>
@@ -731,13 +791,30 @@
                                                 {% for estado in expediente.estados[2:] %}
                                                 <tr>
                                                     <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
-                                                    <td><span class="badge badge-info badge-sm">{{ estado[2][:15] + '...' if estado[2] and estado[2]|length > 15 else (estado[2] or 'Sin estado') }}</span></td>
+                                                    <td><span class="badge badge-info badge-sm">{{ estado[2][:20] + '...' if estado[2] and estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
                                                     <td>
-                                                        {% if estado[3] and estado[3]|length > 100 %}
-                                                            <div class="observaciones-estado-container">
-                                                                <small class="observaciones-estado-preview">{{ estado[3][:100] }}...</small>
-                                                                <div class="observaciones-estado-full" style="display: none;">
+                                                        {% if estado[3] and estado[3]|length > 50 %}
+                                                            <div class="auto-anotacion-container">
+                                                                <small class="auto-anotacion-preview">{{ estado[3][:50] }}...</small>
+                                                                <div class="auto-anotacion-full" style="display: none;">
                                                                     <small>{{ estado[3] }}</small>
+                                                                </div>
+                                                                <br>
+                                                                <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-auto-anotacion" 
+                                                                        onclick="toggleAutoAnotacionText(this)">
+                                                                    <i class="fas fa-expand"></i> Ver completo
+                                                                </button>
+                                                            </div>
+                                                        {% else %}
+                                                            <small>{{ estado[3] or 'Sin auto/anotación' }}</small>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if estado[4] and estado[4]|length > 50 %}
+                                                            <div class="observaciones-estado-container">
+                                                                <small class="observaciones-estado-preview">{{ estado[4][:50] }}...</small>
+                                                                <div class="observaciones-estado-full" style="display: none;">
+                                                                    <small>{{ estado[4] }}</small>
                                                                 </div>
                                                                 <br>
                                                                 <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-estado" 
@@ -746,7 +823,7 @@
                                                                 </button>
                                                             </div>
                                                         {% else %}
-                                                            <small>{{ estado[3] or 'Sin observaciones' }}</small>
+                                                            <small>{{ estado[4] or 'Sin observaciones' }}</small>
                                                         {% endif %}
                                                     </td>
                                                     <td>
@@ -801,17 +878,22 @@
                                         </div>
                                         
                                         <div class="form-group">
-                                            <label for="nuevo_estado">Estado:</label>
+                                            <label for="nuevo_estado">Clase:</label>
                                             <select class="form-control" id="nuevo_estado" name="nuevo_estado" required>
-                                                <option value="">Seleccionar estado</option>
-                                                <option value="EN_PROCESO">En Proceso</option>
-                                                <option value="COMPLETADO">Completado</option>
-                                                <option value="PROCESADO_AZURE">Procesado Azure</option>
-                                                <option value="PENDIENTE">Pendiente</option>
-                                                <option value="SALIO">Salió</option>
-                                                <option value="TERMINADO">Terminado</option>
-                                                <option value="ARCHIVADO">Archivado</option>
+                                                <option value="">Seleccionar clase</option>
+                                                <option value="Ejecutivos De Mínima Cuantía">Ejecutivos De Mínima Cuantía</option>
+                                                <option value="Ejecutivos De Mayor Cuantía">Ejecutivos De Mayor Cuantía</option>
+                                                <option value="Declarativos">Declarativos</option>
+                                                <option value="Especiales">Especiales</option>
+                                                <option value="Terminado">Terminado</option>
+                                                <option value="Archivado">Archivado</option>
                                             </select>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="nueva_auto_anotacion">Auto/Anotación:</label>
+                                            <textarea class="form-control" id="nueva_auto_anotacion" name="nueva_auto_anotacion" 
+                                                      rows="3" placeholder="Auto o anotación del estado"></textarea>
                                         </div>
                                         
                                         <div class="form-group">

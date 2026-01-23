@@ -124,7 +124,7 @@ def _construir_select_expediente(cursor, alias=''):
         base_select.append("NULL AS tipo_solicitud")
     
     # Otras columnas opcionales
-    optional_columns = ['juzgado_origen', 'responsable', 'observaciones', 'fecha_ingreso']
+    optional_columns = ['juzgado_origen', 'responsable', 'observaciones', 'fecha_ingreso', 'turno']
     for col in optional_columns:
         if col in available_columns:
             base_select.append(f"{prefix}{col}")
@@ -215,7 +215,8 @@ def buscar_expediente_por_radicado(radicado):
                 'responsable': result[9] if len(result) > 9 else None,  # Mantener None si no hay responsable
                 'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
-                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
+                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None,
+                'turno': result[12] if len(result) > 12 else None
             }
             
             logger.info(f"Expediente mapeado: {expediente}")
@@ -224,16 +225,16 @@ def buscar_expediente_por_radicado(radicado):
             cursor.execute("""
                 SELECT table_name 
                 FROM information_schema.tables 
-                WHERE table_name IN ('ingresos_expediente', 'estados_expediente')
+                WHERE table_name IN ('ingresos', 'estados', 'actuaciones')
             """)
             tablas_relacionadas = [row[0] for row in cursor.fetchall()]
             logger.info(f"Tablas relacionadas encontradas: {tablas_relacionadas}")
             
             # Obtener ingresos si la tabla existe
-            if 'ingresos_expediente' in tablas_relacionadas:
+            if 'ingresos' in tablas_relacionadas:
                 cursor.execute("""
-                    SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
-                    FROM ingresos_expediente 
+                    SELECT id, fecha_ingreso, observaciones, solicitud, fechas, ubicacion
+                    FROM ingresos 
                     WHERE expediente_id = %s
                     ORDER BY fecha_ingreso DESC
                 """, (expediente['id'],))
@@ -241,13 +242,13 @@ def buscar_expediente_por_radicado(radicado):
                 logger.info(f"Ingresos encontrados: {len(expediente['ingresos'])}")
             else:
                 expediente['ingresos'] = []
-                logger.info("Tabla ingresos_expediente no existe")
+                logger.info("Tabla ingresos no existe")
             
             # Obtener estados si la tabla existe
-            if 'estados_expediente' in tablas_relacionadas:
+            if 'estados' in tablas_relacionadas:
                 cursor.execute("""
-                    SELECT id, fecha_estado, estado, observaciones
-                    FROM estados_expediente 
+                    SELECT id, fecha_estado, clase, auto_anotacion, observaciones
+                    FROM estados 
                     WHERE expediente_id = %s
                     ORDER BY fecha_estado DESC
                 """, (expediente['id'],))
@@ -255,7 +256,21 @@ def buscar_expediente_por_radicado(radicado):
                 logger.info(f"Estados encontrados: {len(expediente['estados'])}")
             else:
                 expediente['estados'] = []
-                logger.info("Tabla estados_expediente no existe")
+                logger.info("Tabla estados no existe")
+            
+            # Obtener actuaciones si la tabla existe
+            if 'actuaciones' in tablas_relacionadas:
+                cursor.execute("""
+                    SELECT id, numero_actuacion, descripcion_actuacion, fecha_actuacion, tipo_origen
+                    FROM actuaciones 
+                    WHERE expediente_id = %s
+                    ORDER BY fecha_actuacion DESC
+                """, (expediente['id'],))
+                expediente['actuaciones'] = cursor.fetchall()
+                logger.info(f"Actuaciones encontradas: {len(expediente['actuaciones'])}")
+            else:
+                expediente['actuaciones'] = []
+                logger.info("Tabla actuaciones no existe")
             
             cursor.close()
             conn.close()
@@ -313,22 +328,23 @@ def buscar_expediente_por_id(expediente_id):
                 'responsable': result[9] if len(result) > 9 else None,  # Mantener None si no hay responsable
                 'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
-                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
+                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None,
+                'turno': result[12] if len(result) > 12 else None
             }
             
             # Verificar si existen tablas relacionadas
             cursor.execute("""
                 SELECT table_name 
                 FROM information_schema.tables 
-                WHERE table_name IN ('ingresos_expediente', 'estados_expediente')
+                WHERE table_name IN ('ingresos', 'estados', 'actuaciones')
             """)
             tablas_relacionadas = [row[0] for row in cursor.fetchall()]
             
             # Obtener ingresos si la tabla existe
-            if 'ingresos_expediente' in tablas_relacionadas:
+            if 'ingresos' in tablas_relacionadas:
                 cursor.execute("""
-                    SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
-                    FROM ingresos_expediente 
+                    SELECT id, fecha_ingreso, observaciones, solicitud, fechas, ubicacion
+                    FROM ingresos 
                     WHERE expediente_id = %s
                     ORDER BY fecha_ingreso DESC
                 """, (expediente['id'],))
@@ -337,10 +353,10 @@ def buscar_expediente_por_id(expediente_id):
                 expediente['ingresos'] = []
             
             # Obtener estados si la tabla existe
-            if 'estados_expediente' in tablas_relacionadas:
+            if 'estados' in tablas_relacionadas:
                 cursor.execute("""
-                    SELECT id, fecha_estado, estado, observaciones
-                    FROM estados_expediente 
+                    SELECT id, fecha_estado, clase, auto_anotacion, observaciones
+                    FROM estados 
                     WHERE expediente_id = %s
                     ORDER BY fecha_estado DESC
                 """, (expediente['id'],))
@@ -400,6 +416,10 @@ def vista_actualizarexpediente():
             return asignar_persona_especifica()
         elif accion == 'asignacion_masiva':
             return asignacion_masiva()
+        elif accion == 'agregar_actuacion':
+            return agregar_actuacion()
+        elif accion == 'eliminar_actuacion':
+            return eliminar_actuacion()
     
     # Si viene un radicado como parámetro GET, buscar automáticamente el expediente
     elif radicado_get:
@@ -542,22 +562,23 @@ def buscar_expediente_para_actualizar():
                 'responsable': result[9] if len(result) > 9 else None,  # Mantener None si no hay responsable
                 'observaciones': result[10] if len(result) > 10 and result[10] is not None else '',
                 'fecha_ultima_actualizacion': None,
-                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None
+                'fecha_ultima_actuacion_real': result[11] if len(result) > 11 else None,
+                'turno': result[12] if len(result) > 12 else None
             }
             
             # Verificar si existen tablas relacionadas
             cursor.execute("""
                 SELECT table_name 
                 FROM information_schema.tables 
-                WHERE table_name IN ('ingresos_expediente', 'estados_expediente')
+                WHERE table_name IN ('ingresos', 'estados', 'actuaciones')
             """)
             tablas_relacionadas = [row[0] for row in cursor.fetchall()]
             
             # Obtener ingresos si la tabla existe
-            if 'ingresos_expediente' in tablas_relacionadas:
+            if 'ingresos' in tablas_relacionadas:
                 cursor.execute("""
-                    SELECT id, fecha_ingreso, motivo_ingreso, observaciones_ingreso
-                    FROM ingresos_expediente 
+                    SELECT id, fecha_ingreso, observaciones, solicitud, fechas, ubicacion
+                    FROM ingresos 
                     WHERE expediente_id = %s
                     ORDER BY fecha_ingreso DESC
                 """, (expediente['id'],))
@@ -566,16 +587,28 @@ def buscar_expediente_para_actualizar():
                 expediente['ingresos'] = []
             
             # Obtener estados si la tabla existe
-            if 'estados_expediente' in tablas_relacionadas:
+            if 'estados' in tablas_relacionadas:
                 cursor.execute("""
-                    SELECT id, fecha_estado, estado, observaciones
-                    FROM estados_expediente 
+                    SELECT id, fecha_estado, clase, auto_anotacion, observaciones
+                    FROM estados 
                     WHERE expediente_id = %s
                     ORDER BY fecha_estado DESC
                 """, (expediente['id'],))
                 expediente['estados'] = cursor.fetchall()
             else:
                 expediente['estados'] = []
+            
+            # Obtener actuaciones si la tabla existe
+            if 'actuaciones' in tablas_relacionadas:
+                cursor.execute("""
+                    SELECT id, numero_actuacion, descripcion_actuacion, fecha_actuacion, tipo_origen
+                    FROM actuaciones 
+                    WHERE expediente_id = %s
+                    ORDER BY fecha_actuacion DESC
+                """, (expediente['id'],))
+                expediente['actuaciones'] = cursor.fetchall()
+            else:
+                expediente['actuaciones'] = []
             
             flash(f'Expediente encontrado: {expediente["radicado_completo"] or expediente["radicado_corto"]}', 'success')
         else:
@@ -738,10 +771,10 @@ def agregar_ingreso():
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO ingresos_expediente 
-            (expediente_id, fecha_ingreso, motivo_ingreso, observaciones_ingreso)
+            INSERT INTO ingresos 
+            (expediente_id, fecha_ingreso, observaciones, solicitud)
             VALUES (%s, %s, %s, %s)
-        """, (expediente_id, fecha_ingreso_obj, motivo_ingreso, observaciones_ingreso))
+        """, (expediente_id, fecha_ingreso_obj, observaciones_ingreso, motivo_ingreso))
         
         conn.commit()
         cursor.close()
@@ -783,10 +816,10 @@ def agregar_estado():
         
         # Insertar nuevo estado
         cursor.execute("""
-            INSERT INTO estados_expediente 
-            (expediente_id, estado, fecha_estado, observaciones)
-            VALUES (%s, %s, %s, %s)
-        """, (expediente_id, nuevo_estado, fecha_estado_obj, observaciones_estado))
+            INSERT INTO estados 
+            (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (expediente_id, nuevo_estado, fecha_estado_obj, observaciones_estado, observaciones_estado))
         
         # Actualizar estado actual del expediente
         cursor.execute("""
@@ -822,7 +855,7 @@ def eliminar_ingreso():
         
         # Verificar que el ingreso pertenece al expediente
         cursor.execute("""
-            SELECT COUNT(*) FROM ingresos_expediente 
+            SELECT COUNT(*) FROM ingresos 
             WHERE id = %s AND expediente_id = %s
         """, (ingreso_id, expediente_id))
         
@@ -834,7 +867,7 @@ def eliminar_ingreso():
         
         # Eliminar el ingreso
         cursor.execute("""
-            DELETE FROM ingresos_expediente 
+            DELETE FROM ingresos 
             WHERE id = %s AND expediente_id = %s
         """, (ingreso_id, expediente_id))
         
@@ -865,7 +898,7 @@ def eliminar_estado():
         
         # Verificar que el estado pertenece al expediente
         cursor.execute("""
-            SELECT COUNT(*) FROM estados_expediente 
+            SELECT COUNT(*) FROM estados 
             WHERE id = %s AND expediente_id = %s
         """, (estado_id, expediente_id))
         
@@ -877,7 +910,7 @@ def eliminar_estado():
         
         # Eliminar el estado
         cursor.execute("""
-            DELETE FROM estados_expediente 
+            DELETE FROM estados 
             WHERE id = %s AND expediente_id = %s
         """, (estado_id, expediente_id))
         
@@ -1308,3 +1341,90 @@ def obtener_estadisticas_expedientes():
             'sustanciadores': 0,
             'estados_comunes': []
         }
+
+def agregar_actuacion():
+    """Agrega una nueva actuación al expediente"""
+    try:
+        expediente_id = request.form.get('expediente_id')
+        fecha_actuacion = request.form.get('nueva_fecha_actuacion', '').strip()
+        numero_actuacion = request.form.get('nuevo_numero_actuacion', '').strip()
+        descripcion_actuacion = request.form.get('nueva_descripcion_actuacion', '').strip()
+        
+        if not expediente_id:
+            flash('ID de expediente no válido', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        if not fecha_actuacion:
+            flash('La fecha de actuación es obligatoria', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        # Convertir fecha
+        try:
+            fecha_actuacion_obj = datetime.strptime(fecha_actuacion, '%Y-%m-%d').date()
+        except:
+            flash('Formato de fecha inválido', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO actuaciones 
+            (expediente_id, fecha_actuacion, numero_actuacion, descripcion_actuacion, tipo_origen)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (expediente_id, fecha_actuacion_obj, numero_actuacion, descripcion_actuacion, 'MANUAL'))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        flash('Actuación agregada exitosamente', 'success')
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
+                       f'?buscar_id={expediente_id}')
+        
+    except Exception as e:
+        flash(f'Error agregando actuación: {str(e)}', 'error')
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+
+def eliminar_actuacion():
+    """Elimina una actuación del expediente"""
+    try:
+        expediente_id = request.form.get('expediente_id')
+        actuacion_id = request.form.get('actuacion_id')
+        
+        if not expediente_id or not actuacion_id:
+            flash('IDs no válidos para eliminar actuación', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        # Verificar que la actuación pertenece al expediente
+        cursor.execute("""
+            SELECT COUNT(*) FROM actuaciones 
+            WHERE id = %s AND expediente_id = %s
+        """, (actuacion_id, expediente_id))
+        
+        if cursor.fetchone()[0] == 0:
+            flash('Actuación no encontrada o no pertenece al expediente', 'error')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        # Eliminar la actuación
+        cursor.execute("""
+            DELETE FROM actuaciones 
+            WHERE id = %s AND expediente_id = %s
+        """, (actuacion_id, expediente_id))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        flash('Actuación eliminada exitosamente', 'success')
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
+                       f'?buscar_id={expediente_id}')
+        
+    except Exception as e:
+        flash(f'Error eliminando actuación: {str(e)}', 'error')
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
