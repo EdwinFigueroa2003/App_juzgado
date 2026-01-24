@@ -22,15 +22,16 @@ def verificar_usuario(username_or_email, password):
         
         # Buscar usuario por nombre de usuario o correo
         cursor.execute("""
-            SELECT id, usuario, correo, contrasena, nombre, activo, administrador
-            FROM usuarios 
-            WHERE (usuario = %s OR correo = %s) AND activo = TRUE
+            SELECT u.id, u.usuario, u.correo, u.contrasena, u.nombre, u.activo, u.administrador, r.nombre_rol
+            FROM usuarios u
+            LEFT JOIN roles r ON u.rol_id = r.id
+            WHERE (u.usuario = %s OR u.correo = %s) AND u.activo = TRUE
         """, (username_or_email, username_or_email))
         
         user = cursor.fetchone()
         
         if user:
-            user_id, usuario, correo, contrasena_bd, nombre, activo, administrador = user
+            user_id, usuario, correo, contrasena_bd, nombre, activo, administrador, rol_nombre = user
             
             # Verificar contraseña hasheada
             password_hash = hash_password(password)
@@ -53,7 +54,8 @@ def verificar_usuario(username_or_email, password):
                     'usuario': usuario,
                     'correo': correo,
                     'nombre': nombre,
-                    'administrador': administrador
+                    'administrador': administrador,
+                    'rol_nombre': rol_nombre
                 }
             
             # Si no coincide con hash, verificar si es contraseña plana (para migración)
@@ -76,7 +78,8 @@ def verificar_usuario(username_or_email, password):
                     'usuario': usuario,
                     'correo': correo,
                     'nombre': nombre,
-                    'administrador': administrador
+                    'administrador': administrador,
+                    'rol_nombre': rol_nombre
                 }
         
         cursor.close()
@@ -124,6 +127,7 @@ def vista_login():
             session['correo'] = user['correo']
             session['nombre'] = user['nombre']
             session['administrador'] = user['administrador']
+            session['rol_nombre'] = user['rol_nombre']
             session['logged_in'] = True
             
             flash(f'¡Bienvenido {user["nombre"]}!', 'success')

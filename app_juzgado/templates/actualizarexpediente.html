@@ -9,22 +9,24 @@
             <h2 class="mb-4">
                 <i class="fas fa-edit"></i> Actualizar Expedientes
             </h2>
-            
+
             <!-- Mensajes de flash -->
             {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' if category == 'info' else 'warning' }} alert-dismissible fade show" role="alert">
-                            <i class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' if category == 'info' else 'exclamation-circle' }}"></i>
-                            {{ message }}
-                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                                <span aria-hidden="true">&times;</span>
-                            </button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' if category == 'info' else 'warning' }} alert-dismissible fade show"
+                role="alert">
+                <i
+                    class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' if category == 'info' else 'exclamation-circle' }}"></i>
+                {{ message }}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            {% endfor %}
+            {% endif %}
             {% endwith %}
-            
+
             <!-- Notificación especial cuando viene desde enlace de expediente -->
             {% if expediente and request.args.get('radicado') %}
             <div class="alert alert-primary alert-dismissible fade show" role="alert">
@@ -37,7 +39,7 @@
                             <i class="fas fa-magic"></i> Expediente Cargado Automáticamente
                         </h6>
                         <p class="mb-0">
-                            Este expediente se cargó automáticamente desde la vista de consulta. 
+                            Este expediente se cargó automáticamente desde la vista de consulta.
                             Puedes editarlo directamente o buscar otro expediente usando el formulario de búsqueda.
                         </p>
                     </div>
@@ -47,7 +49,7 @@
                 </button>
             </div>
             {% endif %}
-            
+
             <!-- Información sobre roles -->
             <!-- <div class="alert alert-info mb-4">
                 <h6><i class="fas fa-info-circle"></i> Información sobre Asignación por Roles</h6>
@@ -68,8 +70,9 @@
                     proporcionando mayor flexibilidad en la gestión de casos.
                 </small>
             </div> -->
-            
+
             <!-- Asignación Masiva -->
+            {% if session.administrador %}
             <div class="card mb-4">
                 <div class="card-header bg-warning text-dark">
                     <h5 class="mb-0">
@@ -112,22 +115,24 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- Formulario de asignación masiva -->
-                    <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" onsubmit="return confirmarAsignacionMasiva()">
+                    <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
+                        onsubmit="return confirmarAsignacionMasiva()">
                         <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                         <input type="hidden" name="accion" value="asignacion_masiva">
-                        
+
                         <div class="row">
                             <div class="col-md-4">
                                 <div class="form-group">
                                     <label for="criterio_masivo">Criterio de Asignación:</label>
-                                    <select class="form-control" id="criterio_masivo" name="criterio_masivo" onchange="mostrarCampoValor()" required>
+                                    <select class="form-control" id="criterio_masivo" name="criterio_masivo"
+                                        onchange="mostrarCampoValor()" required>
                                         <option value="">Seleccionar criterio</option>
                                         <option value="sin_responsable">Expedientes sin responsable</option>
                                         <option value="estado">Por estado específico</option>
-                                        <option value="tipo_solicitud">Por tipo de solicitud</option>
+                                        <option value="solicitud">Por tipo de solicitud</option>
                                         <!-- <option value="juzgado_origen">Por juzgado de origen</option> -->
                                         <option value="todos" class="text-danger">TODOS los expedientes</option>
                                     </select>
@@ -137,24 +142,17 @@
                                 <div class="form-group">
                                     <label for="valor_criterio">Valor del Criterio:</label>
                                     <div id="campo_valor_criterio">
-                                        <input type="text" 
-                                               class="form-control" 
-                                               id="valor_criterio" 
-                                               name="valor_criterio" 
-                                               placeholder="Especificar valor..."
-                                               class="form-control hidden-default" 
-                                               id="valor_criterio" 
-                                               name="valor_criterio" 
-                                               placeholder="Especificar valor...">
-                                        <select class="form-control hidden-default" id="valor_estado" name="valor_criterio">
+                                        <input type="text" class="form-control" id="valor_criterio"
+                                            name="valor_criterio" placeholder="Especificar valor..."
+                                            class="form-control hidden-default" id="valor_criterio"
+                                            name="valor_criterio" placeholder="Especificar valor...">
+                                        <select class="form-control hidden-default" id="valor_estado"
+                                            name="valor_criterio">
                                             <option value="">Seleccionar estado</option>
                                             {% for estado in estadisticas.estados_comunes %}
-                                                <option value="{{ estado[0] }}">{{ estado[0] }} ({{ estado[1] }} expedientes)</option>
+                                            <option value="{{ estado[0] }}">{{ estado[0] }} ({{ estado[1] }}
+                                                expedientes)</option>
                                             {% endfor %}
-                                            <option value="EN_PROCESO">EN_PROCESO</option>
-                                            <option value="COMPLETADO">COMPLETADO</option>
-                                            <option value="PENDIENTE">PENDIENTE</option>
-                                            <option value="PROCESADO_AZURE">PROCESADO_AZURE</option>
                                         </select>
                                         <small class="form-text text-muted hidden-default" id="ayuda_criterio">
                                             Este campo aparecerá según el criterio seleccionado
@@ -168,32 +166,36 @@
                                     <select class="form-control" id="rol_masivo" name="rol_masivo" required>
                                         <option value="">Seleccionar rol</option>
                                         {% for rol in roles %}
-                                            <option value="{{ rol.nombre_rol }}">{{ rol.nombre_rol }}</option>
+                                        <option value="{{ rol.nombre_rol }}">{{ rol.nombre_rol }}</option>
                                         {% endfor %}
                                         <option value="ALEATORIO">ALEATORIO (Escribiente/Sustanciador)</option>
-                                        <option value="LIMPIAR" class="text-danger">LIMPIAR (Quitar todos los responsables)</option>
+                                        <option value="LIMPIAR" class="text-danger">LIMPIAR (Quitar todos los
+                                            responsables)</option>
                                     </select>
                                     <small class="form-text text-muted">
-                                        <i class="fas fa-info-circle"></i> 
-                                        <strong>ALEATORIO:</strong> Asigna roles aleatorios | <strong>LIMPIAR:</strong> Quita todos los responsables
+                                        <i class="fas fa-info-circle"></i>
+                                        <strong>ALEATORIO:</strong> Asigna roles aleatorios | <strong>LIMPIAR:</strong>
+                                        Quita todos los responsables
                                     </small>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="row">
                             <div class="col-12">
                                 <div class="alert alert-warning">
                                     <i class="fas fa-exclamation-triangle"></i>
-                                    <strong>Advertencia:</strong> Esta acción asignará el rol seleccionado a múltiples expedientes según el criterio especificado. 
+                                    <strong>Advertencia:</strong> Esta acción asignará el rol seleccionado a múltiples
+                                    expedientes según el criterio especificado.
                                     Esta operación no se puede deshacer fácilmente.
                                 </div>
-                                
+
                                 <button type="submit" class="btn btn-warning btn-lg">
                                     <i class="fas fa-magic"></i> Ejecutar Asignación Masiva
                                 </button>
-                                
-                                <button type="button" class="btn btn-secondary btn-lg ml-2" onclick="limpiarFormularioMasivo()">
+
+                                <button type="button" class="btn btn-secondary btn-lg ml-2"
+                                    onclick="limpiarFormularioMasivo()">
                                     <i class="fas fa-eraser"></i> Limpiar
                                 </button>
                             </div>
@@ -201,7 +203,7 @@
                     </form>
                 </div>
             </div>
-            
+
             <!-- Formulario de búsqueda -->
             <div class="card mb-4">
                 <div class="card-header bg-primary text-white">
@@ -210,20 +212,17 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}">
+                    <form method="POST"
+                        action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}">
                         <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                         <input type="hidden" name="accion" value="buscar">
                         <div class="row">
                             <div class="col-md-8">
                                 <div class="form-group">
                                     <label for="radicado_buscar">Radicado:</label>
-                                    <input type="text" 
-                                           class="form-control" 
-                                           id="radicado_buscar" 
-                                           name="radicado_buscar" 
-                                           placeholder="Ej: 08001418901520250047500"
-                                           required>
+                                    <input type="text" class="form-control" id="radicado_buscar" name="radicado_buscar"
+                                        placeholder="Ej: 08001418901520250047500" required>
                                 </div>
                             </div>
                             <div class="col-md-4">
@@ -236,25 +235,34 @@
                     </form>
                 </div>
             </div>
-            
+            {% endif %}
+
             <!-- Información del expediente -->
             {% if expediente %}
             <div class="card mb-4">
                 <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
-                        <i class="fas fa-folder"></i> Expediente: {{ expediente.radicado_completo or expediente.radicado_corto }}
+                        <i class="fas fa-folder"></i> Expediente: {{ expediente.radicado_completo or
+                        expediente.radicado_corto }}
                     </h5>
                     <div class="btn-group" role="group">
-                        <a href="{{ url_for('idvistaexpediente.vista_expediente') }}" 
-                           class="btn btn-sm btn-outline-light" 
-                           title="Volver a consultar expedientes">
+                        {% if request.args.get('buscar_id') %}
+                        <!-- Si viene desde asignaciones, volver a asignaciones -->
+                        <a href="{{ url_for('idvistaasignacion.vista_asignacion') }}"
+                            class="btn btn-sm btn-outline-light" title="Volver a mis asignaciones">
+                            <i class="fas fa-arrow-left"></i> Volver a Asignaciones
+                        </a>
+                        {% else %}
+                        <!-- Si viene desde consulta general, volver a consulta -->
+                        <a href="{{ url_for('idvistaexpediente.vista_expediente') }}"
+                            class="btn btn-sm btn-outline-light" title="Volver a consultar expedientes">
                             <i class="fas fa-arrow-left"></i> Volver a Consulta
                         </a>
+                        {% endif %}
                         {% if request.args.get('radicado') %}
-                        <button type="button" 
-                                class="btn btn-sm btn-outline-light btn-ver-detalles" 
-                                data-radicado="{{ request.args.get('radicado') }}"
-                                title="Ver detalles completos de este expediente">
+                        <button type="button" class="btn btn-sm btn-outline-light btn-ver-detalles"
+                            data-radicado="{{ request.args.get('radicado') }}"
+                            title="Ver detalles completos de este expediente">
                             <i class="fas fa-eye"></i> Ver Detalles
                         </button>
                         {% endif %}
@@ -262,19 +270,26 @@
                 </div>
                 <div class="card-body">
                     <!-- Formulario de actualización de datos básicos -->
-                    <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}">
+                    <form method="POST"
+                        action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}">
                         <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                         <input type="hidden" name="accion" value="actualizar">
                         <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
-                        
+
                         <h6 class="text-primary mb-3"><i class="fas fa-info-circle"></i> Datos Básicos</h6>
-                        
+
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
-                                    <label>Radicado Completo:</label>
-                                    <input type="text" class="form-control" value="{{ expediente.radicado_completo or 'No disponible' }}" readonly>
+                                    <label for="radicado_completo">Radicado Completo:</label>
+                                    <input type="text" class="form-control" id="radicado_completo"
+                                        name="radicado_completo" value="{{ expediente.radicado_completo or '' }}"
+                                        placeholder="Ej: 08001418901520250047500">
+                                    <small class="form-text text-muted">
+                                        <i class="fas fa-info-circle"></i> Puedes modificar el radicado completo si es
+                                        necesario
+                                    </small>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -282,23 +297,23 @@
                                     <label>Rol/Responsable Actual:</label>
                                     <div class="form-control-plaintext">
                                         {% if expediente.responsable %}
-                                            {% if expediente.responsable == 'ESCRIBIENTE' %}
-                                                <span class="badge badge-success badge-lg">
-                                                    <i class="fas fa-pen"></i> ESCRIBIENTE
-                                                </span>
-                                            {% elif expediente.responsable == 'SUSTANCIADOR' %}
-                                                <span class="badge badge-info badge-lg">
-                                                    <i class="fas fa-gavel"></i> SUSTANCIADOR
-                                                </span>
-                                            {% else %}
-                                                <span class="badge badge-secondary badge-lg">
-                                                    <i class="fas fa-user"></i> {{ expediente.responsable }}
-                                                </span>
-                                            {% endif %}
+                                        {% if expediente.responsable == 'ESCRIBIENTE' %}
+                                        <span class="badge badge-success badge-lg">
+                                            <i class="fas fa-pen"></i> ESCRIBIENTE
+                                        </span>
+                                        {% elif expediente.responsable == 'SUSTANCIADOR' %}
+                                        <span class="badge badge-info badge-lg">
+                                            <i class="fas fa-gavel"></i> SUSTANCIADOR
+                                        </span>
                                         {% else %}
-                                            <span class="badge badge-warning badge-lg">
-                                                <i class="fas fa-exclamation-triangle"></i> Sin Asignar
-                                            </span>
+                                        <span class="badge badge-secondary badge-lg">
+                                            <i class="fas fa-user"></i> {{ expediente.responsable }}
+                                        </span>
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="badge badge-warning badge-lg">
+                                            <i class="fas fa-exclamation-triangle"></i> Sin Asignar
+                                        </span>
                                         {% endif %}
                                     </div>
                                 </div>
@@ -308,204 +323,230 @@
                                     <label>Estado Actual:</label>
                                     <div class="form-control-plaintext">
                                         {% if expediente.estado_actual %}
-                                            {% if expediente.estado_actual == 'Activo Pendiente' %}
-                                                <span class="badge badge-warning badge-lg">
-                                                    <i class="fas fa-clock"></i> Activo Pendiente
-                                                </span>
-                                                {% if expediente.turno %}
-                                                    <br><small class="text-muted mt-1">
-                                                        <i class="fas fa-sort-numeric-up"></i> Turno: {{ expediente.turno }}
-                                                    </small>
-                                                {% endif %}
-                                            {% elif expediente.estado_actual == 'Activo Resuelto' %}
-                                                <span class="badge badge-success badge-lg">
-                                                    <i class="fas fa-check-circle"></i> Activo Resuelto
-                                                </span>
-                                            {% elif expediente.estado_actual == 'Inactivo Resuelto' %}
-                                                <span class="badge badge-secondary badge-lg">
-                                                    <i class="fas fa-archive"></i> Inactivo Resuelto
-                                                </span>
-                                            {% elif expediente.estado_actual == 'Pendiente' %}
-                                                <span class="badge badge-light badge-lg">
-                                                    <i class="fas fa-pause-circle"></i> Pendiente
-                                                </span>
-                                            {% else %}
-                                                <span class="badge badge-info badge-lg">
-                                                    <i class="fas fa-info-circle"></i> {{ expediente.estado_actual }}
-                                                </span>
-                                            {% endif %}
+                                        {% if expediente.estado_actual == 'Activo Pendiente' %}
+                                        <span class="badge badge-warning badge-lg">
+                                            <i class="fas fa-clock"></i> Activo Pendiente
+                                        </span>
+                                        {% if expediente.turno %}
+                                        <br><small class="text-muted mt-1">
+                                            <i class="fas fa-sort-numeric-up"></i> Turno: {{ expediente.turno }}
+                                        </small>
+                                        {% endif %}
+                                        {% elif expediente.estado_actual == 'Activo Resuelto' %}
+                                        <span class="badge badge-success badge-lg">
+                                            <i class="fas fa-check-circle"></i> Activo Resuelto
+                                        </span>
+                                        {% elif expediente.estado_actual == 'Inactivo Resuelto' %}
+                                        <span class="badge badge-secondary badge-lg">
+                                            <i class="fas fa-archive"></i> Inactivo Resuelto
+                                        </span>
+                                        {% elif expediente.estado_actual == 'Pendiente' %}
+                                        <span class="badge badge-light badge-lg">
+                                            <i class="fas fa-pause-circle"></i> Pendiente
+                                        </span>
                                         {% else %}
-                                            <span class="badge badge-danger badge-lg">
-                                                <i class="fas fa-question-circle"></i> Sin Estado
-                                            </span>
+                                        <span class="badge badge-info badge-lg">
+                                            <i class="fas fa-info-circle"></i> {{ expediente.estado_actual }}
+                                        </span>
+                                        {% endif %}
+                                        {% else %}
+                                        <span class="badge badge-danger badge-lg">
+                                            <i class="fas fa-question-circle"></i> Sin Estado
+                                        </span>
                                         {% endif %}
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="demandante">Demandante:</label>
-                                    <input type="text" class="form-control" id="demandante" name="demandante" 
-                                           value="{{ expediente.demandante or '' }}">
+                                    <input type="text" class="form-control" id="demandante" name="demandante"
+                                        value="{{ expediente.demandante or '' }}">
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="demandado">Demandado:</label>
-                                    <input type="text" class="form-control" id="demandado" name="demandado" 
-                                           value="{{ expediente.demandado or '' }}">
+                                    <input type="text" class="form-control" id="demandado" name="demandado"
+                                        value="{{ expediente.demandado or '' }}">
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="row">
                             <div class="col-md-4">
                                 <div class="form-group">
                                     <label for="estado_actual">Estado Actual:</label>
                                     <select class="form-control" id="estado_actual" name="estado_actual">
                                         <option value="">Seleccionar estado</option>
-                                        <option value="ACTIVO PENDIENTE" {{ 'selected' if expediente.estado_actual == 'ACTIVO PENDIENTE' }}>Activo Pendiente</option>
-                                        <option value="ACTIVO RESUELTO" {{ 'selected' if expediente.estado_actual == 'ACTIVO RESUELTO' }}>Activo Resuelto</option>
-                                        <option value="INACTIVO PENDIENTE" {{ 'selected' if expediente.estado_actual == 'INACTIVO PENDIENTE' }}>Inactivo Resuelto</option>
-                                        <option value="INACTIVO RESUELTO" {{ 'selected' if expediente.estado_actual == 'INACTIVO RESUELTO' }}>Inactivo Resuelto</option>
-                                        <option value="PENDIENTE" {{ 'selected' if expediente.estado_actual == 'PENDIENTE' }}>Pendiente</option>
+                                        <option value="ACTIVO PENDIENTE" {{ 'selected' if
+                                            expediente.estado_actual=='ACTIVO PENDIENTE' }}>Activo Pendiente</option>
+                                        <option value="ACTIVO RESUELTO" {{ 'selected' if
+                                            expediente.estado_actual=='ACTIVO RESUELTO' }}>Activo Resuelto</option>
+                                        <option value="INACTIVO PENDIENTE" {{ 'selected' if
+                                            expediente.estado_actual=='INACTIVO PENDIENTE' }}>Inactivo Resuelto</option>
+                                        <option value="INACTIVO RESUELTO" {{ 'selected' if
+                                            expediente.estado_actual=='INACTIVO RESUELTO' }}>Inactivo Resuelto</option>
+                                        <option value="PENDIENTE" {{ 'selected' if expediente.estado_actual=='PENDIENTE'
+                                            }}>Pendiente</option>
                                     </select>
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group">
-                                    <label for="rol_responsable">Rol/Responsable:</label>
-                                    <div class="input-group">
-                                        <select class="form-control" id="rol_responsable" name="rol_responsable">
-                                            <option value="">Sin Asignar</option>
-                                            {% for rol in roles %}
-                                                <option value="{{ rol.nombre_rol }}" {{ 'selected' if expediente.responsable == rol.nombre_rol }}>
+                                    {% if session.administrador %}
+                                        <label for="rol_responsable">Rol/Responsable:</label>
+                                        <div class="input-group">
+                                            <select class="form-control" id="rol_responsable" name="rol_responsable">
+                                                <option value="">Sin Asignar</option>
+                                                {% for rol in roles %}
+                                                <option value="{{ rol.nombre_rol }}" {{ 'selected' if
+                                                    expediente.responsable==rol.nombre_rol }}>
                                                     {{ rol.nombre_rol }}
                                                 </option>
-                                            {% endfor %}
-                                        </select>
-                                        {% if expediente.responsable %}
-                                        <div class="input-group-append">
-                                            <button type="button" 
-                                                    class="btn btn-outline-danger" 
-                                                    onclick="quitarResponsable()"
-                                                    title="Quitar responsable">
-                                                <i class="fas fa-times"></i>
-                                            </button>
+                                                {% endfor %}
+                                            </select>
+                                            {% if expediente.responsable %}
+                                            <div class="input-group-append">
+                                                <button type="button" class="btn btn-outline-danger"
+                                                    onclick="quitarResponsable()" title="Quitar responsable">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            {% endif %}
                                         </div>
-                                        {% endif %}
-                                    </div>
-                                    <small class="form-text text-muted">
-                                        <i class="fas fa-info-circle"></i> 
-                                        Selecciona "Sin Asignar" o usa el botón <i class="fas fa-times"></i> para quitar el responsable
-                                    </small>
+                                    
+                                        <small class="form-text text-muted">
+                                            <i class="fas fa-info-circle"></i>
+                                            Selecciona "Sin Asignar" o usa el botón <i class="fas fa-times"></i> para quitar
+                                            el responsable
+                                        </small>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="tipo_proceso">Tipo de Proceso:</label>
-                                    <input type="text" class="form-control" id="tipo_proceso" name="tipo_proceso" 
-                                           value="{{ expediente.tipo_proceso or '' }}">
+                                    <input type="text" class="form-control" id="tipo_proceso" name="tipo_proceso"
+                                        value="{{ expediente.tipo_proceso or '' }}">
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="form-group">
                             <label for="observaciones">Observaciones:</label>
-                            <textarea class="form-control" id="observaciones" name="observaciones" rows="3">{{ expediente.observaciones or '' }}</textarea>
+                            <textarea class="form-control" id="observaciones" name="observaciones"
+                                rows="3">{{ expediente.observaciones or '' }}</textarea>
                         </div>
-                        
+
                         <button type="submit" class="btn btn-success">
                             <i class="fas fa-save"></i> Actualizar Datos Básicos
                         </button>
                     </form>
-                    
+                    {% if session.administrador %}
+                        <!-- Formulario separado para eliminar expediente -->
+                        <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
+                            class="d-inline-block ml-2"
+                            onsubmit="return confirmarEliminacionExpediente('{{ expediente.radicado_completo or expediente.radicado_corto }}')">
+                            <!-- 🔒 CSRF Protection -->
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                            <input type="hidden" name="accion" value="eliminar_expediente">
+                            <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-trash-alt"></i> Eliminar Expediente
+                            </button>
+                        </form>
+                    {% endif %}
+
+
                     <!-- Formulario oculto para quitar responsable -->
-                    <form id="form-quitar-responsable" method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" class="form-hidden">
+                    <form id="form-quitar-responsable" method="POST"
+                        action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
+                        class="form-hidden">
                         <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                         <input type="hidden" name="accion" value="quitar_responsable">
                         <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
                     </form>
-                    
+
                     <hr class="my-4">
-                    
+
                     <!-- Nueva sección: Asignar a Persona Específica (FUERA del formulario principal) -->
-                        <div class="row">
-                            <div class="col-md-12">
-                                <div class="card border-info mb-3">
-                                    <div class="card-header bg-info text-white">
-                                        <i class="fas fa-user-plus"></i> Asignar a Persona Específica
-                                    </div>
-                                    <div class="card-body">
-                                        <p class="card-text">
-                                            <small class="text-muted">
-                                                <i class="fas fa-info-circle"></i> 
-                                                Escribe el nombre de la persona. Aparecerán sugerencias de personas ya asignadas, o puedes escribir un nombre nuevo.
-                                            </small>
-                                        </p>
-                                        <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" class="form-inline">
-                                            <!-- 🔒 CSRF Protection -->
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                            <input type="hidden" name="accion" value="asignar_persona_especifica">
-                                            <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
-                                            
-                                            <div class="form-group mr-2 flex-grow-1">
-                                                <label for="nombre_persona_especifica" class="sr-only">Nombre de la persona:</label>
-                                                <input type="text" 
-                                                       class="form-control form-control-sm w-100" 
-                                                       id="nombre_persona_especifica" 
-                                                       name="nombre_persona_especifica" 
-                                                       list="lista-personas"
-                                                       placeholder="Escribe el nombre de la persona..."
-                                                       autocomplete="off"
-                                                       required>
-                                                <datalist id="lista-personas">
-                                                    <!-- Las opciones se cargarán dinámicamente -->
-                                                </datalist>
-                                            </div>
-                                            
-                                            <button type="submit" class="btn btn-info btn-sm">
-                                                <i class="fas fa-user-check"></i> Asignar Persona
-                                            </button>
-                                        </form>
-                                        
-                                        {% if expediente.responsable %}
-                                        <div class="mt-2">
-                                            <small class="text-success">
-                                                <i class="fas fa-check-circle"></i> 
-                                                <strong>Responsable actual:</strong> {{ expediente.responsable }}
-                                            </small>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="card border-info mb-3">
+                                <div class="card-header bg-info text-white">
+                                    <i class="fas fa-user-plus"></i> Asignar a Persona Específica
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle"></i>
+                                            Escribe el nombre de la persona. Aparecerán sugerencias de personas ya
+                                            asignadas, o puedes escribir un nombre nuevo.
+                                        </small>
+                                    </p>
+                                    <form method="POST"
+                                        action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
+                                        class="form-inline">
+                                        <!-- 🔒 CSRF Protection -->
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                        <input type="hidden" name="accion" value="asignar_persona_especifica">
+                                        <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+
+                                        <div class="form-group mr-2 flex-grow-1">
+                                            <label for="nombre_persona_especifica" class="sr-only">Nombre de la
+                                                persona:</label>
+                                            <input type="text" class="form-control form-control-sm w-100"
+                                                id="nombre_persona_especifica" name="nombre_persona_especifica"
+                                                list="lista-personas" placeholder="Escribe el nombre de la persona..."
+                                                autocomplete="off" required>
+                                            <datalist id="lista-personas">
+                                                <!-- Las opciones se cargarán dinámicamente -->
+                                            </datalist>
                                         </div>
-                                        {% endif %}
+
+                                        <button type="submit" class="btn btn-info btn-sm">
+                                            <i class="fas fa-user-check"></i> Asignar Persona
+                                        </button>
+                                    </form>
+
+                                    {% if expediente.responsable %}
+                                    <div class="mt-2">
+                                        <small class="text-success">
+                                            <i class="fas fa-check-circle"></i>
+                                            <strong>Responsable actual:</strong> {{ expediente.responsable }}
+                                        </small>
                                     </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
-                        
-                        <script>
+                    </div>
+
+                    <script>
                         // Autocompletado de personas usando datalist
-                        (function() {
+                        (function () {
                             const input = document.getElementById('nombre_persona_especifica');
                             const datalist = document.getElementById('lista-personas');
-                            
+
                             if (!input || !datalist) return;
-                            
+
                             let timeoutId = null;
                             let personasCache = [];
-                            
+
                             // Función para cargar personas desde el servidor
                             function cargarPersonas(query) {
                                 if (query.length < 2) {
                                     return;
                                 }
-                                
+
                                 fetch(`{{ url_for('idvistaactualizarexpediente.api_buscar_personas') }}?q=${encodeURIComponent(query)}`)
                                     .then(response => response.json())
                                     .then(personas => {
@@ -516,12 +557,12 @@
                                         console.error('Error cargando personas:', error);
                                     });
                             }
-                            
+
                             // Función para actualizar el datalist
                             function actualizarDatalist(personas) {
                                 // Limpiar opciones existentes
                                 datalist.innerHTML = '';
-                                
+
                                 // Agregar nuevas opciones
                                 personas.forEach(persona => {
                                     const option = document.createElement('option');
@@ -529,401 +570,443 @@
                                     datalist.appendChild(option);
                                 });
                             }
-                            
+
                             // Event listener para el input con debouncing
-                            input.addEventListener('input', function() {
+                            input.addEventListener('input', function () {
                                 clearTimeout(timeoutId);
                                 const query = this.value.trim();
-                                
+
                                 if (query.length < 2) {
                                     datalist.innerHTML = '';
                                     return;
                                 }
-                                
+
                                 // Debounce: esperar 300ms después de que el usuario deje de escribir
                                 timeoutId = setTimeout(() => {
                                     cargarPersonas(query);
                                 }, 300);
                             });
-                            
+
                             // Cargar personas iniciales al enfocar el campo
-                            input.addEventListener('focus', function() {
+                            input.addEventListener('focus', function () {
                                 if (datalist.children.length === 0 && this.value.length >= 2) {
                                     cargarPersonas(this.value);
                                 }
                             });
                         })();
-                        </script>
-                        
-                    </div>
+                    </script>
+
                 </div>
             </div>
-        </div>
-        
-        <hr class="my-4">
-        
-        <!-- Sección de Ingresos -->
-        <div class="row">
-                        <div class="col-md-6">
-                            <h6 class="text-primary"><i class="fas fa-calendar-plus"></i> Historial de Ingresos</h6>
-                            {% if expediente.ingresos %}
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-striped">
-                                        <thead>
-                                            <tr>
-                                                <th>Fecha</th>
-                                                <th>Solicitud</th>
-                                                <th>Observaciones</th>
-                                                <!-- <th>Ubicación</th> -->
-                                                <th width="60">Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for ingreso in expediente.ingresos[:2] %}
-                                            <tr>
-                                                <td><small>{{ ingreso[1].strftime('%d/%m/%Y') if ingreso[1] else 'N/A' }}</small></td>
-                                                <td><small>{{ ingreso[3][:30] + '...' if ingreso[3] and ingreso[3]|length > 30 else (ingreso[3] or 'Sin solicitud') }}</small></td>
-                                                <td>
-                                                    {% if ingreso[2] and ingreso[2]|length > 50 %}
-                                                        <div class="observaciones-ingreso-container">
-                                                            <small class="observaciones-ingreso-preview">{{ ingreso[2][:50] }}...</small>
-                                                            <div class="observaciones-ingreso-full" style="display: none;">
-                                                                <small>{{ ingreso[2] }}</small>
-                                                            </div>
-                                                            <br>
-                                                            <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-ingreso" 
-                                                                    onclick="toggleObservacionesIngresoText(this)">
-                                                                <i class="fas fa-expand"></i> Ver completo
-                                                            </button>
-                                                        </div>
-                                                    {% else %}
-                                                        <small>{{ ingreso[2] or 'Sin observaciones' }}</small>
-                                                    {% endif %}
-                                                </td>
-                                                <!-- <td><small>{{ ingreso[5] or 'N/A' }}</small></td> -->
-                                                <td>
-                                                    <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" 
-                                                          class="form-inline-display" 
-                                                          onsubmit="return confirm('¿Está seguro de eliminar este ingreso?')">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                        <input type="hidden" name="accion" value="eliminar_ingreso">
-                                                        <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
-                                                        <input type="hidden" name="ingreso_id" value="{{ ingreso[0] }}">
-                                                        <button type="submit" class="btn btn-danger btn-xs" title="Eliminar ingreso">
-                                                            <i class="fas fa-trash"></i>
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                            {% endfor %}
-                                            
-                                            <!-- Ingresos adicionales (ocultos inicialmente) -->
-                                            {% if expediente.ingresos|length > 2 %}
-                                            <tbody id="ingresos-adicionales" class="hidden-default">
-                                                {% for ingreso in expediente.ingresos[2:] %}
-                                                <tr>
-                                                    <td><small>{{ ingreso[1].strftime('%d/%m/%Y') if ingreso[1] else 'N/A' }}</small></td>
-                                                    <td><small>{{ ingreso[3][:30] + '...' if ingreso[3] and ingreso[3]|length > 30 else (ingreso[3] or 'Sin solicitud') }}</small></td>
-                                                    <td>
-                                                        {% if ingreso[2] and ingreso[2]|length > 50 %}
-                                                            <div class="observaciones-ingreso-container">
-                                                                <small class="observaciones-ingreso-preview">{{ ingreso[2][:50] }}...</small>
-                                                                <div class="observaciones-ingreso-full" style="display: none;">
-                                                                    <small>{{ ingreso[2] }}</small>
-                                                                </div>
-                                                                <br>
-                                                                <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-ingreso" 
-                                                                        onclick="toggleObservacionesIngresoText(this)">
-                                                                    <i class="fas fa-expand"></i> Ver completo
-                                                                </button>
-                                                            </div>
-                                                        {% else %}
-                                                            <small>{{ ingreso[2] or 'Sin observaciones' }}</small>
-                                                        {% endif %}
-                                                    </td>
-                                                    <td><small>{{ ingreso[5] or 'N/A' }}</small></td>
-                                                    <td>
-                                                        <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" 
-                                                              style="display: inline;" 
-                                                              onsubmit="return confirm('¿Está seguro de eliminar este ingreso?')">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                            <input type="hidden" name="accion" value="eliminar_ingreso">
-                                                            <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
-                                                            <input type="hidden" name="ingreso_id" value="{{ ingreso[0] }}">
-                                                            <button type="submit" class="btn btn-danger btn-xs" title="Eliminar ingreso">
-                                                                <i class="fas fa-trash"></i>
-                                                            </button>
-                                                        </form>
-                                                    </td>
-                                                </tr>
-                                                {% endfor %}
-                                            </tbody>
-                                            {% endif %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                
-                                <!-- Botón para mostrar/ocultar ingresos adicionales -->
-                                {% if expediente.ingresos|length > 2 %}
-                                <div class="text-center mt-2">
-                                    <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleIngresosAdicionales()">
-                                        <i class="fas fa-eye"></i> Ver todos ({{ expediente.ingresos|length }})
-                                    </button>
-                                </div>
-                                {% endif %}
-                            {% else %}
-                                <p class="text-muted">No hay ingresos registrados</p>
-                            {% endif %}
-                            
-                            <!-- Formulario para agregar ingreso -->
-                            <div class="card mt-3">
-                                <div class="card-header">
-                                    <h6 class="mb-0">Agregar Nuevo Ingreso</h6>
-                                </div>
-                                <div class="card-body">
-                                    <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <input type="hidden" name="accion" value="agregar_ingreso">
-                                        <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
-                                        
-                                        <div class="form-group">
-                                            <label for="nueva_fecha_ingreso">Fecha de Ingreso:</label>
-                                            <input type="date" class="form-control" id="nueva_fecha_ingreso" name="nueva_fecha_ingreso" required>
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="nuevo_motivo_ingreso">Motivo/Solicitud:</label>
-                                            <input type="text" class="form-control" id="nuevo_motivo_ingreso" name="nuevo_motivo_ingreso" 
-                                                   placeholder="Motivo del ingreso">
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="nuevas_observaciones_ingreso">Observaciones:</label>
-                                            <textarea class="form-control" id="nuevas_observaciones_ingreso" name="nuevas_observaciones_ingreso" 
-                                                      rows="2" placeholder="Observaciones del ingreso"></textarea>
-                                        </div>
-                                        
-                                        <button type="submit" class="btn btn-primary btn-sm">
-                                            <i class="fas fa-plus"></i> Agregar Ingreso
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Sección de Estados -->
-                        <div class="col-md-6">
-                            <h6 class="text-primary"><i class="fas fa-history"></i> Historial de Estados</h6>
-                            {% if expediente.estados %}
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-striped">
-                                        <thead>
-                                            <tr>
-                                                <th>Fecha</th>
-                                                <th>Clase</th>
-                                                <th>Auto/Anotación</th>
-                                                <th>Observaciones</th>
-                                                <th width="60">Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for estado in expediente.estados[:2] %}
-                                            <tr>
-                                                <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
-                                                <td><span class="badge badge-info badge-sm">{{ estado[2][:20] + '...' if estado[2] and estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
-                                                <td>
-                                                    {% if estado[3] and estado[3]|length > 50 %}
-                                                        <div class="auto-anotacion-container">
-                                                            <small class="auto-anotacion-preview">{{ estado[3][:50] }}...</small>
-                                                            <div class="auto-anotacion-full" style="display: none;">
-                                                                <small>{{ estado[3] }}</small>
-                                                            </div>
-                                                            <br>
-                                                            <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-auto-anotacion" 
-                                                                    onclick="toggleAutoAnotacionText(this)">
-                                                                <i class="fas fa-expand"></i> Ver completo
-                                                            </button>
-                                                        </div>
-                                                    {% else %}
-                                                        <small>{{ estado[3] or 'Sin auto/anotación' }}</small>
-                                                    {% endif %}
-                                                </td>
-                                                <td>
-                                                    {% if estado[4] and estado[4]|length > 50 %}
-                                                        <div class="observaciones-estado-container">
-                                                            <small class="observaciones-estado-preview">{{ estado[4][:50] }}...</small>
-                                                            <div class="observaciones-estado-full" style="display: none;">
-                                                                <small>{{ estado[4] }}</small>
-                                                            </div>
-                                                            <br>
-                                                            <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-estado" 
-                                                                    onclick="toggleObservacionesEstadoText(this)">
-                                                                <i class="fas fa-expand"></i> Ver completo
-                                                            </button>
-                                                        </div>
-                                                    {% else %}
-                                                        <small>{{ estado[4] or 'Sin observaciones' }}</small>
-                                                    {% endif %}
-                                                </td>
-                                                <td>
-                                                    <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" 
-                                                          style="display: inline;" 
-                                                          onsubmit="return confirm('¿Está seguro de eliminar este estado?')">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                        <input type="hidden" name="accion" value="eliminar_estado">
-                                                        <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
-                                                        <input type="hidden" name="estado_id" value="{{ estado[0] }}">
-                                                        <button type="submit" class="btn btn-danger btn-xs" title="Eliminar estado">
-                                                            <i class="fas fa-trash"></i>
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                            {% endfor %}
-                                            
-                                            <!-- Estados adicionales (ocultos inicialmente) -->
-                                            {% if expediente.estados|length > 2 %}
-                                            <tbody id="estados-adicionales" class="hidden-default">
-                                                {% for estado in expediente.estados[2:] %}
-                                                <tr>
-                                                    <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
-                                                    <td><span class="badge badge-info badge-sm">{{ estado[2][:20] + '...' if estado[2] and estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
-                                                    <td>
-                                                        {% if estado[3] and estado[3]|length > 50 %}
-                                                            <div class="auto-anotacion-container">
-                                                                <small class="auto-anotacion-preview">{{ estado[3][:50] }}...</small>
-                                                                <div class="auto-anotacion-full" style="display: none;">
-                                                                    <small>{{ estado[3] }}</small>
-                                                                </div>
-                                                                <br>
-                                                                <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-auto-anotacion" 
-                                                                        onclick="toggleAutoAnotacionText(this)">
-                                                                    <i class="fas fa-expand"></i> Ver completo
-                                                                </button>
-                                                            </div>
-                                                        {% else %}
-                                                            <small>{{ estado[3] or 'Sin auto/anotación' }}</small>
-                                                        {% endif %}
-                                                    </td>
-                                                    <td>
-                                                        {% if estado[4] and estado[4]|length > 50 %}
-                                                            <div class="observaciones-estado-container">
-                                                                <small class="observaciones-estado-preview">{{ estado[4][:50] }}...</small>
-                                                                <div class="observaciones-estado-full" style="display: none;">
-                                                                    <small>{{ estado[4] }}</small>
-                                                                </div>
-                                                                <br>
-                                                                <button type="button" class="btn btn-sm btn-outline-primary btn-toggle-observaciones-estado" 
-                                                                        onclick="toggleObservacionesEstadoText(this)">
-                                                                    <i class="fas fa-expand"></i> Ver completo
-                                                                </button>
-                                                            </div>
-                                                        {% else %}
-                                                            <small>{{ estado[4] or 'Sin observaciones' }}</small>
-                                                        {% endif %}
-                                                    </td>
-                                                    <td>
-                                                        <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" 
-                                                              style="display: inline;" 
-                                                              onsubmit="return confirm('¿Está seguro de eliminar este estado?')">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                            <input type="hidden" name="accion" value="eliminar_estado">
-                                                            <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
-                                                            <input type="hidden" name="estado_id" value="{{ estado[0] }}">
-                                                            <button type="submit" class="btn btn-danger btn-xs" title="Eliminar estado">
-                                                                <i class="fas fa-trash"></i>
-                                                            </button>
-                                                        </form>
-                                                    </td>
-                                                </tr>
-                                                {% endfor %}
-                                            </tbody>
-                                            {% endif %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                
-                                <!-- Botón para mostrar/ocultar estados adicionales -->
-                                {% if expediente.estados|length > 2 %}
-                                <div class="text-center mt-2">
-                                    <button type="button" class="btn btn-sm btn-outline-warning" onclick="toggleEstadosAdicionales()">
-                                        <i class="fas fa-eye"></i> Ver todos ({{ expediente.estados|length }})
-                                    </button>
-                                </div>
-                                {% endif %}
-                            {% else %}
-                                <p class="text-muted">No hay estados registrados</p>
-                            {% endif %}
-                            
-                            <!-- Formulario para agregar estado -->
-                            <div class="card mt-3">
-                                <div class="card-header">
-                                    <h6 class="mb-0">Agregar Nuevo Estado</h6>
-                                </div>
-                                <div class="card-body">
-                                    <form method="POST" action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <input type="hidden" name="accion" value="agregar_estado">
-                                        <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
-                                        
-                                        <div class="form-group">
-                                            <label for="nueva_fecha_estado">Fecha del Estado:</label>
-                                            <input type="date" class="form-control" id="nueva_fecha_estado" name="nueva_fecha_estado" required>
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="nuevo_estado">Clase:</label>
-                                            <select class="form-control" id="nuevo_estado" name="nuevo_estado" required>
-                                                <option value="">Seleccionar clase</option>
-                                                <option value="Ejecutivos De Mínima Cuantía">Ejecutivos De Mínima Cuantía</option>
-                                                <option value="Ejecutivos De Mayor Cuantía">Ejecutivos De Mayor Cuantía</option>
-                                                <option value="Declarativos">Declarativos</option>
-                                                <option value="Especiales">Especiales</option>
-                                                <option value="Terminado">Terminado</option>
-                                                <option value="Archivado">Archivado</option>
-                                            </select>
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="nueva_auto_anotacion">Auto/Anotación:</label>
-                                            <textarea class="form-control" id="nueva_auto_anotacion" name="nueva_auto_anotacion" 
-                                                      rows="3" placeholder="Auto o anotación del estado"></textarea>
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="nuevas_observaciones_estado">Observaciones:</label>
-                                            <textarea class="form-control" id="nuevas_observaciones_estado" name="nuevas_observaciones_estado" 
-                                                      rows="2" placeholder="Observaciones del estado"></textarea>
-                                        </div>
-                                        
-                                        <button type="submit" class="btn btn-warning btn-sm">
-                                            <i class="fas fa-plus"></i> Agregar Estado
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Información adicional -->
-                    <div class="mt-4 text-muted small">
-                        <i class="fas fa-clock"></i> 
-                        Última actualización: {{ expediente.fecha_ultima_actualizacion.strftime('%d/%m/%Y %H:%M') if expediente.fecha_ultima_actualizacion else 'No disponible' }}
-                    </div>
-                </div>
-            </div>
-            {% endif %}
         </div>
     </div>
+
+    <hr class="my-4">
+
+    <!-- Sección de Ingresos -->
+    <div class="row">
+        <div class="col-md-6">
+            <h6 class="text-primary"><i class="fas fa-calendar-plus"></i> Historial de Ingresos</h6>
+            {% if expediente.ingresos %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Solicitud</th>
+                            <th>Observaciones</th>
+                            <!-- <th>Ubicación</th> -->
+                            <th width="60">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ingreso in expediente.ingresos[:2] %}
+                        <tr>
+                            <td><small>{{ ingreso[1].strftime('%d/%m/%Y') if ingreso[1] else 'N/A' }}</small></td>
+                            <td><small>{{ ingreso[3][:30] + '...' if ingreso[3] and ingreso[3]|length > 30 else
+                                    (ingreso[3] or 'Sin solicitud') }}</small></td>
+                            <td>
+                                {% if ingreso[2] and ingreso[2]|length > 50 %}
+                                <div class="observaciones-ingreso-container">
+                                    <small class="observaciones-ingreso-preview">{{ ingreso[2][:50] }}...</small>
+                                    <div class="observaciones-ingreso-full" style="display: none;">
+                                        <small>{{ ingreso[2] }}</small>
+                                    </div>
+                                    <br>
+                                    <button type="button"
+                                        class="btn btn-sm btn-outline-primary btn-toggle-observaciones-ingreso"
+                                        onclick="toggleObservacionesIngresoText(this)">
+                                        <i class="fas fa-expand"></i> Ver completo
+                                    </button>
+                                </div>
+                                {% else %}
+                                <small>{{ ingreso[2] or 'Sin observaciones' }}</small>
+                                {% endif %}
+                            </td>
+                            <!-- <td><small>{{ ingreso[5] or 'N/A' }}</small></td> -->
+                            <td>
+                                <form method="POST"
+                                    action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
+                                    class="form-inline-display"
+                                    onsubmit="return confirm('¿Está seguro de eliminar este ingreso?')">
+                                    <!-- 🔒 CSRF Protection -->
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="hidden" name="accion" value="eliminar_ingreso">
+                                    <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+                                    <input type="hidden" name="ingreso_id" value="{{ ingreso[0] }}">
+                                    <button type="submit" class="btn btn-danger btn-xs" title="Eliminar ingreso">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+
+                        <!-- Ingresos adicionales (ocultos inicialmente) -->
+                        {% if expediente.ingresos|length > 2 %}
+                    <tbody id="ingresos-adicionales" class="hidden-default">
+                        {% for ingreso in expediente.ingresos[2:] %}
+                        <tr>
+                            <td><small>{{ ingreso[1].strftime('%d/%m/%Y') if ingreso[1] else 'N/A' }}</small></td>
+                            <td><small>{{ ingreso[3][:30] + '...' if ingreso[3] and ingreso[3]|length > 30 else
+                                    (ingreso[3] or 'Sin solicitud') }}</small></td>
+                            <td>
+                                {% if ingreso[2] and ingreso[2]|length > 50 %}
+                                <div class="observaciones-ingreso-container">
+                                    <small class="observaciones-ingreso-preview">{{ ingreso[2][:50] }}...</small>
+                                    <div class="observaciones-ingreso-full" style="display: none;">
+                                        <small>{{ ingreso[2] }}</small>
+                                    </div>
+                                    <br>
+                                    <button type="button"
+                                        class="btn btn-sm btn-outline-primary btn-toggle-observaciones-ingreso"
+                                        onclick="toggleObservacionesIngresoText(this)">
+                                        <i class="fas fa-expand"></i> Ver completo
+                                    </button>
+                                </div>
+                                {% else %}
+                                <small>{{ ingreso[2] or 'Sin observaciones' }}</small>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ ingreso[5] or 'N/A' }}</small></td>
+                            <td>
+                                <form method="POST"
+                                    action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
+                                    style="display: inline;"
+                                    onsubmit="return confirm('¿Está seguro de eliminar este ingreso?')">
+                                    <!-- 🔒 CSRF Protection -->
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="hidden" name="accion" value="eliminar_ingreso">
+                                    <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+                                    <input type="hidden" name="ingreso_id" value="{{ ingreso[0] }}">
+                                    <button type="submit" class="btn btn-danger btn-xs" title="Eliminar ingreso">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Botón para mostrar/ocultar ingresos adicionales -->
+            {% if expediente.ingresos|length > 2 %}
+            <div class="text-center mt-2">
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleIngresosAdicionales()">
+                    <i class="fas fa-eye"></i> Ver todos ({{ expediente.ingresos|length }})
+                </button>
+            </div>
+            {% endif %}
+            {% else %}
+            <p class="text-muted">No hay ingresos registrados</p>
+            {% endif %}
+
+            <!-- Formulario para agregar ingreso -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Agregar Nuevo Ingreso</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST"
+                        action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}">
+                        <!-- 🔒 CSRF Protection -->
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <input type="hidden" name="accion" value="agregar_ingreso">
+                        <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+
+                        <div class="form-group">
+                            <label for="nueva_fecha_ingreso">Fecha de Ingreso:</label>
+                            <input type="date" class="form-control" id="nueva_fecha_ingreso" name="nueva_fecha_ingreso"
+                                required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="nuevo_motivo_ingreso">Motivo/Solicitud:</label>
+                            <input type="text" class="form-control" id="nuevo_motivo_ingreso"
+                                name="nuevo_motivo_ingreso" placeholder="Motivo del ingreso">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="nuevas_observaciones_ingreso">Observaciones:</label>
+                            <textarea class="form-control" id="nuevas_observaciones_ingreso"
+                                name="nuevas_observaciones_ingreso" rows="2"
+                                placeholder="Observaciones del ingreso"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i> Agregar Ingreso
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección de Estados -->
+        <div class="col-md-6">
+            <h6 class="text-primary"><i class="fas fa-history"></i> Historial de Estados</h6>
+            {% if expediente.estados %}
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Clase</th>
+                            <th>Auto/Anotación</th>
+                            <th>Observaciones</th>
+                            <th width="60">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for estado in expediente.estados[:2] %}
+                        <tr>
+                            <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
+                            <td><span class="badge badge-info badge-sm">{{ estado[2][:20] + '...' if estado[2] and
+                                    estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
+                            <td>
+                                {% if estado[3] and estado[3]|length > 50 %}
+                                <div class="auto-anotacion-container">
+                                    <small class="auto-anotacion-preview">{{ estado[3][:50] }}...</small>
+                                    <div class="auto-anotacion-full" style="display: none;">
+                                        <small>{{ estado[3] }}</small>
+                                    </div>
+                                    <br>
+                                    <button type="button"
+                                        class="btn btn-sm btn-outline-primary btn-toggle-auto-anotacion"
+                                        onclick="toggleAutoAnotacionText(this)">
+                                        <i class="fas fa-expand"></i> Ver completo
+                                    </button>
+                                </div>
+                                {% else %}
+                                <small>{{ estado[3] or 'Sin auto/anotación' }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if estado[4] and estado[4]|length > 50 %}
+                                <div class="observaciones-estado-container">
+                                    <small class="observaciones-estado-preview">{{ estado[4][:50] }}...</small>
+                                    <div class="observaciones-estado-full" style="display: none;">
+                                        <small>{{ estado[4] }}</small>
+                                    </div>
+                                    <br>
+                                    <button type="button"
+                                        class="btn btn-sm btn-outline-primary btn-toggle-observaciones-estado"
+                                        onclick="toggleObservacionesEstadoText(this)">
+                                        <i class="fas fa-expand"></i> Ver completo
+                                    </button>
+                                </div>
+                                {% else %}
+                                <small>{{ estado[4] or 'Sin observaciones' }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form method="POST"
+                                    action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
+                                    style="display: inline;"
+                                    onsubmit="return confirm('¿Está seguro de eliminar este estado?')">
+                                    <!-- 🔒 CSRF Protection -->
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="hidden" name="accion" value="eliminar_estado">
+                                    <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+                                    <input type="hidden" name="estado_id" value="{{ estado[0] }}">
+                                    <button type="submit" class="btn btn-danger btn-xs" title="Eliminar estado">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+
+                        <!-- Estados adicionales (ocultos inicialmente) -->
+                        {% if expediente.estados|length > 2 %}
+                    <tbody id="estados-adicionales" class="hidden-default">
+                        {% for estado in expediente.estados[2:] %}
+                        <tr>
+                            <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
+                            <td><span class="badge badge-info badge-sm">{{ estado[2][:20] + '...' if estado[2] and
+                                    estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
+                            <td>
+                                {% if estado[3] and estado[3]|length > 50 %}
+                                <div class="auto-anotacion-container">
+                                    <small class="auto-anotacion-preview">{{ estado[3][:50] }}...</small>
+                                    <div class="auto-anotacion-full" style="display: none;">
+                                        <small>{{ estado[3] }}</small>
+                                    </div>
+                                    <br>
+                                    <button type="button"
+                                        class="btn btn-sm btn-outline-primary btn-toggle-auto-anotacion"
+                                        onclick="toggleAutoAnotacionText(this)">
+                                        <i class="fas fa-expand"></i> Ver completo
+                                    </button>
+                                </div>
+                                {% else %}
+                                <small>{{ estado[3] or 'Sin auto/anotación' }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if estado[4] and estado[4]|length > 50 %}
+                                <div class="observaciones-estado-container">
+                                    <small class="observaciones-estado-preview">{{ estado[4][:50] }}...</small>
+                                    <div class="observaciones-estado-full" style="display: none;">
+                                        <small>{{ estado[4] }}</small>
+                                    </div>
+                                    <br>
+                                    <button type="button"
+                                        class="btn btn-sm btn-outline-primary btn-toggle-observaciones-estado"
+                                        onclick="toggleObservacionesEstadoText(this)">
+                                        <i class="fas fa-expand"></i> Ver completo
+                                    </button>
+                                </div>
+                                {% else %}
+                                <small>{{ estado[4] or 'Sin observaciones' }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form method="POST"
+                                    action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
+                                    style="display: inline;"
+                                    onsubmit="return confirm('¿Está seguro de eliminar este estado?')">
+                                    <!-- 🔒 CSRF Protection -->
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="hidden" name="accion" value="eliminar_estado">
+                                    <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+                                    <input type="hidden" name="estado_id" value="{{ estado[0] }}">
+                                    <button type="submit" class="btn btn-danger btn-xs" title="Eliminar estado">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Botón para mostrar/ocultar estados adicionales -->
+            {% if expediente.estados|length > 2 %}
+            <div class="text-center mt-2">
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="toggleEstadosAdicionales()">
+                    <i class="fas fa-eye"></i> Ver todos ({{ expediente.estados|length }})
+                </button>
+            </div>
+            {% endif %}
+            {% else %}
+            <p class="text-muted">No hay estados registrados</p>
+            {% endif %}
+
+            <!-- Formulario para agregar estado -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Agregar Nuevo Estado</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST"
+                        action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}">
+                        <!-- 🔒 CSRF Protection -->
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <input type="hidden" name="accion" value="agregar_estado">
+                        <input type="hidden" name="expediente_id" value="{{ expediente.id }}">
+
+                        <div class="form-group">
+                            <label for="nueva_fecha_estado">Fecha del Estado:</label>
+                            <input type="date" class="form-control" id="nueva_fecha_estado" name="nueva_fecha_estado"
+                                required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="nuevo_estado">Clase:</label>
+                            <select class="form-control" id="nuevo_estado" name="nuevo_estado" required>
+                                <option value="">Seleccionar clase</option>
+                                <option value="Ejecutivos De Mínima Cuantía">Ejecutivos De Mínima Cuantía</option>
+                                <option value="Ejecutivos De Mayor Cuantía">Ejecutivos De Mayor Cuantía</option>
+                                <option value="Declarativos">Declarativos</option>
+                                <option value="Especiales">Especiales</option>
+                                <option value="Terminado">Terminado</option>
+                                <option value="Archivado">Archivado</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="nueva_auto_anotacion">Auto/Anotación:</label>
+                            <textarea class="form-control" id="nueva_auto_anotacion" name="nueva_auto_anotacion"
+                                rows="3" placeholder="Auto o anotación del estado"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="nuevas_observaciones_estado">Observaciones:</label>
+                            <textarea class="form-control" id="nuevas_observaciones_estado"
+                                name="nuevas_observaciones_estado" rows="2"
+                                placeholder="Observaciones del estado"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-warning btn-sm">
+                            <i class="fas fa-plus"></i> Agregar Estado
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Información adicional -->
+    <div class="mt-4 text-muted small">
+        <i class="fas fa-clock"></i>
+        Última actualización: {{ expediente.fecha_ultima_actualizacion.strftime('%d/%m/%Y %H:%M') if
+        expediente.fecha_ultima_actualizacion else 'No disponible' }}
+    </div>
+</div>
+</div>
+{% endif %}
+</div>
+</div>
 </div>
 
 
 <script src="{{ url_for('static', filename='js/base.js') }}"></script>
+
+<script>
+    // Función para confirmar eliminación de expediente
+    function confirmarEliminacionExpediente(radicado) {
+        const mensaje = `¿Está COMPLETAMENTE SEGURO de que desea ELIMINAR el expediente ${radicado}?\n\n` +
+            `⚠️ ADVERTENCIA: Esta acción es IRREVERSIBLE y eliminará:\n` +
+            `• El expediente completo\n` +
+            `• Todos sus ingresos\n` +
+            `• Todos sus estados\n` +
+            `• Todas sus actuaciones\n\n` +
+            `Escriba "ELIMINAR" para confirmar:`;
+
+        const confirmacion = prompt(mensaje);
+
+        if (confirmacion === "ELIMINAR") {
+            return confirm("¿Está 100% seguro? Esta acción NO se puede deshacer.");
+        }
+
+        return false;
+    }
+</script>
 
 {% endblock %}

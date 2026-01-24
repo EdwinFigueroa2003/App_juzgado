@@ -1484,3 +1484,72 @@ body {
     transform: translateY(0);
   }
 }
+/* ========================================
+   ESTILOS PARA MENÚ ORGANIZADO POR ROLES
+   ======================================== */
+
+/* Encabezado de sección del menú */
+.menu-section-header {
+    padding: 12px 20px 8px 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+    margin: 10px 0 5px 0;
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.menu-section-header i {
+    margin-right: 8px;
+    font-size: 0.9rem;
+}
+
+/* Item de menú deshabilitado */
+.menu-item.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.menu-item.disabled span {
+    color: var(--text-muted);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.menu-item.disabled span i {
+    margin-right: 12px;
+    color: #ef4444;
+}
+
+/* Hover effects mejorados */
+.menu-item:not(.disabled):hover {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+    transform: translateX(3px);
+}
+
+/* Separador visual entre secciones */
+.menu-item + .menu-section-header {
+    margin-top: 20px;
+}
+
+/* Animaciones suaves */
+.menu-item, .menu-section-header {
+    transition: all 0.3s ease;
+}
+
+/* Responsive para menú */
+@media (max-width: 768px) {
+    .menu-section-header {
+        padding: 10px 15px 6px 15px;
+        font-size: 0.8rem;
+    }
+    
+    .menu-item.disabled span {
+        padding: 10px 15px;
+        font-size: 0.85rem;
+    }
+}

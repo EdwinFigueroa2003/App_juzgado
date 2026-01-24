@@ -420,6 +420,8 @@ def vista_actualizarexpediente():
             return agregar_actuacion()
         elif accion == 'eliminar_actuacion':
             return eliminar_actuacion()
+        elif accion == 'eliminar_expediente':
+            return eliminar_expediente()
     
     # Si viene un radicado como parámetro GET, buscar automáticamente el expediente
     elif radicado_get:
@@ -651,8 +653,10 @@ def actualizar_expediente():
         juzgado_origen = request.form.get('juzgado_origen', '').strip()
         rol_responsable = request.form.get('rol_responsable', '').strip()
         observaciones = request.form.get('observaciones', '').strip()
+        radicado_completo = request.form.get('radicado_completo', '').strip()
         
         logger.info("Datos del formulario:")
+        logger.info(f"  - radicado_completo: '{radicado_completo}'")
         logger.info(f"  - demandante: '{demandante}'")
         logger.info(f"  - demandado: '{demandado}'")
         logger.info(f"  - estado_actual: '{estado_actual}'")
@@ -676,7 +680,8 @@ def actualizar_expediente():
             'demandante': demandante,
             'demandado': demandado,
             'estado': estado_actual,
-            'responsable': rol_responsable
+            'responsable': rol_responsable,
+            'radicado_completo': radicado_completo
         }
         
         for field, value in base_fields.items():
@@ -1427,4 +1432,105 @@ def eliminar_actuacion():
         
     except Exception as e:
         flash(f'Error eliminando actuación: {str(e)}', 'error')
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+def eliminar_expediente():
+    """Elimina un expediente completo y todos sus datos relacionados"""
+    logger.info("=== INICIO eliminar_expediente ===")
+    
+    try:
+        expediente_id = request.form.get('expediente_id')
+        
+        if not expediente_id:
+            flash('ID de expediente no válido', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        logger.info(f"Eliminando expediente ID: {expediente_id}")
+        
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        # Obtener información del expediente antes de eliminarlo
+        cursor.execute("""
+            SELECT radicado_completo, radicado_corto, demandante, demandado
+            FROM expediente 
+            WHERE id = %s
+        """, (expediente_id,))
+        
+        expediente_info = cursor.fetchone()
+        
+        if not expediente_info:
+            flash('Expediente no encontrado', 'error')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        radicado = expediente_info[0] or expediente_info[1]
+        demandante = expediente_info[2]
+        demandado = expediente_info[3]
+        
+        logger.info(f"Expediente a eliminar: {radicado} - {demandante} vs {demandado}")
+        
+        # Eliminar en orden (tablas dependientes primero)
+        tablas_a_limpiar = [
+            ('actuaciones', 'expediente_id'),
+            ('estados', 'expediente_id'), 
+            ('ingresos', 'expediente_id'),
+            ('expediente', 'id')
+        ]
+        
+        registros_eliminados = {}
+        
+        for tabla, columna_id in tablas_a_limpiar:
+            # Verificar si la tabla existe
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = %s
+                )
+            """, (tabla,))
+            
+            if cursor.fetchone()[0]:
+                # Contar registros antes de eliminar
+                cursor.execute(f"SELECT COUNT(*) FROM {tabla} WHERE {columna_id} = %s", (expediente_id,))
+                count_antes = cursor.fetchone()[0]
+                
+                # Eliminar registros
+                cursor.execute(f"DELETE FROM {tabla} WHERE {columna_id} = %s", (expediente_id,))
+                registros_eliminados[tabla] = count_antes
+                
+                logger.info(f"Eliminados {count_antes} registros de tabla {tabla}")
+            else:
+                logger.warning(f"Tabla {tabla} no existe")
+                registros_eliminados[tabla] = 0
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Mensaje de confirmación detallado
+        mensaje_eliminacion = f"Expediente {radicado} eliminado exitosamente. "
+        detalles = []
+        
+        if registros_eliminados.get('actuaciones', 0) > 0:
+            detalles.append(f"{registros_eliminados['actuaciones']} actuaciones")
+        if registros_eliminados.get('estados', 0) > 0:
+            detalles.append(f"{registros_eliminados['estados']} estados")
+        if registros_eliminados.get('ingresos', 0) > 0:
+            detalles.append(f"{registros_eliminados['ingresos']} ingresos")
+        
+        if detalles:
+            mensaje_eliminacion += f"Se eliminaron: {', '.join(detalles)}"
+        
+        flash(mensaje_eliminacion, 'success')
+        logger.info(f"✅ Expediente {expediente_id} eliminado exitosamente")
+        logger.info("=== FIN eliminar_expediente - ÉXITO ===")
+        
+        # Redirigir a la página principal sin expediente cargado
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+    except Exception as e:
+        logger.error(f"ERROR en eliminar_expediente: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        flash(f'Error eliminando expediente: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))

@@ -219,17 +219,15 @@ def vista_expediente():
     pagina_actual = request.args.get('pagina', 1, type=int)
     pagina_actual = max(1, pagina_actual)  # Asegurar que sea al menos 1
     
-    # Si viene por GET con parámetros de paginación, reconstruir los filtros
-    if request.method == 'GET' and pagina_actual > 1:
+    # Si viene por GET con parámetros, manejar búsqueda directa o paginación
+    if request.method == 'GET':
         radicado_buscar = request.args.get('radicado', '').strip()
         estado_filtro = request.args.get('estado', '').strip()
         solicitud_filtro = request.args.get('solicitud', '').strip()
+        tipo_busqueda_get = request.args.get('tipo_busqueda', '').strip()
         
-        # Determinar tipo de búsqueda
-        if radicado_buscar:
-            request.form = request.form.copy()
-            request.form['tipo_busqueda'] = 'radicado'
-            request.form['radicado'] = radicado_buscar
+        # Búsqueda directa por GET (desde enlaces externos)
+        if radicado_buscar and (pagina_actual == 1 or tipo_busqueda_get == 'radicado'):
             expedientes = buscar_expedientes(radicado_buscar)
         elif estado_filtro:
             orden_fecha = request.args.get('orden', 'DESC')
