@@ -1042,25 +1042,48 @@ def asignacion_masiva():
         criterio = request.form.get('criterio_masivo', '').strip()
         valor_criterio = request.form.get('valor_criterio', '').strip()
         rol_asignar = request.form.get('rol_masivo', '').strip()
+        cantidad_limite = request.form.get('cantidad_limite', '').strip()
+        
+        # Logging para debug
+        logger.info("=== INICIO asignacion_masiva ===")
+        logger.info(f"Criterio recibido: '{criterio}'")
+        logger.info(f"Valor criterio recibido: '{valor_criterio}'")
+        logger.info(f"Rol a asignar: '{rol_asignar}'")
+        logger.info(f"Cantidad límite: '{cantidad_limite}'")
+        logger.info(f"Todos los datos del formulario: {dict(request.form)}")
         
         if not criterio or not rol_asignar:
+            logger.warning(f"Faltan datos: criterio='{criterio}', rol='{rol_asignar}'")
             flash('Debe seleccionar un criterio y un rol para la asignación masiva', 'error')
             return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        # Convertir cantidad_limite a entero si se proporciona
+        limite = None
+        if cantidad_limite and cantidad_limite.isdigit():
+            limite = int(cantidad_limite)
+            if limite <= 0:
+                flash('La cantidad debe ser un número positivo', 'error')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            logger.info(f"Límite aplicado: {limite}")
         
         conn = obtener_conexion()
         cursor = conn.cursor()
         
         # Manejar asignación aleatoria
         if rol_asignar == 'ALEATORIO':
-            return asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn)
+            logger.info("Ejecutando asignación aleatoria")
+            return asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn, limite)
         
         # Manejar limpieza de responsables
         if rol_asignar == 'LIMPIAR':
-            return limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn)
+            logger.info("Ejecutando limpieza de responsables")
+            return limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite)
         
         # Construir la consulta según el criterio (lógica original para roles específicos)
         if criterio == 'estado':
+            logger.info(f"Procesando criterio 'estado' con valor: '{valor_criterio}'")
             if not valor_criterio:
+                logger.warning(f"Valor de criterio vacío para estado: '{valor_criterio}'")
                 flash('Debe especificar un estado para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
@@ -1069,7 +1092,16 @@ def asignacion_masiva():
                 SET responsable = %s
                 WHERE estado = %s
             """
-            cursor.execute(query, (rol_asignar, valor_criterio))
+            params = (rol_asignar, valor_criterio)
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += " AND id IN (SELECT id FROM expediente WHERE estado = %s ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (rol_asignar, valor_criterio, valor_criterio, limite)
+            
+            logger.info(f"Query a ejecutar: {query}")
+            logger.info(f"Parámetros: {params}")
+            cursor.execute(query, params)
             
         elif criterio == 'sin_responsable':
             query = """
@@ -1077,7 +1109,14 @@ def asignacion_masiva():
                 SET responsable = %s
                 WHERE responsable IS NULL OR responsable = ''
             """
-            cursor.execute(query, (rol_asignar,))
+            params = (rol_asignar,)
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += " AND id IN (SELECT id FROM expediente WHERE responsable IS NULL OR responsable = '' ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (rol_asignar, limite)
+            
+            cursor.execute(query, params)
             
         elif criterio == 'tipo_solicitud':
             if not valor_criterio:
@@ -1088,12 +1127,20 @@ def asignacion_masiva():
             if not tipo_col:
                 flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            
             query = f"""
                 UPDATE expediente 
                 SET responsable = %s
                 WHERE {tipo_col} ILIKE %s
             """
-            cursor.execute(query, (rol_asignar, f'%{valor_criterio}%'))
+            params = (rol_asignar, f'%{valor_criterio}%')
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += f" AND id IN (SELECT id FROM expediente WHERE {tipo_col} ILIKE %s ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (rol_asignar, f'%{valor_criterio}%', f'%{valor_criterio}%', limite)
+            
+            cursor.execute(query, params)
             
         elif criterio == 'juzgado_origen':
             if not valor_criterio:
@@ -1105,7 +1152,14 @@ def asignacion_masiva():
                 SET responsable = %s
                 WHERE juzgado_origen ILIKE %s
             """
-            cursor.execute(query, (rol_asignar, f'%{valor_criterio}%'))
+            params = (rol_asignar, f'%{valor_criterio}%')
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += " AND id IN (SELECT id FROM expediente WHERE juzgado_origen ILIKE %s ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (rol_asignar, f'%{valor_criterio}%', f'%{valor_criterio}%', limite)
+            
+            cursor.execute(query, params)
             
         elif criterio == 'todos':
             if not confirm_todos():
@@ -1116,7 +1170,14 @@ def asignacion_masiva():
                 UPDATE expediente 
                 SET responsable = %s
             """
-            cursor.execute(query, (rol_asignar,))
+            params = (rol_asignar,)
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += " WHERE id IN (SELECT id FROM expediente ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (rol_asignar, limite)
+            
+            cursor.execute(query, params)
         
         expedientes_actualizados = cursor.rowcount
         conn.commit()
@@ -1124,7 +1185,10 @@ def asignacion_masiva():
         conn.close()
         
         if expedientes_actualizados > 0:
-            flash(f'Asignación masiva exitosa: {expedientes_actualizados} expediente(s) asignado(s) al rol {rol_asignar}', 'success')
+            mensaje = f'Asignación masiva exitosa: {expedientes_actualizados} expediente(s) asignado(s) al rol {rol_asignar}'
+            if limite:
+                mensaje += f' (limitado a {limite} expedientes)'
+            flash(mensaje, 'success')
         else:
             flash('No se encontraron expedientes que cumplan con el criterio especificado', 'warning')
         
@@ -1134,7 +1198,7 @@ def asignacion_masiva():
         flash(f'Error en asignación masiva: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
 
-def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
+def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite=None):
     """Limpia responsables de manera masiva según criterios"""
     try:
         expedientes_actualizados = 0
@@ -1149,7 +1213,14 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
                 SET responsable = NULL
                 WHERE estado = %s AND responsable IS NOT NULL
             """
-            cursor.execute(query, (valor_criterio,))
+            params = (valor_criterio,)
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += " AND id IN (SELECT id FROM expediente WHERE estado = %s AND responsable IS NOT NULL ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (valor_criterio, valor_criterio, limite)
+            
+            cursor.execute(query, params)
             expedientes_actualizados = cursor.rowcount
             
         elif criterio == 'sin_responsable':
@@ -1165,12 +1236,20 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
             if not tipo_col:
                 flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            
             query = f"""
                 UPDATE expediente 
                 SET responsable = NULL
                 WHERE {tipo_col} ILIKE %s AND responsable IS NOT NULL
             """
-            cursor.execute(query, (f'%{valor_criterio}%',))
+            params = (f'%{valor_criterio}%',)
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += f" AND id IN (SELECT id FROM expediente WHERE {tipo_col} ILIKE %s AND responsable IS NOT NULL ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (f'%{valor_criterio}%', f'%{valor_criterio}%', limite)
+            
+            cursor.execute(query, params)
             expedientes_actualizados = cursor.rowcount
             
         elif criterio == 'juzgado_origen':
@@ -1183,7 +1262,14 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
                 SET responsable = NULL
                 WHERE juzgado_origen ILIKE %s AND responsable IS NOT NULL
             """
-            cursor.execute(query, (f'%{valor_criterio}%',))
+            params = (f'%{valor_criterio}%',)
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += " AND id IN (SELECT id FROM expediente WHERE juzgado_origen ILIKE %s AND responsable IS NOT NULL ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (f'%{valor_criterio}%', f'%{valor_criterio}%', limite)
+            
+            cursor.execute(query, params)
             expedientes_actualizados = cursor.rowcount
             
         elif criterio == 'todos':
@@ -1192,7 +1278,14 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
                 SET responsable = NULL
                 WHERE responsable IS NOT NULL
             """
-            cursor.execute(query)
+            params = ()
+            
+            # Agregar límite si se especifica
+            if limite:
+                query += " AND id IN (SELECT id FROM expediente WHERE responsable IS NOT NULL ORDER BY fecha_ingreso ASC LIMIT %s)"
+                params = (limite,)
+            
+            cursor.execute(query, params)
             expedientes_actualizados = cursor.rowcount
         
         conn.commit()
@@ -1200,7 +1293,10 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
         conn.close()
         
         if expedientes_actualizados > 0:
-            flash(f'Limpieza masiva exitosa: Se removió el responsable de {expedientes_actualizados} expediente(s)', 'success')
+            mensaje = f'Limpieza masiva exitosa: Se removió el responsable de {expedientes_actualizados} expediente(s)'
+            if limite:
+                mensaje += f' (limitado a {limite} expedientes)'
+            flash(mensaje, 'success')
         else:
             flash('No se encontraron expedientes con responsable asignado que cumplan con el criterio especificado', 'warning')
         
@@ -1210,7 +1306,7 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn):
         flash(f'Error en limpieza masiva: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
 
-def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn):
+def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn, limite=None):
     """Maneja la asignación aleatoria de roles"""
     import random
     
@@ -1223,11 +1319,23 @@ def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn):
                 flash('Debe especificar un estado para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
-            cursor.execute("SELECT id FROM expediente WHERE estado = %s", (valor_criterio,))
+            query = "SELECT id FROM expediente WHERE estado = %s ORDER BY fecha_ingreso ASC"
+            params = (valor_criterio,)
+            if limite:
+                query += " LIMIT %s"
+                params = (valor_criterio, limite)
+            
+            cursor.execute(query, params)
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'sin_responsable':
-            cursor.execute("SELECT id FROM expediente WHERE responsable IS NULL OR responsable = ''")
+            query = "SELECT id FROM expediente WHERE responsable IS NULL OR responsable = '' ORDER BY fecha_ingreso ASC"
+            params = ()
+            if limite:
+                query += " LIMIT %s"
+                params = (limite,)
+            
+            cursor.execute(query, params)
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'tipo_solicitud':
@@ -1238,7 +1346,14 @@ def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn):
             if not tipo_col:
                 flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'warning')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            cursor.execute(f"SELECT id FROM expediente WHERE {tipo_col} ILIKE %s", (f'%{valor_criterio}%',))
+            
+            query = f"SELECT id FROM expediente WHERE {tipo_col} ILIKE %s ORDER BY fecha_ingreso ASC"
+            params = (f'%{valor_criterio}%',)
+            if limite:
+                query += " LIMIT %s"
+                params = (f'%{valor_criterio}%', limite)
+            
+            cursor.execute(query, params)
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'juzgado_origen':
@@ -1246,11 +1361,23 @@ def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn):
                 flash('Debe especificar un juzgado de origen para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
-            cursor.execute("SELECT id FROM expediente WHERE juzgado_origen ILIKE %s", (f'%{valor_criterio}%',))
+            query = "SELECT id FROM expediente WHERE juzgado_origen ILIKE %s ORDER BY fecha_ingreso ASC"
+            params = (f'%{valor_criterio}%',)
+            if limite:
+                query += " LIMIT %s"
+                params = (f'%{valor_criterio}%', limite)
+            
+            cursor.execute(query, params)
             expedientes_ids = [row[0] for row in cursor.fetchall()]
             
         elif criterio == 'todos':
-            cursor.execute("SELECT id FROM expediente")
+            query = "SELECT id FROM expediente ORDER BY fecha_ingreso ASC"
+            params = ()
+            if limite:
+                query += " LIMIT %s"
+                params = (limite,)
+            
+            cursor.execute(query, params)
             expedientes_ids = [row[0] for row in cursor.fetchall()]
         
         if not expedientes_ids:
@@ -1281,8 +1408,10 @@ def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn):
         conn.close()
         
         total_asignados = len(expedientes_ids)
-        flash(f'Asignación aleatoria exitosa: {total_asignados} expediente(s) asignados. '
-              f'ESCRIBIENTES: {contador_escribientes}, SUSTANCIADORES: {contador_sustanciadores}', 'success')
+        mensaje = f'Asignación aleatoria exitosa: {total_asignados} expediente(s) asignados. ESCRIBIENTES: {contador_escribientes}, SUSTANCIADORES: {contador_sustanciadores}'
+        if limite:
+            mensaje += f' (limitado a {limite} expedientes)'
+        flash(mensaje, 'success')
         
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
         

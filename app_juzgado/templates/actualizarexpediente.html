@@ -132,7 +132,7 @@
                                         <option value="">Seleccionar criterio</option>
                                         <option value="sin_responsable">Expedientes sin responsable</option>
                                         <option value="estado">Por estado específico</option>
-                                        <option value="solicitud">Por tipo de solicitud</option>
+                                        <option value="tipo_solicitud">Por tipo de solicitud</option>
                                         <!-- <option value="juzgado_origen">Por juzgado de origen</option> -->
                                         <option value="todos" class="text-danger">TODOS los expedientes</option>
                                     </select>
@@ -144,17 +144,16 @@
                                     <div id="campo_valor_criterio">
                                         <input type="text" class="form-control" id="valor_criterio"
                                             name="valor_criterio" placeholder="Especificar valor..."
-                                            class="form-control hidden-default" id="valor_criterio"
-                                            name="valor_criterio" placeholder="Especificar valor...">
-                                        <select class="form-control hidden-default" id="valor_estado"
-                                            name="valor_criterio">
+                                            style="display: none;">
+                                        <select class="form-control" id="valor_estado"
+                                            name="valor_criterio" style="display: none;">
                                             <option value="">Seleccionar estado</option>
                                             {% for estado in estadisticas.estados_comunes %}
                                             <option value="{{ estado[0] }}">{{ estado[0] }} ({{ estado[1] }}
                                                 expedientes)</option>
                                             {% endfor %}
                                         </select>
-                                        <small class="form-text text-muted hidden-default" id="ayuda_criterio">
+                                        <small class="form-text text-muted" id="ayuda_criterio" style="display: none;">
                                             Este campo aparecerá según el criterio seleccionado
                                         </small>
                                     </div>
@@ -176,6 +175,41 @@
                                         <i class="fas fa-info-circle"></i>
                                         <strong>ALEATORIO:</strong> Asigna roles aleatorios | <strong>LIMPIAR:</strong>
                                         Quita todos los responsables
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Nueva fila para cantidad límite -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="cantidad_limite">Cantidad Límite (Opcional):</label>
+                                    <select class="form-control" id="cantidad_limite" name="cantidad_limite">
+                                        <option value="">Sin límite (todos los que cumplan el criterio)</option>
+                                        <option value="50">50 expedientes</option>
+                                        <option value="100">100 expedientes</option>
+                                        <option value="150">150 expedientes</option>
+                                        <option value="200">200 expedientes</option>
+                                        <option value="250">250 expedientes</option>
+                                        <option value="500">500 expedientes</option>
+                                        <option value="1000">1000 expedientes</option>
+                                    </select>
+                                    <small class="form-text text-muted">
+                                        <i class="fas fa-info-circle"></i>
+                                        <strong>Límite:</strong> Restringe la asignación a una cantidad específica de expedientes (se toman los más antiguos primero)
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="cantidad_personalizada">O Cantidad Personalizada:</label>
+                                    <input type="number" class="form-control" id="cantidad_personalizada" 
+                                           placeholder="Ej: 75" min="1" max="10000"
+                                           onchange="actualizarCantidadLimite()">
+                                    <small class="form-text text-muted">
+                                        <i class="fas fa-edit"></i>
+                                        Ingresa un número personalizado (1-10,000)
                                     </small>
                                 </div>
                             </div>
@@ -1007,6 +1041,177 @@
 
         return false;
     }
+
+    // Función para actualizar cantidad límite con valor personalizado
+    function actualizarCantidadLimite() {
+        const cantidadPersonalizada = document.getElementById('cantidad_personalizada');
+        const cantidadLimite = document.getElementById('cantidad_limite');
+        
+        if (cantidadPersonalizada.value && cantidadPersonalizada.value.trim() !== '') {
+            const valor = parseInt(cantidadPersonalizada.value);
+            if (valor > 0 && valor <= 10000) {
+                // Limpiar opciones personalizadas anteriores
+                const opciones = cantidadLimite.querySelectorAll('option');
+                opciones.forEach(opcion => {
+                    if (opcion.text.includes('(personalizado)')) {
+                        opcion.remove();
+                    }
+                });
+                
+                // Crear nueva opción con el valor personalizado
+                const nuevaOpcion = new Option(`${valor} expedientes (personalizado)`, valor, true, true);
+                cantidadLimite.appendChild(nuevaOpcion);
+                cantidadLimite.value = valor;
+            } else {
+                alert('La cantidad debe estar entre 1 y 10,000');
+                cantidadPersonalizada.value = '';
+            }
+        }
+    }
+
+    // Función para limpiar formulario masivo
+    function limpiarFormularioMasivo() {
+        document.getElementById('criterio_masivo').value = '';
+        document.getElementById('valor_criterio').value = '';
+        document.getElementById('rol_masivo').value = '';
+        document.getElementById('cantidad_limite').value = '';
+        document.getElementById('cantidad_personalizada').value = '';
+        
+        // Limpiar opciones personalizadas del select
+        const cantidadLimite = document.getElementById('cantidad_limite');
+        const opciones = cantidadLimite.querySelectorAll('option');
+        opciones.forEach(opcion => {
+            if (opcion.text.includes('(personalizado)')) {
+                opcion.remove();
+            }
+        });
+        
+        // Ocultar campos de valor
+        mostrarCampoValor();
+    }
+
+    // Función para confirmar asignación masiva
+    function confirmarAsignacionMasiva() {
+        const criterio = document.getElementById('criterio_masivo').value;
+        const rol = document.getElementById('rol_masivo').value;
+        const cantidad = document.getElementById('cantidad_limite').value;
+        
+        let mensaje = `¿Confirma la asignación masiva?\n\n`;
+        mensaje += `Criterio: ${criterio}\n`;
+        mensaje += `Rol: ${rol}\n`;
+        if (cantidad) {
+            mensaje += `Cantidad límite: ${cantidad} expedientes\n`;
+        } else {
+            mensaje += `Cantidad: Todos los expedientes que cumplan el criterio\n`;
+        }
+        mensaje += `\n⚠️ Esta operación no se puede deshacer fácilmente.`;
+        
+        return confirm(mensaje);
+    }
+
+    // Función para mostrar/ocultar campo de valor según criterio
+    function mostrarCampoValor() {
+        const criterio = document.getElementById('criterio_masivo').value;
+        const campoValor = document.getElementById('campo_valor_criterio');
+        const inputTexto = document.getElementById('valor_criterio');
+        const selectEstado = document.getElementById('valor_estado');
+        const ayuda = document.getElementById('ayuda_criterio');
+        
+        console.log('mostrarCampoValor - Criterio seleccionado:', criterio);
+        
+        // Ocultar todos los campos primero
+        inputTexto.style.display = 'none';
+        selectEstado.style.display = 'none';
+        ayuda.style.display = 'none';
+        
+        // Limpiar valores
+        inputTexto.value = '';
+        selectEstado.value = '';
+        
+        // Deshabilitar ambos campos primero
+        inputTexto.disabled = true;
+        selectEstado.disabled = true;
+        
+        if (criterio === 'estado') {
+            selectEstado.style.display = 'block';
+            selectEstado.disabled = false;
+            ayuda.style.display = 'block';
+            ayuda.textContent = 'Selecciona el estado específico para filtrar expedientes';
+            console.log('Mostrando select de estado');
+        } else if (criterio === 'tipo_solicitud') {
+            inputTexto.style.display = 'block';
+            inputTexto.disabled = false;
+            inputTexto.placeholder = 'Ej: TUTELA, AMPARO, etc.';
+            ayuda.style.display = 'block';
+            ayuda.textContent = 'Ingresa el tipo de solicitud (búsqueda parcial)';
+            console.log('Mostrando input de solicitud');
+        } else if (criterio === 'juzgado_origen') {
+            inputTexto.style.display = 'block';
+            inputTexto.disabled = false;
+            inputTexto.placeholder = 'Ej: JUZGADO CIVIL, PENAL, etc.';
+            ayuda.style.display = 'block';
+            ayuda.textContent = 'Ingresa el nombre del juzgado (búsqueda parcial)';
+            console.log('Mostrando input de juzgado');
+        } else {
+            console.log('Criterio no requiere valor adicional o no reconocido');
+        }
+    }
+
+    // Función para confirmar asignación masiva con validación mejorada
+    function confirmarAsignacionMasiva() {
+        const criterio = document.getElementById('criterio_masivo').value;
+        const rol = document.getElementById('rol_masivo').value;
+        const cantidad = document.getElementById('cantidad_limite').value;
+        
+        // Obtener el valor del criterio según el tipo
+        let valorCriterio = '';
+        if (criterio === 'estado') {
+            const selectEstado = document.getElementById('valor_estado');
+            valorCriterio = selectEstado.value;
+            console.log('Valor estado seleccionado:', valorCriterio);
+            
+            if (!valorCriterio) {
+                alert('Debe seleccionar un estado específico');
+                return false;
+            }
+        } else if (criterio === 'tipo_solicitud' || criterio === 'juzgado_origen') {
+            const inputTexto = document.getElementById('valor_criterio');
+            valorCriterio = inputTexto.value.trim();
+            console.log('Valor texto ingresado:', valorCriterio);
+            
+            if (!valorCriterio) {
+                alert('Debe ingresar un valor para el criterio seleccionado');
+                return false;
+            }
+        }
+        
+        let mensaje = `¿Confirma la asignación masiva?\n\n`;
+        mensaje += `Criterio: ${criterio}\n`;
+        if (valorCriterio) {
+            mensaje += `Valor: ${valorCriterio}\n`;
+        }
+        mensaje += `Rol: ${rol}\n`;
+        if (cantidad) {
+            mensaje += `Cantidad límite: ${cantidad} expedientes\n`;
+        } else {
+            mensaje += `Cantidad: Todos los expedientes que cumplan el criterio\n`;
+        }
+        mensaje += `\n⚠️ Esta operación no se puede deshacer fácilmente.`;
+        
+        return confirm(mensaje);
+    }
+
+    // Inicializar el formulario cuando se carga la página
+    document.addEventListener('DOMContentLoaded', function() {
+        // Asegurar que los campos estén ocultos al cargar
+        mostrarCampoValor();
+        
+        // Agregar event listener al select de criterio
+        const criterioSelect = document.getElementById('criterio_masivo');
+        if (criterioSelect) {
+            criterioSelect.addEventListener('change', mostrarCampoValor);
+        }
+    });
 </script>
 
 {% endblock %}

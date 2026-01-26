@@ -344,7 +344,7 @@
                                             </td>
                                             <td>
                                                 <span
-                                                    class="badge badge-{{ 'success' if responsable_data[0] == 'ESCRIBIENTE' else 'info' if responsable_data[0] == 'SUSTANCIADOR' else 'secondary' }}">
+                                                    class="badge badge-{{ 'success' if responsable_data[0] == 'ESCRIBIENTE' else 'warning' if responsable_data[0] == 'SUSTANCIADOR' else 'warning' }}">
                                                     <i
                                                         class="fas fa-{{ 'pen' if responsable_data[0] == 'ESCRIBIENTE' else 'gavel' if responsable_data[0] == 'SUSTANCIADOR' else 'user' }}"></i>
                                                     {{ responsable_data[0] }}
