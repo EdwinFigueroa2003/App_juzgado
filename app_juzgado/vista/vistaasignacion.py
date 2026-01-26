@@ -323,51 +323,164 @@ def obtener_estadisticas_generales():
         """)
         estados_count = cursor.fetchall()
         
-        # Estadísticas por responsable con desglose de estados
-        cursor.execute("""
-            SELECT 
-                responsable, 
-                COUNT(*) as total,
-                COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
-                COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
-                COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
-            FROM expediente 
-            WHERE responsable IS NOT NULL AND responsable != ''
-            GROUP BY responsable 
-            ORDER BY COUNT(*) DESC
-        """)
+        # Obtener roles disponibles del sistema
+        cursor.execute("SELECT nombre_rol FROM roles ORDER BY nombre_rol")
+        roles_sistema = [row[0] for row in cursor.fetchall()]
+        print(f"🔍 DEBUG - Roles del sistema: {roles_sistema}")
+        
+        # Estadísticas POR ROL (solo roles del sistema)
+        roles_detallado = []
+        roles_con_expedientes = {}
+        
+        # Crear clase ExpedienteObj fuera del loop para evitar problemas
+        class ExpedienteObj:
+            def __init__(self, data):
+                self.id = data[0]
+                self.radicado_completo = data[1]
+                self.radicado_corto = data[2]
+                self.demandante = data[3]
+                self.demandado = data[4]
+                self.estado = data[5]
+                self.fecha_ingreso = data[6]
+                self.turno = data[7]
+                self.juzgado_origen = data[8]
+        
+        for rol in roles_sistema:
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
+                    COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
+                    COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
+                    COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
+                FROM expediente 
+                WHERE responsable = %s
+            """, (rol,))
+            
+            stats = cursor.fetchone()
+            if stats[0] > 0:  # Solo incluir roles con expedientes asignados
+                roles_detallado.append((rol, stats[0], stats[1], stats[2], stats[3], stats[4]))
+                
+                # Obtener expedientes detallados para este rol
+                cursor.execute("""
+                    SELECT 
+                        id, radicado_completo, radicado_corto, demandante, demandado,
+                        estado, fecha_ingreso, turno, juzgado_origen
+                    FROM expediente 
+                    WHERE responsable = %s
+                    ORDER BY 
+                        CASE 
+                            WHEN estado = 'Activo Pendiente' THEN 1
+                            WHEN estado = 'Activo Resuelto' THEN 2
+                            WHEN estado = 'Inactivo Resuelto' THEN 3
+                            WHEN estado = 'Pendiente' THEN 4
+                            ELSE 5
+                        END,
+                        CASE 
+                            WHEN turno IS NOT NULL THEN turno
+                            ELSE 999999
+                        END ASC,
+                        fecha_ingreso DESC
+                    LIMIT 100
+                """, (rol,))
+                
+                expedientes = cursor.fetchall()
+                roles_con_expedientes[rol] = [ExpedienteObj(exp) for exp in expedientes]
+        
+        print(f"🔍 DEBUG - Roles con expedientes: {len(roles_detallado)}")
+        for rol_data in roles_detallado:
+            print(f"   - {rol_data[0]}: {rol_data[1]} expedientes")
+        
+        # Estadísticas POR RESPONSABLE (usuarios específicos, excluyendo roles del sistema)
+        if roles_sistema:
+            placeholders = ','.join(['%s'] * len(roles_sistema))
+            cursor.execute(f"""
+                SELECT 
+                    responsable, 
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
+                    COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
+                    COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
+                    COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
+                FROM expediente 
+                WHERE responsable IS NOT NULL AND responsable != ''
+                AND responsable NOT IN ({placeholders})
+                GROUP BY responsable 
+                ORDER BY COUNT(*) DESC
+            """, roles_sistema)
+        else:
+            cursor.execute("""
+                SELECT 
+                    responsable, 
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
+                    COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
+                    COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
+                    COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
+                FROM expediente 
+                WHERE responsable IS NOT NULL AND responsable != ''
+                GROUP BY responsable 
+                ORDER BY COUNT(*) DESC
+            """)
+        
         responsables_detallado = cursor.fetchall()
-        print(f"🔍 DEBUG - Responsables detallado encontrados: {len(responsables_detallado)}")
+        print(f"🔍 DEBUG - Responsables individuales encontrados: {len(responsables_detallado)}")
         if responsables_detallado:
             for i, resp in enumerate(responsables_detallado[:3]):
                 print(f"   {i+1}. {resp[0]}: Total={resp[1]}, AP={resp[2]}, P={resp[5]}")
         else:
-            print("   ⚠️ No se encontraron responsables con expedientes asignados - Usando datos de demostración")
-            # Obtener los roles disponibles para crear datos de demostración
-            cursor.execute("SELECT nombre_rol FROM roles WHERE activo = TRUE ORDER BY nombre_rol LIMIT 5")
-            roles = [row[0] for row in cursor.fetchall()]
-            
-            # Si no hay roles, crear datos ficticios de demostración
-            if roles:
-                # Crear datos de demostración basados en roles reales
-                responsables_detallado = [
-                    (roles[0] if len(roles) > 0 else 'SUSTANCIADOR', 45, 15, 20, 5, 5),
-                    (roles[1] if len(roles) > 1 else 'ESCRIBIENTE', 38, 12, 18, 8, 0),
-                    (roles[2] if len(roles) > 2 else 'JEFE_OFICINA', 22, 8, 10, 4, 0),
-                ]
-            else:
-                responsables_detallado = [
-                    ('SUSTANCIADOR', 45, 15, 20, 5, 5),
-                    ('ESCRIBIENTE', 38, 12, 18, 8, 0),
-                    ('JEFE_OFICINA', 22, 8, 10, 4, 0),
-                ]
+            print("   ⚠️ No se encontraron responsables individuales con expedientes asignados")
+            responsables_detallado = []
         
-        # Mantener el formato anterior para compatibilidad
-        responsables_count = [(row[0], row[1]) for row in responsables_detallado]
+        print(f"🔍 DEBUG - Datos finales:")
+        print(f"   - roles_detallado: {len(roles_detallado)} items")
+        print(f"   - responsables_detallado: {len(responsables_detallado)} items")
+        print(f"   - roles_con_expedientes keys: {list(roles_con_expedientes.keys())}")
+        print(f"   - responsables_con_expedientes keys: {list(responsables_con_expedientes.keys()) if 'responsables_con_expedientes' in locals() else 'No definido'}")
         
-        # Obtener expedientes detallados para cada responsable
+        # Mantener el formato anterior para compatibilidad (ahora solo para roles)
+        responsables_count = [(row[0], row[1]) for row in roles_detallado]
+        
+        # Obtener expedientes detallados para cada responsable individual (no roles)
         responsables_con_expedientes = {}
+        for responsable_data in responsables_detallado:
+            responsable_nombre = responsable_data[0]
+            
+            cursor_exp = conn.cursor()
+            cursor_exp.execute("""
+                SELECT 
+                    id, 
+                    radicado_completo, 
+                    radicado_corto, 
+                    demandante, 
+                    demandado,
+                    estado,
+                    fecha_ingreso,
+                    turno,
+                    juzgado_origen
+                FROM expediente 
+                WHERE responsable = %s
+                ORDER BY 
+                    CASE 
+                        WHEN estado = 'Activo Pendiente' THEN 1
+                        WHEN estado = 'Activo Resuelto' THEN 2
+                        WHEN estado = 'Inactivo Resuelto' THEN 3
+                        WHEN estado = 'Pendiente' THEN 4
+                        ELSE 5
+                    END,
+                    CASE 
+                        WHEN turno IS NOT NULL THEN turno
+                        ELSE 999999
+                    END ASC,
+                    fecha_ingreso DESC
+                LIMIT 100
+            """, (responsable_nombre,))
+            
+            expedientes = cursor_exp.fetchall()
+            responsables_con_expedientes[responsable_nombre] = [
+                ExpedienteObj(exp) for exp in expedientes
+            ]
+            cursor_exp.close()
         for responsable_data in responsables_detallado:
             responsable_nombre = responsable_data[0]
             
@@ -421,6 +534,75 @@ def obtener_estadisticas_generales():
             ]
             cursor_exp.close()
         
+        # Obtener usuarios con expedientes asignados específicamente (no por rol)
+        usuarios_con_expedientes = []
+        cursor.execute("""
+            SELECT u.id, u.nombre, u.usuario, u.correo, r.nombre_rol, u.administrador
+            FROM usuarios u
+            LEFT JOIN roles r ON u.rol_id = r.id
+            WHERE u.activo = TRUE
+            ORDER BY u.nombre
+        """)
+        usuarios = cursor.fetchall()
+        
+        for usuario in usuarios:
+            user_id, nombre, usuario_name, correo, rol, es_admin = usuario
+            
+            # Buscar expedientes asignados específicamente a este usuario (por nombre, no por rol)
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
+                    COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
+                    COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
+                    COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
+                FROM expediente 
+                WHERE responsable = %s OR responsable = %s
+            """, (nombre, usuario_name))
+            
+            stats = cursor.fetchone()
+            
+            if stats[0] > 0:  # Solo incluir usuarios con expedientes asignados
+                # Obtener expedientes detallados
+                cursor.execute("""
+                    SELECT 
+                        id, radicado_completo, radicado_corto, demandante, demandado,
+                        estado, fecha_ingreso, turno, juzgado_origen
+                    FROM expediente 
+                    WHERE responsable = %s OR responsable = %s
+                    ORDER BY 
+                        CASE 
+                            WHEN estado = 'Activo Pendiente' THEN 1
+                            WHEN estado = 'Activo Resuelto' THEN 2
+                            WHEN estado = 'Inactivo Resuelto' THEN 3
+                            WHEN estado = 'Pendiente' THEN 4
+                            ELSE 5
+                        END,
+                        CASE 
+                            WHEN turno IS NOT NULL THEN turno
+                            ELSE 999999
+                        END ASC,
+                        fecha_ingreso DESC
+                    LIMIT 100
+                """, (nombre, usuario_name))
+                
+                expedientes_detallados = cursor.fetchall()
+                
+                usuarios_con_expedientes.append({
+                    'id': user_id,
+                    'nombre': nombre,
+                    'usuario': usuario_name,
+                    'correo': correo,
+                    'rol': rol,
+                    'es_admin': es_admin,
+                    'total_expedientes': stats[0],
+                    'activo_pendiente': stats[1],
+                    'activo_resuelto': stats[2],
+                    'inactivo_resuelto': stats[3],
+                    'pendiente': stats[4],
+                    'expedientes_detallados': [ExpedienteObj(exp) for exp in expedientes_detallados]
+                })
+        
         cursor.close()
         conn.close()
         
@@ -431,8 +613,11 @@ def obtener_estadisticas_generales():
             'porcentaje_asignados': round((expedientes_asignados / total_expedientes) * 100, 1) if total_expedientes > 0 else 0,
             'estados_count': estados_count,
             'responsables_count': responsables_count,
-            'responsables_detallado': responsables_detallado,
-            'responsables_con_expedientes': responsables_con_expedientes
+            'responsables_detallado': responsables_detallado,  # Para "Por Responsable" (usuarios individuales)
+            'responsables_con_expedientes': responsables_con_expedientes,  # Para "Por Responsable" (usuarios individuales)
+            'roles_detallado': roles_detallado,  # Para "Por Rol" (roles del sistema)
+            'roles_con_expedientes': roles_con_expedientes,  # Para "Por Rol" (roles del sistema)
+            'usuarios_con_expedientes': usuarios_con_expedientes
         }
         
     except Exception as e:
@@ -445,7 +630,10 @@ def obtener_estadisticas_generales():
             'estados_count': [],
             'responsables_count': [],
             'responsables_detallado': [],
-            'responsables_con_expedientes': {}
+            'responsables_con_expedientes': {},
+            'roles_detallado': [],
+            'roles_con_expedientes': {},
+            'usuarios_con_expedientes': []
         }
 
 def obtener_usuarios_con_expedientes():

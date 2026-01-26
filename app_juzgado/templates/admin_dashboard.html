@@ -132,6 +132,11 @@
                     </a>
                 </li> -->
                 <li class="nav-item">
+                    <a class="nav-link" id="roles-tab" data-bs-toggle="tab" href="#roles" role="tab">
+                        <i class="fas fa-user-tag"></i> Por Rol
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" id="responsables-tab" data-bs-toggle="tab" href="#responsables" role="tab">
                         <i class="fas fa-user-tie"></i> Por Responsable
                     </a>
@@ -296,6 +301,186 @@
                     </div>
                 </div>
 
+                <!-- Tab Por Rol -->
+                <div class="tab-pane fade" id="roles" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-user-tag"></i> Expedientes por Rol
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            {% if estadisticas.roles_detallado %}
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th>Rol</th>
+                                            <th>Total</th>
+                                            <th>Activo Pendiente</th>
+                                            <th>Pendiente</th>
+                                            <th>Activo Resuelto</th>
+                                            <th>Inactivo Resuelto</th>
+                                            <th>Porcentaje</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for rol_data in estadisticas.roles_detallado %}
+                                        <tr>
+                                            <td style="text-align: center; width: 50px;">
+                                                <!-- Botón principal con Bootstrap collapse -->
+                                                <button class="btn btn-sm btn-outline-secondary collapse-btn" 
+                                                        type="button" 
+                                                        data-bs-toggle="collapse" 
+                                                        data-bs-target="#expedientes-rol-{{ loop.index }}" 
+                                                        aria-expanded="false"
+                                                        title="Click para ver expedientes">
+                                                    <i class="fas fa-chevron-down"></i>
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <span
+                                                    class="badge badge-{{ 'success' if rol_data[0] == 'ESCRIBIENTE' else 'warning' if rol_data[0] == 'SUSTANCIADOR' else 'secondary' }}">
+                                                    <i
+                                                        class="fas fa-{{ 'pen' if rol_data[0] == 'ESCRIBIENTE' else 'gavel' if rol_data[0] == 'SUSTANCIADOR' else 'user' }}"></i>
+                                                    {{ rol_data[0] }}
+                                                </span>
+                                            </td>
+                                            <td><strong class="text-primary">{{ rol_data[1] }}</strong></td>
+                                            <td>
+                                                <span class="badge badge-warning">{{ rol_data[2] }}</span>
+                                                {% if rol_data[1] > 0 %}
+                                                <br><small class="text-muted">{{ ((rol_data[2] /
+                                                    rol_data[1]) * 100)|round(1) }}%</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-light">{{ rol_data[5] }}</span>
+                                                {% if rol_data[1] > 0 %}
+                                                <br><small class="text-muted">{{ ((rol_data[5] /
+                                                    rol_data[1]) * 100)|round(1) }}%</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-success">{{ rol_data[3] }}</span>
+                                                {% if rol_data[1] > 0 %}
+                                                <br><small class="text-muted">{{ ((rol_data[3] /
+                                                    rol_data[1]) * 100)|round(1) }}%</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-secondary">{{ rol_data[4] }}</span>
+                                                {% if rol_data[1] > 0 %}
+                                                <br><small class="text-muted">{{ ((rol_data[4] /
+                                                    rol_data[1]) * 100)|round(1) }}%</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ ((rol_data[1] / estadisticas.total_expedientes) *
+                                                100)|round(1) }}%</td>
+                                        </tr>
+                                        <!-- Fila de expansión con expedientes -->
+                                        <tr>
+                                            <td colspan="8" class="p-0 border-0">
+                                                <div class="collapse" id="expedientes-rol-{{ loop.index }}">
+                                                    <div class="card card-body bg-light">
+                                                        <h6 class="mb-3">
+                                                            <i class="fas fa-list"></i> Expedientes del rol {{ rol_data[0] }}
+                                                        </h6>
+                                                        {% if estadisticas.roles_con_expedientes[rol_data[0]] %}
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm table-bordered mb-0">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th>Radicado</th>
+                                                                        <th>Demandante</th>
+                                                                        <th>Demandado</th>
+                                                                        <th>Estado</th>
+                                                                        <th>Turno</th>
+                                                                        <th>Fecha Ingreso</th>
+                                                                        <th>Juzgado</th>
+                                                                        <th>Acciones</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {% for expediente in estadisticas.roles_con_expedientes[rol_data[0]] %}
+                                                                    <tr>
+                                                                        <td>
+                                                                            <strong>{{ expediente.radicado_corto or expediente.radicado_completo[:15] + '...' if expediente.radicado_completo else 'N/A' }}</strong>
+                                                                            {% if expediente.radicado_completo %}
+                                                                            <br><small class="text-muted">{{ expediente.radicado_completo }}</small>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                        <td>{{ expediente.demandante or '-' }}</td>
+                                                                        <td>{{ expediente.demandado or '-' }}</td>
+                                                                        <td>
+                                                                            <span class="badge badge-{{ 'warning' if expediente.estado == 'Activo Pendiente' else 'success' if expediente.estado == 'Activo Resuelto' else 'secondary' if expediente.estado == 'Inactivo Resuelto' else 'light' }}">
+                                                                                {{ expediente.estado or 'Sin estado' }}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td>
+                                                                            {% if expediente.turno %}
+                                                                                <span class="badge badge-info">{{ expediente.turno }}</span>
+                                                                            {% else %}
+                                                                                <small class="text-muted">-</small>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                        <td>
+                                                                            {% if expediente.fecha_ingreso %}
+                                                                            {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') if expediente.fecha_ingreso else '-' }}
+                                                                            {% else %}
+                                                                            -
+                                                                            {% endif %}
+                                                                        </td>
+                                                                        <td>{{ expediente.juzgado_origen or '-' }}</td>
+                                                                        <td>
+                                                                            <a href="{{ url_for('idvistaexpediente.vista_expediente') }}?radicado={{ expediente.radicado_corto or expediente.radicado_completo }}" class="btn btn-xs btn-outline-primary" title="Ver expediente">
+                                                                                <i class="fas fa-eye"></i>
+                                                                            </a>
+                                                                            <a href="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}?buscar_id={{ expediente.id }}" class="btn btn-xs btn-outline-info" title="Editar expediente">
+                                                                                <i class="fas fa-edit"></i>
+                                                                            </a>
+                                                                        </td>
+                                                                    </tr>
+                                                                    {% endfor %}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                        {% else %}
+                                                        <p class="text-muted mb-0">
+                                                            <i class="fas fa-inbox"></i> No hay expedientes asignados a este rol
+                                                        </p>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center text-muted">
+                                <i class="fas fa-user-tag fa-3x mb-3"></i>
+                                <h5>No hay expedientes asignados por rol</h5>
+                                <p><strong>Para ver los datos aquí:</strong></p>
+                                <ul class="text-left d-inline-block">
+                                    <li>Ve a <strong>Actualizar Expediente</strong></li>
+                                    <li>Busca un expediente por radicado</li>
+                                    <li>Asigna un <strong>Rol</strong> al expediente</li>
+                                    <li>Vuelve a este dashboard para ver los datos</li>
+                                </ul>
+                                <hr>
+                                <p class="small text-muted">
+                                    <i class="fas fa-lightbulb"></i>
+                                    Los datos se actualizarán automáticamente cuando haya expedientes con roles asignados.
+                                </p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Tab Por Responsable -->
                 <div class="tab-pane fade" id="responsables" role="tabpanel">
                     <div class="card">
@@ -324,7 +509,7 @@
                                             <th>Activo Pendiente</th>
                                             <th>Pendiente</th>
                                             <th>Activo Resuelto</th>
-                                            <th>Inactivo Resuelto</th>
+                                            <!-- <th>Inactivo Resuelto</th> -->
                                             <th>Porcentaje</th>
                                         </tr>
                                     </thead>
@@ -372,13 +557,13 @@
                                                     responsable_data[1]) * 100)|round(1) }}%</small>
                                                 {% endif %}
                                             </td>
-                                            <td>
+                                            <!-- <td>
                                                 <span class="badge badge-secondary">{{ responsable_data[4] }}</span>
                                                 {% if responsable_data[1] > 0 %}
                                                 <br><small class="text-muted">{{ ((responsable_data[4] /
                                                     responsable_data[1]) * 100)|round(1) }}%</small>
                                                 {% endif %}
-                                            </td>
+                                            </td> -->
                                             <td>{{ ((responsable_data[1] / estadisticas.total_expedientes) *
                                                 100)|round(1) }}%</td>
                                         </tr>
