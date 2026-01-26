@@ -402,19 +402,22 @@ def obtener_estadisticas_generales():
             """, (responsable_nombre,))
             
             expedientes = cursor_exp.fetchall()
+            
+            # Crear objetos tipo clase para que funcionen con notación de punto en el template
+            class ExpedienteObj:
+                def __init__(self, data):
+                    self.id = data[0]
+                    self.radicado_completo = data[1]
+                    self.radicado_corto = data[2]
+                    self.demandante = data[3]
+                    self.demandado = data[4]
+                    self.estado = data[5]
+                    self.fecha_ingreso = data[6]
+                    self.turno = data[7]
+                    self.juzgado_origen = data[8]
+            
             responsables_con_expedientes[responsable_nombre] = [
-                {
-                    'id': exp[0],
-                    'radicado_completo': exp[1],
-                    'radicado_corto': exp[2],
-                    'demandante': exp[3],
-                    'demandado': exp[4],
-                    'estado': exp[5],
-                    'fecha_ingreso': exp[6],
-                    'turno': exp[7],
-                    'juzgado_origen': exp[8],
-                }
-                for exp in expedientes
+                ExpedienteObj(exp) for exp in expedientes
             ]
             cursor_exp.close()
         

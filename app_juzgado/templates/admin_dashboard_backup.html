@@ -401,7 +401,7 @@
                                                                         <th>Estado</th>
                                                                         <th>Turno</th>
                                                                         <th>Fecha Ingreso</th>
-                                                                        <!-- <th>Juzgado</th> -->
+                                                                        <th>Juzgado</th>
                                                                         <th>Acciones</th>
                                                                     </tr>
                                                                 </thead>
@@ -423,8 +423,7 @@
                                                                         </td>
                                                                         <td>
                                                                             {% if expediente.turno %}
-                                                                                <span class="text-black">{{ expediente.turno }}</span>
-                                                                                <!-- <span class="badge badge-info">{{ expediente.turno }}</span> -->
+                                                                                <span class="badge badge-info">{{ expediente.turno }}</span>
                                                                             {% else %}
                                                                                 <small class="text-muted">-</small>
                                                                             {% endif %}
@@ -436,7 +435,7 @@
                                                                             -
                                                                             {% endif %}
                                                                         </td>
-                                                                        <!-- <td>{{ expediente.juzgado_origen or '-' }}</td> -->
+                                                                        <td>{{ expediente.juzgado_origen or '-' }}</td>
                                                                         <td>
                                                                             <a href="{{ url_for('idvistaexpediente.vista_expediente') }}?radicado={{ expediente.radicado_corto or expediente.radicado_completo }}" class="btn btn-xs btn-outline-primary" title="Ver expediente">
                                                                                 <i class="fas fa-eye"></i>
@@ -458,7 +457,6 @@
                                                     </div>
                                                 </div>
                                             </td>
-                                        </tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
@@ -520,5 +518,96 @@
         </div>
     </div>
 </div>
+
+<script>
+// Activar tooltips
+$(function () {
+    $('[data-toggle="tooltip"]').tooltip()
+});
+
+$(document).ready(function() {
+    console.log('🚀 Inicializando admin dashboard...');
+    
+    // Verificar que jQuery y Bootstrap están cargados
+    console.log('jQuery version:', $.fn.jquery);
+    console.log('Bootstrap collapse disponible:', typeof $.fn.collapse);
+    
+    // Inicializar tabs
+    $('#adminTabs a').on('click', function (e) {
+        e.preventDefault();
+        console.log('🔄 Tab clickeado:', $(this).attr('id'));
+        $(this).tab('show');
+    });
+    
+    // Activar el primer tab por defecto
+    $('#usuarios-tab').tab('show');
+    
+    // SOLUCIÓN SIMPLE PARA COLLAPSE
+    // Usar delegación de eventos para manejar botones que se cargan dinámicamente
+    $(document).on('click', '.collapse-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const $button = $(this);
+        const target = $button.attr('data-bs-target');
+        const $icon = $button.find('i');
+        
+        console.log('🔽 Click en collapse button, target:', target);
+        
+        if ($(target).length > 0) {
+            // Usar Bootstrap 5 Collapse API
+            const collapseElement = document.querySelector(target);
+            const bsCollapse = new bootstrap.Collapse(collapseElement, {
+                toggle: false
+            });
+            
+            // Toggle el collapse
+            if ($(target).hasClass('show')) {
+                bsCollapse.hide();
+                $icon.removeClass('fa-chevron-up').addClass('fa-chevron-down');
+                console.log('📁 Colapsando:', target);
+            } else {
+                bsCollapse.show();
+                $icon.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                console.log('📂 Expandiendo:', target);
+            }
+            
+            // Cambiar el icono inmediatamente
+            setTimeout(function() {
+                if ($(target).hasClass('show')) {
+                    $icon.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                    console.log('� Expandido:', target);
+                } else {
+                    $icon.removeClass('fa-chevron-up').addClass('fa-chevron-down');
+                    console.log('📁 Colapsado:', target);
+                }
+            }, 50);
+            
+        } else {
+            console.log('❌ Target no encontrado:', target);
+        }
+    });
+    
+    // Verificar elementos después de que se cargue el tab responsables
+    $('#responsables-tab').on('shown.bs.tab', function() {
+        setTimeout(function() {
+            const collapseButtons = $('.collapse-btn');
+            const collapseElements = $('.collapse');
+            
+            console.log('📊 Elementos en tab responsables:');
+            console.log('   - Botones collapse:', collapseButtons.length);
+            console.log('   - Elementos collapse:', collapseElements.length);
+            
+            collapseButtons.each(function(index) {
+                const target = $(this).attr('data-bs-target');
+                const exists = $(target).length > 0;
+                console.log(`   - Botón ${index + 1}: ${target} -> ${exists ? '✅' : '❌'}`);
+            });
+        }, 100);
+    });
+    
+    console.log('✅ Admin dashboard inicializado');
+});
+</script>
 
 {% endblock %}
