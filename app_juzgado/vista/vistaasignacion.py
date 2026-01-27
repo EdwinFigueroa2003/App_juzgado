@@ -138,11 +138,12 @@ def obtener_expedientes_por_usuario(usuario_id, rol_usuario):
         
         nombre_completo, nombre_usuario = user_info
         
-        # Query OPTIMIZADO - Sin subconsultas complejas, usando JOINs simples
+        # Query OPTIMIZADO - Sistema Híbrido: priorizar asignación específica
         query = """
             SELECT 
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
                 e.estado, e.juzgado_origen, e.responsable, e.fecha_ingreso, e.turno,
+                e.usuario_asignado_id,
                 i_recent.solicitud as solicitud_reciente,
                 COALESCE(ing_stats.total_ingresos, 0) as total_ingresos,
                 COALESCE(est_stats.total_estados, 0) as total_estados,
@@ -167,8 +168,16 @@ def obtener_expedientes_por_usuario(usuario_id, rol_usuario):
                 FROM ingresos 
                 ORDER BY expediente_id, fecha_ingreso DESC
             ) i_recent ON e.id = i_recent.expediente_id
-            WHERE (e.responsable = %s OR e.responsable = %s OR e.responsable = %s)
+            WHERE (
+                -- Prioridad 1: Asignado específicamente a este usuario
+                e.usuario_asignado_id = %s
+                OR 
+                -- Prioridad 2: Asignado al rol del usuario (solo si no hay asignación específica)
+                (e.usuario_asignado_id IS NULL AND (e.responsable = %s OR e.responsable = %s OR e.responsable = %s))
+            )
             ORDER BY 
+                -- Priorizar expedientes asignados específicamente
+                CASE WHEN e.usuario_asignado_id = %s THEN 1 ELSE 2 END,
                 CASE 
                     WHEN e.estado = 'Activo Pendiente' THEN 1
                     WHEN e.estado = 'Activo Resuelto' THEN 2
@@ -184,8 +193,8 @@ def obtener_expedientes_por_usuario(usuario_id, rol_usuario):
             LIMIT 100
         """
         
-        # Buscar por: rol, nombre completo, nombre de usuario
-        cursor.execute(query, (rol_usuario, nombre_completo, nombre_usuario))
+        # Buscar por: usuario_id específico, rol, nombre completo, nombre de usuario
+        cursor.execute(query, (usuario_id, rol_usuario, nombre_completo, nombre_usuario, usuario_id))
         resultados = cursor.fetchall()
         
         expedientes = []
@@ -204,14 +213,16 @@ def obtener_expedientes_por_usuario(usuario_id, rol_usuario):
                 'fecha_ultima_actualizacion': row[8],
                 'fecha_ultima_actuacion_real': row[8],
                 'turno': row[9],
-                'solicitud': row[10] or '',  # Solicitud más reciente optimizada
-                'tipo_solicitud': row[10] or '',  # Mismo valor para tipo_solicitud
-                'tipo_tramite': row[10] or '',    # Mantener tipo_tramite para compatibilidad con template
+                'usuario_asignado_id': row[10],  # Nueva columna
+                'asignacion_especifica': row[10] is not None,  # Indica si tiene asignación específica
+                'solicitud': row[11] or '',  # Actualizar índices
+                'tipo_solicitud': row[11] or '',  # Mismo valor para tipo_solicitud
+                'tipo_tramite': row[11] or '',    # Mantener tipo_tramite para compatibilidad con template
                 'ubicacion_actual': '',  # No disponible en tabla expediente
-                'total_ingresos': row[11] or 0,  # Actualizar índices
-                'total_estados': row[12] or 0,   # Actualizar índices
-                'ultimo_ingreso': row[13],       # Actualizar índices
-                'ultimo_estado': row[14]         # Actualizar índices
+                'total_ingresos': row[12] or 0,  # Actualizar índices
+                'total_estados': row[13] or 0,   # Actualizar índices
+                'ultimo_ingreso': row[14],       # Actualizar índices
+                'ultimo_estado': row[15]         # Actualizar índices
             })
         
         cursor.close()
@@ -308,10 +319,22 @@ def obtener_estadisticas_generales():
         cursor.execute("SELECT COUNT(*) FROM expediente")
         total_expedientes = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM expediente WHERE responsable IS NOT NULL AND responsable != ''")
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM expediente 
+            WHERE (
+                usuario_asignado_id IS NOT NULL 
+                OR 
+                (responsable IS NOT NULL AND responsable != '')
+            )
+        """)
         expedientes_asignados = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM expediente WHERE responsable IS NULL OR responsable = ''")
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM expediente 
+            WHERE usuario_asignado_id IS NULL AND (responsable IS NULL OR responsable = '')
+        """)
         expedientes_sin_asignar = cursor.fetchone()[0]
         
         # Estadísticas por estado
@@ -391,35 +414,49 @@ def obtener_estadisticas_generales():
         for rol_data in roles_detallado:
             print(f"   - {rol_data[0]}: {rol_data[1]} expedientes")
         
-        # Estadísticas POR RESPONSABLE (usuarios específicos, excluyendo roles del sistema)
+        # Estadísticas POR RESPONSABLE (usuarios específicos con asignación híbrida)
+        # Incluir tanto asignaciones por responsable como por usuario_asignado_id
         if roles_sistema:
             placeholders = ','.join(['%s'] * len(roles_sistema))
             cursor.execute(f"""
                 SELECT 
-                    responsable, 
+                    COALESCE(u.nombre, e.responsable) as responsable_nombre,
                     COUNT(*) as total,
-                    COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
-                    COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
-                    COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                    COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
-                FROM expediente 
-                WHERE responsable IS NOT NULL AND responsable != ''
-                AND responsable NOT IN ({placeholders})
-                GROUP BY responsable 
+                    COUNT(CASE WHEN e.estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
+                    COUNT(CASE WHEN e.estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
+                    COUNT(CASE WHEN e.estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
+                    COUNT(CASE WHEN e.estado = 'Pendiente' THEN 1 END) as pendiente
+                FROM expediente e
+                LEFT JOIN usuarios u ON e.usuario_asignado_id = u.id
+                WHERE (
+                    -- Asignación específica por usuario_asignado_id
+                    e.usuario_asignado_id IS NOT NULL
+                    OR 
+                    -- Asignación tradicional por responsable (excluyendo roles del sistema)
+                    (e.responsable IS NOT NULL AND e.responsable != '' AND e.responsable NOT IN ({placeholders}))
+                )
+                GROUP BY COALESCE(u.nombre, e.responsable)
                 ORDER BY COUNT(*) DESC
             """, roles_sistema)
         else:
             cursor.execute("""
                 SELECT 
-                    responsable, 
+                    COALESCE(u.nombre, e.responsable) as responsable_nombre,
                     COUNT(*) as total,
-                    COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
-                    COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
-                    COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                    COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
-                FROM expediente 
-                WHERE responsable IS NOT NULL AND responsable != ''
-                GROUP BY responsable 
+                    COUNT(CASE WHEN e.estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
+                    COUNT(CASE WHEN e.estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
+                    COUNT(CASE WHEN e.estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
+                    COUNT(CASE WHEN e.estado = 'Pendiente' THEN 1 END) as pendiente
+                FROM expediente e
+                LEFT JOIN usuarios u ON e.usuario_asignado_id = u.id
+                WHERE (
+                    -- Asignación específica por usuario_asignado_id
+                    e.usuario_asignado_id IS NOT NULL
+                    OR 
+                    -- Asignación tradicional por responsable
+                    (e.responsable IS NOT NULL AND e.responsable != '')
+                )
+                GROUP BY COALESCE(u.nombre, e.responsable)
                 ORDER BY COUNT(*) DESC
             """)
         
@@ -441,7 +478,7 @@ def obtener_estadisticas_generales():
         # Mantener el formato anterior para compatibilidad (ahora solo para roles)
         responsables_count = [(row[0], row[1]) for row in roles_detallado]
         
-        # Obtener expedientes detallados para cada responsable individual (no roles)
+        # Obtener expedientes detallados para cada responsable individual (incluye asignación híbrida)
         responsables_con_expedientes = {}
         for responsable_data in responsables_detallado:
             responsable_nombre = responsable_data[0]
@@ -449,91 +486,46 @@ def obtener_estadisticas_generales():
             cursor_exp = conn.cursor()
             cursor_exp.execute("""
                 SELECT 
-                    id, 
-                    radicado_completo, 
-                    radicado_corto, 
-                    demandante, 
-                    demandado,
-                    estado,
-                    fecha_ingreso,
-                    turno,
-                    juzgado_origen
-                FROM expediente 
-                WHERE responsable = %s
+                    e.id, 
+                    e.radicado_completo, 
+                    e.radicado_corto, 
+                    e.demandante, 
+                    e.demandado,
+                    e.estado,
+                    e.fecha_ingreso,
+                    e.turno,
+                    e.juzgado_origen
+                FROM expediente e
+                LEFT JOIN usuarios u ON e.usuario_asignado_id = u.id
+                WHERE (
+                    -- Asignación específica por usuario_asignado_id
+                    u.nombre = %s
+                    OR 
+                    -- Asignación tradicional por responsable
+                    e.responsable = %s
+                )
                 ORDER BY 
                     CASE 
-                        WHEN estado = 'Activo Pendiente' THEN 1
-                        WHEN estado = 'Activo Resuelto' THEN 2
-                        WHEN estado = 'Inactivo Resuelto' THEN 3
-                        WHEN estado = 'Pendiente' THEN 4
+                        WHEN e.estado = 'Activo Pendiente' THEN 1
+                        WHEN e.estado = 'Activo Resuelto' THEN 2
+                        WHEN e.estado = 'Inactivo Resuelto' THEN 3
+                        WHEN e.estado = 'Pendiente' THEN 4
                         ELSE 5
                     END,
                     CASE 
-                        WHEN turno IS NOT NULL THEN turno
+                        WHEN e.turno IS NOT NULL THEN e.turno
                         ELSE 999999
                     END ASC,
-                    fecha_ingreso DESC
+                    e.fecha_ingreso DESC
                 LIMIT 100
-            """, (responsable_nombre,))
+            """, (responsable_nombre, responsable_nombre))
             
             expedientes = cursor_exp.fetchall()
             responsables_con_expedientes[responsable_nombre] = [
                 ExpedienteObj(exp) for exp in expedientes
             ]
             cursor_exp.close()
-        for responsable_data in responsables_detallado:
-            responsable_nombre = responsable_data[0]
-            
-            cursor_exp = conn.cursor()
-            cursor_exp.execute("""
-                SELECT 
-                    id, 
-                    radicado_completo, 
-                    radicado_corto, 
-                    demandante, 
-                    demandado,
-                    estado,
-                    fecha_ingreso,
-                    turno,
-                    juzgado_origen
-                FROM expediente 
-                WHERE responsable = %s
-                ORDER BY 
-                    CASE 
-                        WHEN estado = 'Activo Pendiente' THEN 1
-                        WHEN estado = 'Activo Resuelto' THEN 2
-                        WHEN estado = 'Inactivo Resuelto' THEN 3
-                        WHEN estado = 'Pendiente' THEN 4
-                        ELSE 5
-                    END,
-                    CASE 
-                        WHEN turno IS NOT NULL THEN turno
-                        ELSE 999999
-                    END ASC,
-                    fecha_ingreso DESC
-                LIMIT 100
-            """, (responsable_nombre,))
-            
-            expedientes = cursor_exp.fetchall()
-            
-            # Crear objetos tipo clase para que funcionen con notación de punto en el template
-            class ExpedienteObj:
-                def __init__(self, data):
-                    self.id = data[0]
-                    self.radicado_completo = data[1]
-                    self.radicado_corto = data[2]
-                    self.demandante = data[3]
-                    self.demandado = data[4]
-                    self.estado = data[5]
-                    self.fecha_ingreso = data[6]
-                    self.turno = data[7]
-                    self.juzgado_origen = data[8]
-            
-            responsables_con_expedientes[responsable_nombre] = [
-                ExpedienteObj(exp) for exp in expedientes
-            ]
-            cursor_exp.close()
-        
+
         # Obtener usuarios con expedientes asignados específicamente (no por rol)
         usuarios_con_expedientes = []
         cursor.execute("""
@@ -548,43 +540,55 @@ def obtener_estadisticas_generales():
         for usuario in usuarios:
             user_id, nombre, usuario_name, correo, rol, es_admin = usuario
             
-            # Buscar expedientes asignados específicamente a este usuario (por nombre, no por rol)
+            # Buscar expedientes asignados específicamente a este usuario (híbrido: por usuario_asignado_id Y por nombre)
             cursor.execute("""
                 SELECT 
                     COUNT(*) as total,
-                    COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
-                    COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
-                    COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                    COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
-                FROM expediente 
-                WHERE responsable = %s OR responsable = %s
-            """, (nombre, usuario_name))
+                    COUNT(CASE WHEN e.estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
+                    COUNT(CASE WHEN e.estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
+                    COUNT(CASE WHEN e.estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
+                    COUNT(CASE WHEN e.estado = 'Pendiente' THEN 1 END) as pendiente
+                FROM expediente e
+                WHERE (
+                    -- Asignación específica por usuario_asignado_id
+                    e.usuario_asignado_id = %s
+                    OR 
+                    -- Asignación tradicional por responsable (nombre o usuario)
+                    e.responsable = %s OR e.responsable = %s
+                )
+            """, (user_id, nombre, usuario_name))
             
             stats = cursor.fetchone()
             
             if stats[0] > 0:  # Solo incluir usuarios con expedientes asignados
-                # Obtener expedientes detallados
+                # Obtener expedientes detallados (híbrido)
                 cursor.execute("""
                     SELECT 
-                        id, radicado_completo, radicado_corto, demandante, demandado,
-                        estado, fecha_ingreso, turno, juzgado_origen
-                    FROM expediente 
-                    WHERE responsable = %s OR responsable = %s
+                        e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
+                        e.estado, e.fecha_ingreso, e.turno, e.juzgado_origen
+                    FROM expediente e
+                    WHERE (
+                        -- Asignación específica por usuario_asignado_id
+                        e.usuario_asignado_id = %s
+                        OR 
+                        -- Asignación tradicional por responsable
+                        e.responsable = %s OR e.responsable = %s
+                    )
                     ORDER BY 
                         CASE 
-                            WHEN estado = 'Activo Pendiente' THEN 1
-                            WHEN estado = 'Activo Resuelto' THEN 2
-                            WHEN estado = 'Inactivo Resuelto' THEN 3
-                            WHEN estado = 'Pendiente' THEN 4
+                            WHEN e.estado = 'Activo Pendiente' THEN 1
+                            WHEN e.estado = 'Activo Resuelto' THEN 2
+                            WHEN e.estado = 'Inactivo Resuelto' THEN 3
+                            WHEN e.estado = 'Pendiente' THEN 4
                             ELSE 5
                         END,
                         CASE 
-                            WHEN turno IS NOT NULL THEN turno
+                            WHEN e.turno IS NOT NULL THEN e.turno
                             ELSE 999999
                         END ASC,
-                        fecha_ingreso DESC
+                        e.fecha_ingreso DESC
                     LIMIT 100
-                """, (nombre, usuario_name))
+                """, (user_id, nombre, usuario_name))
                 
                 expedientes_detallados = cursor.fetchall()
                 
@@ -657,30 +661,45 @@ def obtener_usuarios_con_expedientes():
         for usuario in usuarios:
             user_id, nombre, usuario_name, correo, rol, es_admin = usuario
             
-            # Obtener expedientes asignados a este usuario (por rol Y por nombre específico)
+            # Obtener expedientes asignados a este usuario (híbrido: por usuario_asignado_id, rol Y por nombre específico)
             if rol:
-                # Buscar por ROL, nombre completo Y nombre de usuario (igual que en asignaciones)
+                # Buscar por usuario_asignado_id, ROL, nombre completo Y nombre de usuario (sistema híbrido)
                 cursor.execute("""
                     SELECT 
                         COUNT(*) as total,
-                        COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
-                        COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
-                        COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                        COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
-                    FROM expediente 
-                    WHERE (responsable = %s OR responsable = %s OR responsable = %s)
-                """, (rol, nombre, usuario_name))
+                        COUNT(CASE WHEN e.estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
+                        COUNT(CASE WHEN e.estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
+                        COUNT(CASE WHEN e.estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
+                        COUNT(CASE WHEN e.estado = 'Pendiente' THEN 1 END) as pendiente
+                    FROM expediente e
+                    WHERE (
+                        -- Prioridad 1: Asignación específica por usuario_asignado_id
+                        e.usuario_asignado_id = %s
+                        OR 
+                        -- Prioridad 2: Asignación por rol o nombre (solo si no hay asignación específica)
+                        (e.usuario_asignado_id IS NULL AND (e.responsable = %s OR e.responsable = %s OR e.responsable = %s))
+                    )
+                """, (user_id, rol, nombre, usuario_name))
                 
                 stats = cursor.fetchone()
                 
-                # Obtener algunos expedientes recientes
+                # Obtener algunos expedientes recientes (híbrido)
                 cursor.execute("""
-                    SELECT radicado_completo, radicado_corto, demandante, demandado, estado
-                    FROM expediente 
-                    WHERE (responsable = %s OR responsable = %s OR responsable = %s)
-                    ORDER BY fecha_ingreso DESC
+                    SELECT e.radicado_completo, e.radicado_corto, e.demandante, e.demandado, e.estado
+                    FROM expediente e
+                    WHERE (
+                        -- Prioridad 1: Asignación específica por usuario_asignado_id
+                        e.usuario_asignado_id = %s
+                        OR 
+                        -- Prioridad 2: Asignación por rol o nombre
+                        (e.usuario_asignado_id IS NULL AND (e.responsable = %s OR e.responsable = %s OR e.responsable = %s))
+                    )
+                    ORDER BY 
+                        -- Priorizar expedientes asignados específicamente
+                        CASE WHEN e.usuario_asignado_id = %s THEN 1 ELSE 2 END,
+                        e.fecha_ingreso DESC
                     LIMIT 5
-                """, (rol, nombre, usuario_name))
+                """, (user_id, rol, nombre, usuario_name, user_id))
                 
                 expedientes_recientes = cursor.fetchall()
             else:

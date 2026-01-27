@@ -440,7 +440,10 @@ def vista_actualizarexpediente():
             flash(f'Expediente recargado: {expediente["radicado_completo"] or expediente["radicado_corto"]}', 'info')
     
     logger.info("=== FIN vista_actualizarexpediente - Renderizando template ===")
-    return render_template('actualizarexpediente.html', expediente=expediente, roles=roles, estadisticas=estadisticas)
+    return render_template('actualizarexpediente.html', 
+                         expediente=expediente, 
+                         roles=roles, 
+                         estadisticas=estadisticas)
 
 @vistaactualizarexpediente.route('/api/buscar_personas', methods=['GET'])
 @login_required
@@ -1079,119 +1082,14 @@ def asignacion_masiva():
             logger.info("Ejecutando limpieza de responsables")
             return limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite)
         
-        # Construir la consulta según el criterio (lógica original para roles específicos)
-        if criterio == 'estado':
-            logger.info(f"Procesando criterio 'estado' con valor: '{valor_criterio}'")
-            if not valor_criterio:
-                logger.warning(f"Valor de criterio vacío para estado: '{valor_criterio}'")
-                flash('Debe especificar un estado para el criterio seleccionado', 'error')
-                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            
-            query = """
-                UPDATE expediente 
-                SET responsable = %s
-                WHERE estado = %s
-            """
-            params = (rol_asignar, valor_criterio)
-            
-            # Agregar límite si se especifica
-            if limite:
-                query += " AND id IN (SELECT id FROM expediente WHERE estado = %s ORDER BY fecha_ingreso ASC LIMIT %s)"
-                params = (rol_asignar, valor_criterio, valor_criterio, limite)
-            
-            logger.info(f"Query a ejecutar: {query}")
-            logger.info(f"Parámetros: {params}")
-            cursor.execute(query, params)
-            
-        elif criterio == 'sin_responsable':
-            query = """
-                UPDATE expediente 
-                SET responsable = %s
-                WHERE responsable IS NULL OR responsable = ''
-            """
-            params = (rol_asignar,)
-            
-            # Agregar límite si se especifica
-            if limite:
-                query += " AND id IN (SELECT id FROM expediente WHERE responsable IS NULL OR responsable = '' ORDER BY fecha_ingreso ASC LIMIT %s)"
-                params = (rol_asignar, limite)
-            
-            cursor.execute(query, params)
-            
-        elif criterio == 'tipo_solicitud':
-            if not valor_criterio:
-                flash('Debe especificar un tipo de trámite para el criterio seleccionado', 'error')
-                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            # Determinar la columna real a usar (tipo_solicitud o tipo_tramite)
-            tipo_col = _detectar_columna_tipo(cursor)
-            if not tipo_col:
-                flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'error')
-                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            
-            query = f"""
-                UPDATE expediente 
-                SET responsable = %s
-                WHERE {tipo_col} ILIKE %s
-            """
-            params = (rol_asignar, f'%{valor_criterio}%')
-            
-            # Agregar límite si se especifica
-            if limite:
-                query += f" AND id IN (SELECT id FROM expediente WHERE {tipo_col} ILIKE %s ORDER BY fecha_ingreso ASC LIMIT %s)"
-                params = (rol_asignar, f'%{valor_criterio}%', f'%{valor_criterio}%', limite)
-            
-            cursor.execute(query, params)
-            
-        elif criterio == 'juzgado_origen':
-            if not valor_criterio:
-                flash('Debe especificar un juzgado de origen para el criterio seleccionado', 'error')
-                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            
-            query = """
-                UPDATE expediente 
-                SET responsable = %s
-                WHERE juzgado_origen ILIKE %s
-            """
-            params = (rol_asignar, f'%{valor_criterio}%')
-            
-            # Agregar límite si se especifica
-            if limite:
-                query += " AND id IN (SELECT id FROM expediente WHERE juzgado_origen ILIKE %s ORDER BY fecha_ingreso ASC LIMIT %s)"
-                params = (rol_asignar, f'%{valor_criterio}%', f'%{valor_criterio}%', limite)
-            
-            cursor.execute(query, params)
-            
-        elif criterio == 'todos':
-            if not confirm_todos():
-                flash('Operación cancelada por el usuario', 'warning')
-                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
-            
-            query = """
-                UPDATE expediente 
-                SET responsable = %s
-            """
-            params = (rol_asignar,)
-            
-            # Agregar límite si se especifica
-            if limite:
-                query += " WHERE id IN (SELECT id FROM expediente ORDER BY fecha_ingreso ASC LIMIT %s)"
-                params = (rol_asignar, limite)
-            
-            cursor.execute(query, params)
+        # Manejar asignación por rol específico (ESCRIBIENTE o SUSTANCIADOR)
+        # Ahora distribuye entre usuarios de ese rol
+        if rol_asignar in ['ESCRIBIENTE', 'SUSTANCIADOR']:
+            logger.info(f"Ejecutando distribución por rol específico: {rol_asignar}")
+            return asignacion_por_rol_especifico(criterio, valor_criterio, rol_asignar, cursor, conn, limite)
         
-        expedientes_actualizados = cursor.rowcount
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        if expedientes_actualizados > 0:
-            mensaje = f'Asignación masiva exitosa: {expedientes_actualizados} expediente(s) asignado(s) al rol {rol_asignar}'
-            if limite:
-                mensaje += f' (limitado a {limite} expedientes)'
-            flash(mensaje, 'success')
-        else:
-            flash('No se encontraron expedientes que cumplan con el criterio especificado', 'warning')
-        
+        # Si llegamos aquí, es un rol no reconocido
+        flash(f'Rol no reconocido: {rol_asignar}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
         
     except Exception as e:
@@ -1199,8 +1097,11 @@ def asignacion_masiva():
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
 
 def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite=None):
-    """Limpia responsables de manera masiva según criterios"""
+    """Limpia responsables y asignaciones específicas de manera masiva según criterios"""
     try:
+        logger.info("=== INICIO limpiar_responsables_masivo ===")
+        logger.info(f"Criterio: '{criterio}', Valor: '{valor_criterio}', Límite: {limite}")
+        
         expedientes_actualizados = 0
         
         if criterio == 'estado':
@@ -1208,24 +1109,35 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite=N
                 flash('Debe especificar un estado para el criterio seleccionado', 'error')
                 return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
+            # Contar expedientes antes de limpiar
+            cursor.execute("""
+                SELECT COUNT(*) FROM expediente 
+                WHERE estado = %s AND (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL)
+            """, (valor_criterio,))
+            count_antes = cursor.fetchone()[0]
+            logger.info(f"📊 Expedientes con estado '{valor_criterio}' y asignaciones: {count_antes}")
+            
             query = """
                 UPDATE expediente 
-                SET responsable = NULL
-                WHERE estado = %s AND responsable IS NOT NULL
+                SET responsable = NULL, usuario_asignado_id = NULL
+                WHERE estado = %s AND (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL)
             """
             params = (valor_criterio,)
             
             # Agregar límite si se especifica
             if limite:
-                query += " AND id IN (SELECT id FROM expediente WHERE estado = %s AND responsable IS NOT NULL ORDER BY fecha_ingreso ASC LIMIT %s)"
+                query += " AND id IN (SELECT id FROM expediente WHERE estado = %s AND (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL) ORDER BY fecha_ingreso ASC LIMIT %s)"
                 params = (valor_criterio, valor_criterio, limite)
+                logger.info(f"🔢 Aplicando límite de {limite} expedientes")
             
+            logger.info(f"🔄 Ejecutando limpieza...")
             cursor.execute(query, params)
             expedientes_actualizados = cursor.rowcount
+            logger.info(f"✅ Expedientes actualizados: {expedientes_actualizados}")
             
         elif criterio == 'sin_responsable':
-            # No tiene sentido limpiar expedientes que ya no tienen responsable
-            flash('Los expedientes sin responsable ya no tienen responsable asignado', 'warning')
+            # En el sistema híbrido, esto limpia expedientes que ya no tienen ninguna asignación
+            flash('Los expedientes sin responsable ni usuario asignado ya no tienen asignaciones', 'warning')
             return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
             
         elif criterio == 'tipo_solicitud':
@@ -1239,14 +1151,14 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite=N
             
             query = f"""
                 UPDATE expediente 
-                SET responsable = NULL
-                WHERE {tipo_col} ILIKE %s AND responsable IS NOT NULL
+                SET responsable = NULL, usuario_asignado_id = NULL
+                WHERE {tipo_col} ILIKE %s AND (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL)
             """
             params = (f'%{valor_criterio}%',)
             
             # Agregar límite si se especifica
             if limite:
-                query += f" AND id IN (SELECT id FROM expediente WHERE {tipo_col} ILIKE %s AND responsable IS NOT NULL ORDER BY fecha_ingreso ASC LIMIT %s)"
+                query += f" AND id IN (SELECT id FROM expediente WHERE {tipo_col} ILIKE %s AND (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL) ORDER BY fecha_ingreso ASC LIMIT %s)"
                 params = (f'%{valor_criterio}%', f'%{valor_criterio}%', limite)
             
             cursor.execute(query, params)
@@ -1259,14 +1171,14 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite=N
             
             query = """
                 UPDATE expediente 
-                SET responsable = NULL
-                WHERE juzgado_origen ILIKE %s AND responsable IS NOT NULL
+                SET responsable = NULL, usuario_asignado_id = NULL
+                WHERE juzgado_origen ILIKE %s AND (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL)
             """
             params = (f'%{valor_criterio}%',)
             
             # Agregar límite si se especifica
             if limite:
-                query += " AND id IN (SELECT id FROM expediente WHERE juzgado_origen ILIKE %s AND responsable IS NOT NULL ORDER BY fecha_ingreso ASC LIMIT %s)"
+                query += " AND id IN (SELECT id FROM expediente WHERE juzgado_origen ILIKE %s AND (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL) ORDER BY fecha_ingreso ASC LIMIT %s)"
                 params = (f'%{valor_criterio}%', f'%{valor_criterio}%', limite)
             
             cursor.execute(query, params)
@@ -1275,14 +1187,14 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite=N
         elif criterio == 'todos':
             query = """
                 UPDATE expediente 
-                SET responsable = NULL
-                WHERE responsable IS NOT NULL
+                SET responsable = NULL, usuario_asignado_id = NULL
+                WHERE (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL)
             """
             params = ()
             
             # Agregar límite si se especifica
             if limite:
-                query += " AND id IN (SELECT id FROM expediente WHERE responsable IS NOT NULL ORDER BY fecha_ingreso ASC LIMIT %s)"
+                query += " AND id IN (SELECT id FROM expediente WHERE (responsable IS NOT NULL OR usuario_asignado_id IS NOT NULL) ORDER BY fecha_ingreso ASC LIMIT %s)"
                 params = (limite,)
             
             cursor.execute(query, params)
@@ -1293,12 +1205,12 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite=N
         conn.close()
         
         if expedientes_actualizados > 0:
-            mensaje = f'Limpieza masiva exitosa: Se removió el responsable de {expedientes_actualizados} expediente(s)'
+            mensaje = f'Limpieza masiva exitosa: Se removieron las asignaciones (responsable y usuario específico) de {expedientes_actualizados} expediente(s)'
             if limite:
                 mensaje += f' (limitado a {limite} expedientes)'
             flash(mensaje, 'success')
         else:
-            flash('No se encontraron expedientes con responsable asignado que cumplan con el criterio especificado', 'warning')
+            flash('No se encontraron expedientes con asignaciones que cumplan con el criterio especificado', 'warning')
         
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
         
@@ -1307,10 +1219,12 @@ def limpiar_responsables_masivo(criterio, valor_criterio, cursor, conn, limite=N
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
 
 def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn, limite=None):
-    """Maneja la asignación aleatoria de roles"""
+    """Distribuye expedientes aleatoriamente entre usuarios específicos de cada rol"""
     import random
     
     try:
+        logger.info("=== INICIO asignacion_aleatoria_masiva (distribución por usuarios) ===")
+        
         # Obtener los expedientes que cumplen el criterio
         expedientes_ids = []
         
@@ -1384,39 +1298,343 @@ def asignacion_aleatoria_masiva(criterio, valor_criterio, cursor, conn, limite=N
             flash('No se encontraron expedientes que cumplan con el criterio especificado', 'warning')
             return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
         
-        # Asignar roles aleatorios
-        roles_disponibles = ['ESCRIBIENTE', 'SUSTANCIADOR']
-        contador_escribientes = 0
-        contador_sustanciadores = 0
+        logger.info(f"Expedientes encontrados: {len(expedientes_ids)}")
         
-        for expediente_id in expedientes_ids:
-            rol_aleatorio = random.choice(roles_disponibles)
+        # Obtener usuarios activos por rol (solo usuarios con rol asignado)
+        cursor.execute("""
+            SELECT u.id, u.nombre, r.nombre_rol
+            FROM usuarios u
+            INNER JOIN roles r ON u.rol_id = r.id
+            WHERE u.activo = TRUE AND r.nombre_rol IS NOT NULL
+            ORDER BY r.nombre_rol, u.nombre
+        """)
+        usuarios_activos = cursor.fetchall()
+        
+        if not usuarios_activos:
+            flash('No hay usuarios activos con roles asignados', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        logger.info(f"👥 Usuarios activos con rol encontrados: {len(usuarios_activos)}")
+        for user_id, nombre, rol in usuarios_activos:
+            logger.info(f"   - {nombre} (ID: {user_id}, Rol: {rol})")
+        
+        # Agrupar usuarios por rol
+        usuarios_por_rol = {}
+        for user_id, nombre, rol in usuarios_activos:
+            if rol not in usuarios_por_rol:
+                usuarios_por_rol[rol] = []
+            usuarios_por_rol[rol].append({
+                'id': user_id,
+                'nombre': nombre,
+                'rol': rol
+            })
+        
+        logger.info(f"Usuarios por rol: {[(rol, len(users)) for rol, users in usuarios_por_rol.items()]}")
+        
+        # Crear lista de todos los usuarios disponibles para distribución aleatoria
+        todos_usuarios = []
+        for rol, usuarios in usuarios_por_rol.items():
+            todos_usuarios.extend(usuarios)
+        
+        if not todos_usuarios:
+            flash('No hay usuarios disponibles para asignación', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        # Mezclar la lista de usuarios para distribución aleatoria
+        random.shuffle(todos_usuarios)
+        
+        # Distribuir expedientes entre usuarios
+        contador_por_usuario = {}
+        total_usuarios = len(todos_usuarios)
+        
+        logger.info(f"🔄 INICIANDO DISTRIBUCIÓN:")
+        logger.info(f"   - Total expedientes a distribuir: {len(expedientes_ids)}")
+        logger.info(f"   - Total usuarios disponibles: {total_usuarios}")
+        logger.info(f"   - Usuarios disponibles: {[u['nombre'] + ' (' + u['rol'] + ')' for u in todos_usuarios]}")
+        
+        for i, expediente_id in enumerate(expedientes_ids):
+            # Seleccionar usuario usando distribución circular para equidad
+            usuario_seleccionado = todos_usuarios[i % total_usuarios]
+            user_id = usuario_seleccionado['id']
+            nombre = usuario_seleccionado['nombre']
+            rol = usuario_seleccionado['rol']
             
+            logger.info(f"📋 Expediente {i+1}/{len(expedientes_ids)} (ID: {expediente_id}):")
+            logger.info(f"   - Asignando a: {nombre} (ID: {user_id}, Rol: {rol})")
+            
+            # Verificar estado actual del expediente antes de actualizar
+            cursor.execute("SELECT responsable, usuario_asignado_id FROM expediente WHERE id = %s", (expediente_id,))
+            estado_anterior = cursor.fetchone()
+            logger.info(f"   - Estado anterior: responsable='{estado_anterior[0]}', usuario_asignado_id={estado_anterior[1]}")
+            
+            # Actualizar expediente con asignación específica
             cursor.execute("""
                 UPDATE expediente 
-                SET responsable = %s
+                SET usuario_asignado_id = %s, responsable = %s
                 WHERE id = %s
-            """, (rol_aleatorio, expediente_id))
+            """, (user_id, rol, expediente_id))
             
-            if rol_aleatorio == 'ESCRIBIENTE':
-                contador_escribientes += 1
+            # Verificar que la actualización fue exitosa
+            if cursor.rowcount == 1:
+                logger.info(f"   ✅ Actualización exitosa")
+                
+                # Verificar estado después de actualizar
+                cursor.execute("SELECT responsable, usuario_asignado_id FROM expediente WHERE id = %s", (expediente_id,))
+                estado_posterior = cursor.fetchone()
+                logger.info(f"   - Estado posterior: responsable='{estado_posterior[0]}', usuario_asignado_id={estado_posterior[1]}")
             else:
-                contador_sustanciadores += 1
+                logger.error(f"   ❌ Error: No se actualizó ningún registro (rowcount: {cursor.rowcount})")
+            
+            # Contar asignaciones por usuario
+            if nombre not in contador_por_usuario:
+                contador_por_usuario[nombre] = {'count': 0, 'rol': rol}
+            contador_por_usuario[nombre]['count'] += 1
+        
+        logger.info(f"💾 FINALIZANDO TRANSACCIÓN:")
+        logger.info(f"   - Realizando commit de {len(expedientes_ids)} actualizaciones")
         
         conn.commit()
+        
+        logger.info(f"   ✅ Commit exitoso")
+        
+        # Verificar algunas asignaciones después del commit
+        logger.info(f"🔍 VERIFICACIÓN POST-COMMIT (muestra de 3 expedientes):")
+        for i, expediente_id in enumerate(expedientes_ids[:3]):
+            cursor.execute("""
+                SELECT id, responsable, usuario_asignado_id 
+                FROM expediente 
+                WHERE id = %s
+            """, (expediente_id,))
+            verificacion = cursor.fetchone()
+            if verificacion:
+                logger.info(f"   - Expediente {verificacion[0]}: responsable='{verificacion[1]}', usuario_asignado_id={verificacion[2]}")
+            else:
+                logger.error(f"   - ❌ No se encontró expediente {expediente_id} después del commit")
+        
         cursor.close()
         conn.close()
         
+        # Crear mensaje de resultado
         total_asignados = len(expedientes_ids)
-        mensaje = f'Asignación aleatoria exitosa: {total_asignados} expediente(s) asignados. ESCRIBIENTES: {contador_escribientes}, SUSTANCIADORES: {contador_sustanciadores}'
+        mensaje = f'Distribución aleatoria exitosa: {total_asignados} expediente(s) distribuidos entre {len(contador_por_usuario)} usuarios'
+        
+        # Agregar detalles de distribución
+        detalles = []
+        for nombre, info in contador_por_usuario.items():
+            detalles.append(f"{nombre} ({info['rol']}): {info['count']}")
+        
+        if len(detalles) <= 5:  # Si son pocos usuarios, mostrar todos
+            mensaje += f". Distribución: {', '.join(detalles)}"
+        else:  # Si son muchos, mostrar resumen
+            mensaje += f". Ejemplo: {', '.join(detalles[:3])}, ..."
+        
         if limite:
             mensaje += f' (limitado a {limite} expedientes)'
+        
         flash(mensaje, 'success')
+        logger.info(f"Distribución completada: {contador_por_usuario}")
         
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
         
     except Exception as e:
-        flash(f'Error en asignación aleatoria: {str(e)}', 'error')
+        logger.error(f"Error en asignacion_aleatoria_masiva: {str(e)}")
+        flash(f'Error en distribución aleatoria: {str(e)}', 'error')
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+
+def asignacion_por_rol_especifico(criterio, valor_criterio, rol_asignar, cursor, conn, limite=None):
+    """Distribuye expedientes entre usuarios específicos de un rol determinado"""
+    import random
+    
+    try:
+        logger.info(f"=== INICIO asignacion_por_rol_especifico - Rol: {rol_asignar} ===")
+        
+        # Obtener usuarios activos del rol específico
+        cursor.execute("""
+            SELECT u.id, u.nombre
+            FROM usuarios u
+            INNER JOIN roles r ON u.rol_id = r.id
+            WHERE r.nombre_rol = %s AND u.activo = TRUE
+            ORDER BY u.nombre
+        """, (rol_asignar,))
+        
+        usuarios_rol = cursor.fetchall()
+        
+        if not usuarios_rol:
+            flash(f'No hay usuarios activos con el rol {rol_asignar}', 'error')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        logger.info(f"Usuarios encontrados para {rol_asignar}: {len(usuarios_rol)}")
+        for user_id, nombre in usuarios_rol:
+            logger.info(f"  - {nombre} (ID: {user_id})")
+        
+        # Obtener expedientes que cumplen el criterio
+        expedientes_ids = []
+        
+        if criterio == 'estado':
+            if not valor_criterio:
+                flash('Debe especificar un estado para el criterio seleccionado', 'error')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            
+            query = "SELECT id FROM expediente WHERE estado = %s ORDER BY fecha_ingreso ASC"
+            params = (valor_criterio,)
+            if limite:
+                query += " LIMIT %s"
+                params = (valor_criterio, limite)
+            
+            cursor.execute(query, params)
+            expedientes_ids = [row[0] for row in cursor.fetchall()]
+            
+        elif criterio == 'sin_responsable':
+            query = "SELECT id FROM expediente WHERE responsable IS NULL OR responsable = '' ORDER BY fecha_ingreso ASC"
+            params = ()
+            if limite:
+                query += " LIMIT %s"
+                params = (limite,)
+            
+            cursor.execute(query, params)
+            expedientes_ids = [row[0] for row in cursor.fetchall()]
+            
+        elif criterio == 'tipo_solicitud':
+            if not valor_criterio:
+                flash('Debe especificar un tipo de trámite para el criterio seleccionado', 'error')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            tipo_col = _detectar_columna_tipo(cursor)
+            if not tipo_col:
+                flash('No existe columna `tipo_solicitud` ni `tipo_tramite` en la BD', 'warning')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            
+            query = f"SELECT id FROM expediente WHERE {tipo_col} ILIKE %s ORDER BY fecha_ingreso ASC"
+            params = (f'%{valor_criterio}%',)
+            if limite:
+                query += " LIMIT %s"
+                params = (f'%{valor_criterio}%', limite)
+            
+            cursor.execute(query, params)
+            expedientes_ids = [row[0] for row in cursor.fetchall()]
+            
+        elif criterio == 'juzgado_origen':
+            if not valor_criterio:
+                flash('Debe especificar un juzgado de origen para el criterio seleccionado', 'error')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+            
+            query = "SELECT id FROM expediente WHERE juzgado_origen ILIKE %s ORDER BY fecha_ingreso ASC"
+            params = (f'%{valor_criterio}%',)
+            if limite:
+                query += " LIMIT %s"
+                params = (f'%{valor_criterio}%', limite)
+            
+            cursor.execute(query, params)
+            expedientes_ids = [row[0] for row in cursor.fetchall()]
+            
+        elif criterio == 'todos':
+            query = "SELECT id FROM expediente ORDER BY fecha_ingreso ASC"
+            params = ()
+            if limite:
+                query += " LIMIT %s"
+                params = (limite,)
+            
+            cursor.execute(query, params)
+            expedientes_ids = [row[0] for row in cursor.fetchall()]
+        
+        if not expedientes_ids:
+            flash('No se encontraron expedientes que cumplan con el criterio especificado', 'warning')
+            return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+        logger.info(f"Expedientes encontrados: {len(expedientes_ids)}")
+        
+        # Distribuir expedientes entre usuarios del rol usando distribución circular
+        contador_por_usuario = {}
+        total_usuarios = len(usuarios_rol)
+        
+        logger.info(f"🔄 INICIANDO DISTRIBUCIÓN POR ROL {rol_asignar}:")
+        logger.info(f"   - Total expedientes a distribuir: {len(expedientes_ids)}")
+        logger.info(f"   - Total usuarios del rol {rol_asignar}: {total_usuarios}")
+        logger.info(f"   - Usuarios del rol: {[nombre for _, nombre in usuarios_rol]}")
+        
+        for i, expediente_id in enumerate(expedientes_ids):
+            # Seleccionar usuario usando distribución circular para equidad
+            user_id, nombre = usuarios_rol[i % total_usuarios]
+            
+            logger.info(f"📋 Expediente {i+1}/{len(expedientes_ids)} (ID: {expediente_id}):")
+            logger.info(f"   - Asignando a: {nombre} (ID: {user_id}, Rol: {rol_asignar})")
+            
+            # Verificar estado actual del expediente antes de actualizar
+            cursor.execute("SELECT responsable, usuario_asignado_id FROM expediente WHERE id = %s", (expediente_id,))
+            estado_anterior = cursor.fetchone()
+            logger.info(f"   - Estado anterior: responsable='{estado_anterior[0]}', usuario_asignado_id={estado_anterior[1]}")
+            
+            # Actualizar expediente con asignación específica
+            cursor.execute("""
+                UPDATE expediente 
+                SET usuario_asignado_id = %s, responsable = %s
+                WHERE id = %s
+            """, (user_id, rol_asignar, expediente_id))
+            
+            # Verificar que la actualización fue exitosa
+            if cursor.rowcount == 1:
+                logger.info(f"   ✅ Actualización exitosa")
+                
+                # Verificar estado después de actualizar
+                cursor.execute("SELECT responsable, usuario_asignado_id FROM expediente WHERE id = %s", (expediente_id,))
+                estado_posterior = cursor.fetchone()
+                logger.info(f"   - Estado posterior: responsable='{estado_posterior[0]}', usuario_asignado_id={estado_posterior[1]}")
+            else:
+                logger.error(f"   ❌ Error: No se actualizó ningún registro (rowcount: {cursor.rowcount})")
+            
+            # Contar asignaciones por usuario
+            if nombre not in contador_por_usuario:
+                contador_por_usuario[nombre] = 0
+            contador_por_usuario[nombre] += 1
+        
+        logger.info(f"💾 FINALIZANDO TRANSACCIÓN ROL {rol_asignar}:")
+        logger.info(f"   - Realizando commit de {len(expedientes_ids)} actualizaciones")
+        
+        conn.commit()
+        
+        logger.info(f"   ✅ Commit exitoso")
+        
+        # Verificar algunas asignaciones después del commit
+        logger.info(f"🔍 VERIFICACIÓN POST-COMMIT (muestra de 3 expedientes):")
+        for i, expediente_id in enumerate(expedientes_ids[:3]):
+            cursor.execute("""
+                SELECT id, responsable, usuario_asignado_id 
+                FROM expediente 
+                WHERE id = %s
+            """, (expediente_id,))
+            verificacion = cursor.fetchone()
+            if verificacion:
+                logger.info(f"   - Expediente {verificacion[0]}: responsable='{verificacion[1]}', usuario_asignado_id={verificacion[2]}")
+            else:
+                logger.error(f"   - ❌ No se encontró expediente {expediente_id} después del commit")
+        
+        cursor.close()
+        conn.close()
+        
+        # Crear mensaje de resultado
+        total_asignados = len(expedientes_ids)
+        mensaje = f'Distribución por {rol_asignar} exitosa: {total_asignados} expediente(s) distribuidos entre {len(contador_por_usuario)} usuarios'
+        
+        # Agregar detalles de distribución
+        detalles = []
+        for nombre, count in contador_por_usuario.items():
+            detalles.append(f"{nombre}: {count}")
+        
+        if len(detalles) <= 4:  # Si son pocos usuarios, mostrar todos
+            mensaje += f". Distribución: {', '.join(detalles)}"
+        else:  # Si son muchos, mostrar resumen
+            mensaje += f". Ejemplo: {', '.join(detalles[:3])}, ..."
+        
+        if limite:
+            mensaje += f' (limitado a {limite} expedientes)'
+        
+        flash(mensaje, 'success')
+        logger.info(f"Distribución por {rol_asignar} completada: {contador_por_usuario}")
+        
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+        
+    except Exception as e:
+        logger.error(f"Error en asignacion_por_rol_especifico: {str(e)}")
+        flash(f'Error en distribución por {rol_asignar}: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
 
 def confirm_todos():

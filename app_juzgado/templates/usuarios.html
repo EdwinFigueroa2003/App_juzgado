@@ -14,20 +14,22 @@
             <h2 class="mb-4">
                 <i class="fas fa-users"></i> Gestión de Usuarios
             </h2>
-            
+
             <!-- Mensajes de flash -->
             {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' if category == 'info' else 'warning' }} alert-dismissible fade show" role="alert">
-                            <i class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' if category == 'info' else 'exclamation-circle' }}"></i>
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' if category == 'info' else 'warning' }} alert-dismissible fade show"
+                role="alert">
+                <i
+                    class="fas fa-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' if category == 'info' else 'exclamation-circle' }}"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
             {% endwith %}
-            
+
             <!-- Estadísticas rápidas -->
             <div class="row mb-4">
                 <div class="col-md-3">
@@ -63,142 +65,139 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Botón para agregar usuario y buscador -->
             <div class="row mb-4">
                 <div class="col-md-6"></div>
-                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalAgregarUsuario" style="margin-left: -48.5%;">
-                        <i class="fas fa-plus"></i> Agregar Nuevo Usuario
+                <button type="button" class="btn btn-success" data-bs-toggle="modal"
+                    data-bs-target="#modalAgregarUsuario" style="margin-left: -48.5%;">
+                    <i class="fas fa-plus"></i> Agregar Nuevo Usuario
+                </button>
+            </div>
+            <div class="col-md-6" style="margin-left: 52%; margin-top: -7.5%; margin-bottom: 5%;">
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" class="form-control" id="buscadorUsuarios" placeholder="Buscar..."
+                        onkeyup="filtrarUsuarios()">
+                    <button class="btn btn-outline-secondary" type="button" onclick="limpiarBusquedaUsuarios()">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="col-md-6" style="margin-left: 52%; margin-top: -7.5%; margin-bottom: 5%;">
-                    <div class="input-group">
-                        <span class="input-group-text">
-                            <i class="fas fa-search"></i>
-                        </span>
-                        <input type="text" 
-                               class="form-control" 
-                               id="buscadorUsuarios" 
-                               placeholder="Buscar..."
-                               onkeyup="filtrarUsuarios()">
-                        <button class="btn btn-outline-secondary" type="button" onclick="limpiarBusquedaUsuarios()">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    <small class="form-text text-muted mt-1">
-                        <i class="fas fa-info-circle"></i> Busque en tiempo real por cualquier campo
-                    </small>
-                </div>
+                <small class="form-text text-muted mt-1">
+                    <i class="fas fa-info-circle"></i> Busque en tiempo real por cualquier campo
+                </small>
             </div>
-            
-            <!-- Tabla de usuarios -->
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-list"></i> Lista de Usuarios
-                    </h5>
-                </div>
-                <div class="card-body">
-                    {% if usuarios %}
-                        <div class="table-responsive">
-                            <table class="table table-striped table-hover" id="tablaUsuarios">
-                                <thead class="table">
-                                    <tr>
-                                        <th>Usuario</th>
-                                        <th>Correo</th>
-                                        <th>Rol</th>
-                                        <th>Tipo</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="cuerpoTablaUsuarios">
-                                    {% for usuario in usuarios %}
-                                    <tr>
-                                        <td>
-                                            <strong>{{ usuario[1] }}</strong>
-                                            {% if usuario[6] %}
-                                                <br><small class="text-muted">{{ usuario[6] }}</small>
-                                            {% endif %}
-                                            {% if usuario[4] %}
-                                                <span class="badge bg-warning text-dark ms-1">
-                                                    <i class="fas fa-crown"></i> Admin
-                                                </span>
-                                            {% endif %}
-                                        </td>
-                                        <td>{{ usuario[2] }}</td>
-                                        <td>
+        </div>
+
+        <!-- Tabla de usuarios -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-list"></i> Lista de Usuarios
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if usuarios %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="tablaUsuarios">
+                        <thead class="table">
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Correo</th>
+                                <th>Rol</th>
+                                <th>Tipo</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpoTablaUsuarios">
+                            {% for usuario in usuarios %}
+                            <tr>
+                                <td>
+                                    <strong>{{ usuario[1] }}</strong>
+                                    {% if usuario[6] %}
+                                    <br><small class="text-muted">{{ usuario[6] }}</small>
+                                    {% endif %}
+                                    {% if usuario[4] %}
+                                    <span class="badge bg-warning text-dark ms-1">
+                                        <i class="fas fa-crown"></i> Admin
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ usuario[2] }}</td>
+                                <td>
                                             {% if usuario[5] %}
                                                 <span class="badge bg-info">{{ usuario[5] }}</span>
                                             {% else %}
                                                 <span class="badge bg-secondary">Sin rol</span>
                                             {% endif %}
                                         </td>
-                                        <td>
-                                            {% if usuario[4] %}
-                                                <span class="badge bg-warning text-dark">Administrador</span>
-                                            {% else %}
-                                                <span class="badge bg-success">Usuario Normal</span>
-                                            {% endif %}
-                                            {% if not usuario[7] %}
-                                                <span class="badge bg-danger ms-1">Inactivo</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <div class="btn-group" role="group">
-                                                <!-- Cambiar contraseña -->
-                                                <button type="button" class="btn btn-sm btn-outline-primary btn-cambiar-password" 
-                                                        data-usuario-id="{{ usuario[0] }}"
-                                                        data-usuario-nombre="{{ usuario[1] }}"
-                                                        title="Cambiar contraseña">
-                                                    <i class="fas fa-key"></i>
-                                                </button>
-                                                
-                                                <!-- Cambiar rol -->
-                                                <!-- <button type="button" class="btn btn-sm btn-outline-info btn-cambiar-rol" 
+                                <td>
+                                    {% if usuario[4] %}
+                                    <span class="badge bg-warning text-dark">Administrador</span>
+                                    {% else %}
+                                    <span class="badge bg-success">Usuario Normal</span>
+                                    {% endif %}
+                                    {% if not usuario[7] %}
+                                    <span class="badge bg-danger ms-1">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <!-- Cambiar contraseña -->
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-primary btn-cambiar-password"
+                                            data-usuario-id="{{ usuario[0] }}" data-usuario-nombre="{{ usuario[1] }}"
+                                            title="Cambiar contraseña">
+                                            <i class="fas fa-key"></i>
+                                        </button>
+
+                                        <!-- Cambiar rol -->
+                                        <!-- <button type="button" class="btn btn-sm btn-outline-info btn-cambiar-rol" 
                                                         data-usuario-id="{{ usuario[0] }}"
                                                         data-usuario-nombre="{{ usuario[1] }}"
                                                         data-rol-actual="{{ usuario[5] if usuario[5] else '' }}"
                                                         title="Cambiar rol">
                                                     <i class="fas fa-user-tag"></i>
                                                 </button> -->
-                                                
-                                                <!-- Toggle admin -->
-                                                <button type="button" class="btn btn-sm btn-outline-warning btn-toggle-admin" 
-                                                        data-usuario-id="{{ usuario[0] }}"
-                                                        data-usuario-nombre="{{ usuario[1] }}"
-                                                        data-es-admin="{{ usuario[4] }}"
-                                                        title="{{ 'Quitar admin' if usuario[4] else 'Hacer admin' }}">
-                                                    <i class="fas fa-{{ 'user' if usuario[4] else 'crown' }}"></i>
-                                                </button>
-                                                
-                                                <!-- Eliminar usuario -->
-                                                <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-usuario" 
-                                                        data-usuario-id="{{ usuario[0] }}"
-                                                        data-usuario-nombre="{{ usuario[1] }}"
-                                                        title="Eliminar usuario">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <div class="text-center text-muted py-4">
-                            <i class="fas fa-users fa-3x mb-3"></i>
-                            <p>No hay usuarios registrados en el sistema</p>
-                        </div>
-                    {% endif %}
+
+                                        <!-- Toggle admin -->
+                                        <button type="button" class="btn btn-sm btn-outline-warning btn-toggle-admin"
+                                            data-usuario-id="{{ usuario[0] }}" data-usuario-nombre="{{ usuario[1] }}"
+                                            data-es-admin="{{ usuario[4] }}"
+                                            title="{{ 'Quitar admin' if usuario[4] else 'Hacer admin' }}">
+                                            <i class="fas fa-{{ 'user' if usuario[4] else 'crown' }}"></i>
+                                        </button>
+
+                                        <!-- Eliminar usuario -->
+                                        <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-usuario"
+                                            data-usuario-id="{{ usuario[0] }}" data-usuario-nombre="{{ usuario[1] }}"
+                                            title="Eliminar usuario">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-users fa-3x mb-3"></i>
+                    <p>No hay usuarios registrados en el sistema</p>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
+</div>
 
 <!-- Modal para agregar usuario -->
-<div class="modal fade" id="modalAgregarUsuario" tabindex="-1" aria-labelledby="modalAgregarUsuarioLabel" aria-hidden="true">
+<div class="modal fade" id="modalAgregarUsuario" tabindex="-1" aria-labelledby="modalAgregarUsuarioLabel"
+    aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
@@ -208,29 +207,29 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="POST">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <!-- 🔒 CSRF Protection -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                 <div class="modal-body">
                     <input type="hidden" name="accion" value="agregar_usuario">
-                    
+
                     <div class="mb-3">
                         <label for="nombre_completo" class="form-label">Nombre Completo *</label>
                         <input type="text" class="form-control" id="nombre_completo" name="nombre_completo" required>
                         <div class="form-text">Nombre y apellidos del usuario</div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="nombre_usuario" class="form-label">Nombre de Usuario *</label>
                         <input type="text" class="form-control" id="nombre_usuario" name="nombre_usuario" required>
                         <div class="form-text">Debe ser único en el sistema</div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="correo" class="form-label">Correo Electrónico *</label>
                         <input type="email" class="form-control" id="correo" name="correo" required>
                         <div class="form-text">Debe ser único en el sistema</div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="password" class="form-label">
                             Contraseña *
@@ -248,30 +247,26 @@
                             </span>
                         </label>
                         <div class="form-group-password">
-                            <input type="password" 
-                                   class="form-control" 
-                                   id="password" 
-                                   name="password" 
-                                   required 
-                                   data-validate="true"
-                                   autocomplete="new-password">
-                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility('password')">
+                            <input type="password" class="form-control" id="password" name="password" required
+                                data-validate="true" autocomplete="new-password">
+                            <button type="button" class="password-toggle"
+                                onclick="togglePasswordVisibility('password')">
                                 <i class="fas fa-eye"></i>
                             </button>
                         </div>
                         <div id="password-validation" class="password-validation-results"></div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="rol_id" class="form-label">Rol</label>
                         <select class="form-select" id="rol_id" name="rol_id">
                             <option value="">Sin rol asignado</option>
                             {% for rol in roles %}
-                                <option value="{{ rol[0] }}">{{ rol[1] }}</option>
+                            <option value="{{ rol[0] }}">{{ rol[1] }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    
+
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="es_admin" name="es_admin">
                         <label class="form-check-label" for="es_admin">
@@ -292,7 +287,8 @@
 </div>
 
 <!-- Modal para cambiar contraseña -->
-<div class="modal fade" id="modalCambiarPassword" tabindex="-1" aria-labelledby="modalCambiarPasswordLabel" aria-hidden="true">
+<div class="modal fade" id="modalCambiarPassword" tabindex="-1" aria-labelledby="modalCambiarPasswordLabel"
+    aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
@@ -302,17 +298,17 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="POST">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <!-- 🔒 CSRF Protection -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                 <div class="modal-body">
                     <input type="hidden" name="accion" value="cambiar_password">
                     <input type="hidden" name="usuario_id" id="password_usuario_id">
-                    
+
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
                         Cambiando contraseña para: <strong id="password_usuario_nombre"></strong>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="nueva_password" class="form-label">
                             Nueva Contraseña *
@@ -330,14 +326,10 @@
                             </span>
                         </label>
                         <div class="form-group-password">
-                            <input type="password" 
-                                   class="form-control" 
-                                   id="nueva_password" 
-                                   name="nueva_password" 
-                                   required 
-                                   data-validate="true"
-                                   autocomplete="new-password">
-                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility('nueva_password')">
+                            <input type="password" class="form-control" id="nueva_password" name="nueva_password"
+                                required data-validate="true" autocomplete="new-password">
+                            <button type="button" class="password-toggle"
+                                onclick="togglePasswordVisibility('nueva_password')">
                                 <i class="fas fa-eye"></i>
                             </button>
                         </div>
@@ -366,23 +358,23 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form method="POST">
-                        <!-- 🔒 CSRF Protection -->
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <!-- 🔒 CSRF Protection -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                 <div class="modal-body">
                     <input type="hidden" name="accion" value="cambiar_rol">
                     <input type="hidden" name="usuario_id" id="rol_usuario_id">
-                    
+
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
                         Cambiando rol para: <strong id="rol_usuario_nombre"></strong>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="nuevo_rol_id" class="form-label">Nuevo Rol</label>
                         <select class="form-select" id="nuevo_rol_id" name="nuevo_rol_id">
                             <option value="">Sin rol asignado</option>
                             {% for rol in roles %}
-                                <option value="{{ rol[0] }}">{{ rol[1] }}</option>
+                            <option value="{{ rol[0] }}">{{ rol[1] }}</option>
                             {% endfor %}
                         </select>
                     </div>
