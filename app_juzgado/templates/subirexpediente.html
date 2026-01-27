@@ -76,7 +76,14 @@
                                        class="form-control" 
                                        id="radicado_completo" 
                                        name="radicado_completo"
-                                       placeholder="Ej: 08001418902020220003100">
+                                       placeholder="Ej: 08001418902020220003100"
+                                       pattern="[0-9]{23}"
+                                       title="El radicado completo debe tener exactamente 23 dígitos"
+                                       maxlength="23">
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-info-circle"></i> 
+                                    Debe contener exactamente 23 dígitos numéricos
+                                </small>
                             </div>
                             
                             <div class="form-group">
@@ -112,10 +119,10 @@
                                         <label for="estado_actual">Estado Actual:</label>
                                         <select class="form-control" id="estado_actual" name="estado_actual">
                                             <option value="">Seleccionar estado</option>
-                                            <option value="EN_PROCESO">En Proceso</option>
-                                            <option value="COMPLETADO">Completado</option>
-                                            <!-- <option value="PROCESADO_AZURE">Procesado Azure</option> -->
-                                            <option value="PENDIENTE">Pendiente</option>
+                                            <option value="Pendiente">Pendiente</option>
+                                            <option value="Activo Pendiente">Activo Pendiente</option>
+                                            <option value="Inactivo Resuelto">Inactivo Resuelto</option>
+                                            <option value="Activo Resuelto">Activo Resuelto</option>
                                         </select>
                                     </div>
                                 </div>
@@ -247,18 +254,20 @@
                                     <li class="list-group-item"><strong>RADICADO COMPLETO</strong></li>
                                     <li class="list-group-item"><strong>DEMANDANTE</strong></li>
                                     <li class="list-group-item"><strong>DEMANDADO</strong></li>
+                                    <li class="list-group-item"><strong>FECHA INGRESO</strong></li>
+                                    <li class="list-group-item"><strong>SOLICITUD</strong></li>
                                 </ul>
                             </div>
+                            
                             <div class="col-md-6">
                                 <h6 class="text-secondary"><i class="fas fa-list"></i> Columnas Opcionales:</h6>
                                 <ul class="list-group list-group-flush">
-                                    <!-- <li class="list-group-item">ESTADO_EXPEDIENTE</li> -->
+                                    <li class="list-group-item">RADICADO CORTO</li>
+                                    <li class="list-group-item">ESTADO</li>
                                     <li class="list-group-item">UBICACION</li>
-                                    <li class="list-group-item">SOLICITUD</li>
                                     <li class="list-group-item">J. ORIGEN</li>
-                                    <li class="list-group-item">FECHA INGRESO</li>
-                                    <li class="list-group-item">SOLICITUD</li>
-                                    <!-- <li class="list-group-item">RESPONSABLE <small class="text-muted">(usar: ESCRIBIENTE o SUSTANCIADOR)</small></li> -->
+                                    <li class="list-group-item">JUZGADO ORIGEN</li>
+                                    <li class="list-group-item">RESPONSABLE <small class="text-muted">(usar: ESCRIBIENTE o SUSTANCIADOR)</small></li>
                                     <li class="list-group-item">OBSERVACIONES</li>
                                 </ul>
                             </div>
@@ -309,9 +318,9 @@
                                 <div class="col-md-6">
                                     <h6><strong>Formato de Radicados:</strong></h6>
                                     <ul class="small">
-                                        <li><strong>Radicado Completo:</strong> Formato largo (ej: 08001418902020220003100)</li>
+                                        <li><strong>Radicado Completo:</strong> Exactamente 23 dígitos numéricos (ej: 08001418902020220003100)</li>
                                         <li><strong>Radicado Corto:</strong> Formato año-número (ej: 2022-00031)</li>
-                                        <li>Debe proporcionar al menos uno de los dos formatos</li>
+                                        <li>El radicado completo es obligatorio y debe tener 23 dígitos</li>
                                     </ul>
                                 </div>
                                 <div class="col-md-6">

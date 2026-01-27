@@ -91,6 +91,94 @@ def _detectar_columna_ubicacion(cursor):
     except Exception:
         return None
 
+def obtener_siguiente_turno(cursor):
+    """Obtiene el siguiente número de turno disponible para expedientes en estado 'Activo Pendiente'"""
+    try:
+        logger.info("=== INICIO obtener_siguiente_turno ===")
+        
+        # Obtener el último turno asignado para expedientes en estado 'Activo Pendiente'
+        cursor.execute("""
+            SELECT MAX(turno) 
+            FROM expediente 
+            WHERE estado = 'Activo Pendiente' AND turno IS NOT NULL
+        """)
+        
+        resultado = cursor.fetchone()
+        ultimo_turno = resultado[0] if resultado and resultado[0] is not None else 0
+        
+        siguiente_turno = ultimo_turno + 1
+        
+        logger.info(f"Último turno registrado: {ultimo_turno}")
+        logger.info(f"Siguiente turno a asignar: {siguiente_turno}")
+        logger.info("=== FIN obtener_siguiente_turno ===")
+        
+        return siguiente_turno
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo siguiente turno: {str(e)}")
+        return 1  # Si hay error, empezar desde 1
+
+def manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_nuevo):
+    """
+    Maneja la asignación/eliminación de turno cuando cambia el estado del expediente
+    
+    Args:
+        cursor: Cursor de la base de datos
+        expediente_id: ID del expediente
+        estado_anterior: Estado anterior del expediente
+        estado_nuevo: Nuevo estado del expediente
+    """
+    try:
+        logger.info(f"=== INICIO manejar_cambio_estado_turno ===")
+        logger.info(f"Expediente ID: {expediente_id}")
+        logger.info(f"Estado anterior: '{estado_anterior}'")
+        logger.info(f"Estado nuevo: '{estado_nuevo}'")
+        
+        # Verificar si la columna turno existe
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'expediente' AND column_name = 'turno'
+            )
+        """)
+        
+        turno_existe = cursor.fetchone()[0]
+        if not turno_existe:
+            logger.warning("La columna 'turno' no existe en la tabla expediente")
+            return
+        
+        # Caso 1: Cambio A "Activo Pendiente" - Asignar turno
+        if estado_nuevo == 'Activo Pendiente' and estado_anterior != 'Activo Pendiente':
+            siguiente_turno = obtener_siguiente_turno(cursor)
+            
+            cursor.execute("""
+                UPDATE expediente 
+                SET turno = %s 
+                WHERE id = %s
+            """, (siguiente_turno, expediente_id))
+            
+            logger.info(f"✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
+            
+        # Caso 2: Cambio DESDE "Activo Pendiente" a otro estado - Quitar turno
+        elif estado_anterior == 'Activo Pendiente' and estado_nuevo != 'Activo Pendiente':
+            cursor.execute("""
+                UPDATE expediente 
+                SET turno = NULL 
+                WHERE id = %s
+            """, (expediente_id,))
+            
+            logger.info(f"🗑️ Turno removido del expediente {expediente_id} (cambió de 'Activo Pendiente' a '{estado_nuevo}')")
+        
+        # Caso 3: No hay cambio relevante para turno
+        else:
+            logger.info(f"ℹ️ No se requiere cambio de turno ('{estado_anterior}' -> '{estado_nuevo}')")
+        
+        logger.info("=== FIN manejar_cambio_estado_turno ===")
+        
+    except Exception as e:
+        logger.error(f"Error manejando cambio de estado para turno: {str(e)}")
+        raise e
+
 def _construir_select_expediente(cursor, alias=''):
     """Construye la parte SELECT para consultas de expediente basado en columnas disponibles"""
     available_columns = _detectar_columnas_disponibles(cursor)
@@ -671,6 +759,13 @@ def actualizar_expediente():
         conn = obtener_conexion()
         cursor = conn.cursor()
         
+        # Obtener el estado anterior del expediente para manejar el turno
+        cursor.execute("SELECT estado FROM expediente WHERE id = %s", (expediente_id,))
+        resultado_estado = cursor.fetchone()
+        estado_anterior = resultado_estado[0] if resultado_estado else None
+        
+        logger.info(f"Estado anterior del expediente: '{estado_anterior}'")
+        
         # Detectar columnas disponibles
         available_columns = _detectar_columnas_disponibles(cursor)
         
@@ -731,6 +826,13 @@ def actualizar_expediente():
             logger.info(f"Valores: {update_values}")
             
             cursor.execute(query, update_values)
+            
+            # Manejar cambio de turno si el estado cambió
+            if estado_anterior != estado_actual:
+                logger.info(f"🔄 Detectado cambio de estado: '{estado_anterior}' -> '{estado_actual}'")
+                manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_actual)
+            else:
+                logger.info("ℹ️ No hay cambio de estado, no se modifica turno")
             
             conn.commit()
             logger.info("Expediente actualizado correctamente")
@@ -822,6 +924,14 @@ def agregar_estado():
         conn = obtener_conexion()
         cursor = conn.cursor()
         
+        # Obtener el estado anterior del expediente para manejar el turno
+        cursor.execute("SELECT estado FROM expediente WHERE id = %s", (expediente_id,))
+        resultado_estado = cursor.fetchone()
+        estado_anterior = resultado_estado[0] if resultado_estado else None
+        
+        logger.info(f"Estado anterior del expediente: '{estado_anterior}'")
+        logger.info(f"Nuevo estado a aplicar: '{nuevo_estado}'")
+        
         # Insertar nuevo estado
         cursor.execute("""
             INSERT INTO estados 
@@ -835,6 +945,13 @@ def agregar_estado():
             SET estado = %s
             WHERE id = %s
         """, (nuevo_estado, expediente_id))
+        
+        # Manejar cambio de turno si el estado cambió
+        if estado_anterior != nuevo_estado:
+            logger.info(f"🔄 Detectado cambio de estado en agregar_estado: '{estado_anterior}' -> '{nuevo_estado}'")
+            manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, nuevo_estado)
+        else:
+            logger.info("ℹ️ No hay cambio de estado en agregar_estado, no se modifica turno")
         
         conn.commit()
         cursor.close()

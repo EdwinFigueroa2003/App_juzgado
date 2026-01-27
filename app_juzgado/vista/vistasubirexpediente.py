@@ -26,6 +26,29 @@ ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def validar_radicado_completo(radicado):
+    """
+    Valida que el radicado completo tenga exactamente 23 dígitos numéricos
+    
+    Args:
+        radicado (str): El radicado a validar
+        
+    Returns:
+        tuple: (es_valido, mensaje_error)
+    """
+    if not radicado:
+        return True, ""  # Radicado vacío es válido (puede usar radicado corto)
+    
+    radicado = str(radicado).strip()
+    
+    if not radicado.isdigit():
+        return False, "El radicado completo debe contener solo números"
+    
+    if len(radicado) != 23:
+        return False, f"El radicado completo debe tener exactamente 23 dígitos. El ingresado tiene {len(radicado)} dígitos"
+    
+    return True, ""
+
 def obtener_roles_activos():
     """Obtiene la lista de roles disponibles"""
     logger.info("=== INICIO obtener_roles_activos ===")
@@ -137,7 +160,19 @@ def procesar_archivo_excel():
             except Exception as e:
                 logger.warning(f"Error eliminando archivo temporal: {str(e)}")
             
-            flash(f'Archivo procesado exitosamente usando hoja "{resultados["hoja_usada"]}". {resultados["procesados"]} expedientes agregados de {resultados["total_filas"]} filas procesadas.', 'success')
+            # Crear mensaje de resultado más detallado
+            mensaje_resultado = f'Archivo procesado usando hoja "{resultados["hoja_usada"]}". '
+            mensaje_resultado += f'{resultados["procesados"]} expedientes agregados exitosamente'
+            
+            if resultados["errores"] > 0:
+                mensaje_resultado += f', {resultados["errores"]} filas omitidas por errores de validación'
+            
+            mensaje_resultado += f' de {resultados["total_filas"]} filas procesadas.'
+            
+            if resultados["errores"] > 0:
+                mensaje_resultado += f' Revise que los radicados completos tengan exactamente 23 dígitos y que todos los campos requeridos estén presentes.'
+            
+            flash(mensaje_resultado, 'success' if resultados["errores"] == 0 else 'warning')
             logger.info("=== FIN procesar_archivo_excel - ÉXITO ===")
             return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
             
@@ -191,6 +226,27 @@ def procesar_formulario_manual():
         if not radicado_completo and not radicado_corto:
             logger.warning("Validación fallida: No se proporcionó ningún radicado")
             flash('Debe proporcionar al menos un radicado (completo o corto)', 'error')
+            return redirect(request.url)
+        
+        # Validación específica del radicado completo (debe tener exactamente 23 dígitos)
+        if radicado_completo:
+            es_valido, mensaje_error = validar_radicado_completo(radicado_completo)
+            if not es_valido:
+                logger.warning(f"Validación fallida: {mensaje_error}")
+                flash(mensaje_error, 'error')
+                return redirect(request.url)
+            
+            logger.info(f"✅ Radicado completo válido: {radicado_completo} (23 dígitos)")
+        
+        # Validar campos requeridos
+        if not demandante:
+            logger.warning("Validación fallida: Demandante es requerido")
+            flash('El demandante es un campo requerido', 'error')
+            return redirect(request.url)
+        
+        if not demandado:
+            logger.warning("Validación fallida: Demandado es requerido")
+            flash('El demandado es un campo requerido', 'error')
             return redirect(request.url)
         
         logger.info("Validaciones básicas pasadas - iniciando inserción en BD")
@@ -349,6 +405,32 @@ def procesar_formulario_manual():
             except Exception as related_error:
                 logger.warning(f"Error insertando en tablas relacionadas (no crítico): {str(related_error)}")
             
+            # Manejar asignación de turno si el estado es 'Activo Pendiente'
+            if estado_actual == 'Activo Pendiente' and 'turno' in available_columns:
+                logger.info("🎫 Expediente creado con estado 'Activo Pendiente' - asignando turno")
+                
+                # Obtener el siguiente turno disponible
+                cursor.execute("""
+                    SELECT MAX(turno) 
+                    FROM expediente 
+                    WHERE estado = 'Activo Pendiente' AND turno IS NOT NULL
+                """)
+                
+                resultado = cursor.fetchone()
+                ultimo_turno = resultado[0] if resultado and resultado[0] is not None else 0
+                siguiente_turno = ultimo_turno + 1
+                
+                # Asignar turno al expediente recién creado
+                cursor.execute("""
+                    UPDATE expediente 
+                    SET turno = %s 
+                    WHERE id = %s
+                """, (siguiente_turno, expediente_id))
+                
+                logger.info(f"✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
+            else:
+                logger.info("ℹ️ No se requiere asignación de turno (estado diferente a 'Activo Pendiente' o columna turno no existe)")
+            
             conn.commit()
             logger.info("Transacción confirmada (COMMIT)")
             
@@ -430,22 +512,68 @@ def procesar_excel_expedientes(filepath):
         logger.info(f"Columnas disponibles: {list(df.columns)}")
         
         # Verificar si tiene las columnas mínimas necesarias
-        columnas_requeridas = ['radicado_completo', 'radicado_corto', 'RadicadoUnicoLimpio', 'RadicadoUnicoCompleto', 'RADICADO COMPLETO', 'RADICADO_MODIFICADO_OFI']
-        columnas_encontradas = []
+        # Nuevos requisitos: RADICADO COMPLETO, DEMANDANTE, DEMANDADO, FECHA INGRESO, SOLICITUD
         
-        for col_req in columnas_requeridas:
+        # Validar RADICADO COMPLETO
+        columnas_radicado = ['radicado_completo', 'radicado_corto', 'RadicadoUnicoLimpio', 'RadicadoUnicoCompleto', 'RADICADO COMPLETO', 'RADICADO_MODIFICADO_OFI']
+        radicado_encontrado = False
+        for col_req in columnas_radicado:
             if col_req in df.columns:
-                columnas_encontradas.append(col_req)
+                radicado_encontrado = True
+                break
         
-        if not columnas_encontradas:
-            logger.warning("No se encontraron columnas de radicado estándar, intentando detectar automáticamente...")
-            # Buscar columnas que contengan "radicado" en el nombre
-            columnas_radicado = [col for col in df.columns if 'radicado' in col.lower()]
-            if columnas_radicado:
-                logger.info(f"Columnas de radicado detectadas: {columnas_radicado}")
-                columnas_encontradas = columnas_radicado
-            else:
-                logger.warning("No se encontraron columnas de radicado. Usando las primeras columnas disponibles.")
+        # Validar DEMANDANTE
+        columnas_demandante = ['DEMANDANTE_HOMOLOGADO', 'DEMANDANTE', 'demandante', 'Demandante']
+        demandante_encontrado = False
+        for col_req in columnas_demandante:
+            if col_req in df.columns:
+                demandante_encontrado = True
+                break
+        
+        # Validar DEMANDADO
+        columnas_demandado = ['DEMANDADO_HOMOLOGADO', 'DEMANDADO', 'demandado', 'Demandado']
+        demandado_encontrado = False
+        for col_req in columnas_demandado:
+            if col_req in df.columns:
+                demandado_encontrado = True
+                break
+        
+        # Validar FECHA INGRESO
+        columnas_fecha = ['FECHA INGRESO', 'FECHA_INGRESO', 'fecha_ingreso', 'Fecha Ingreso', 'FECHA DE INGRESO']
+        fecha_encontrada = False
+        for col_req in columnas_fecha:
+            if col_req in df.columns:
+                fecha_encontrada = True
+                break
+        
+        # Validar SOLICITUD
+        columnas_solicitud = ['SOLICITUD', 'solicitud', 'Solicitud', 'TIPO_SOLICITUD', 'tipo_solicitud']
+        solicitud_encontrada = False
+        for col_req in columnas_solicitud:
+            if col_req in df.columns:
+                solicitud_encontrada = True
+                break
+        
+        # Verificar que todas las columnas requeridas estén presentes
+        columnas_faltantes = []
+        if not radicado_encontrado:
+            columnas_faltantes.append("RADICADO COMPLETO")
+        if not demandante_encontrado:
+            columnas_faltantes.append("DEMANDANTE")
+        if not demandado_encontrado:
+            columnas_faltantes.append("DEMANDADO")
+        if not fecha_encontrada:
+            columnas_faltantes.append("FECHA INGRESO")
+        if not solicitud_encontrada:
+            columnas_faltantes.append("SOLICITUD")
+        
+        if columnas_faltantes:
+            logger.error(f"Faltan columnas requeridas: {columnas_faltantes}")
+            flash(f'El archivo Excel debe contener las siguientes columnas requeridas: {", ".join(columnas_faltantes)}. Columnas disponibles: {", ".join(df.columns)}', 'error')
+            return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
+        
+        logger.info("✅ Todas las columnas requeridas están presentes")
+        columnas_encontradas = ["Validación exitosa"]  # Para mantener compatibilidad con el código siguiente
         
         conn = obtener_conexion()
         logger.info("Conexión a BD establecida para procesamiento masivo")
@@ -499,26 +627,91 @@ def procesar_excel_expedientes(filepath):
                         demandado = str(row.get(col_name)).strip()
                         break
                 
+                # Procesar FECHA INGRESO (requerida)
+                fecha_ingreso = None
+                for col_name in ['FECHA INGRESO', 'FECHA_INGRESO', 'fecha_ingreso', 'Fecha Ingreso', 'FECHA DE INGRESO']:
+                    if col_name in df.columns and pd.notna(row.get(col_name)):
+                        fecha_valor = row.get(col_name)
+                        # Intentar convertir a fecha si es necesario
+                        try:
+                            if isinstance(fecha_valor, str):
+                                # Intentar diferentes formatos de fecha
+                                from datetime import datetime
+                                for formato in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
+                                    try:
+                                        fecha_ingreso = datetime.strptime(fecha_valor.strip(), formato).date()
+                                        break
+                                    except ValueError:
+                                        continue
+                            else:
+                                # Si ya es un objeto datetime o date
+                                fecha_ingreso = fecha_valor
+                        except Exception as e:
+                            logger.warning(f"Error procesando fecha en fila {index + 1}: {e}")
+                        break
+                
+                # Procesar SOLICITUD (requerida)
+                solicitud = None
+                for col_name in ['SOLICITUD', 'solicitud', 'Solicitud', 'TIPO_SOLICITUD', 'tipo_solicitud']:
+                    if col_name in df.columns and pd.notna(row.get(col_name)):
+                        solicitud = str(row.get(col_name)).strip()
+                        break
+                
                 logger.debug(f"  Radicado completo: '{radicado_completo}'")
                 logger.debug(f"  Radicado corto: '{radicado_corto}'")
                 logger.debug(f"  Demandante: '{demandante}'")
                 logger.debug(f"  Demandado: '{demandado}'")
+                logger.debug(f"  Fecha ingreso: '{fecha_ingreso}'")
+                logger.debug(f"  Solicitud: '{solicitud}'")
                 
+                # Validar campos requeridos
                 if not radicado_completo and not radicado_corto:
                     logger.debug(f"  Saltando fila {index + 1} - sin radicado")
-                    continue  # Saltar filas sin radicado
+                    errores += 1
+                    continue
+                
+                # Validación específica del radicado completo (debe tener exactamente 23 dígitos)
+                if radicado_completo:
+                    es_valido, mensaje_error = validar_radicado_completo(radicado_completo)
+                    if not es_valido:
+                        logger.debug(f"  Saltando fila {index + 1} - {mensaje_error}")
+                        errores += 1
+                        continue
+                    
+                    logger.debug(f"  ✅ Radicado completo válido: {radicado_completo} (23 dígitos)")
+                
+                if not demandante:
+                    logger.debug(f"  Saltando fila {index + 1} - sin demandante")
+                    errores += 1
+                    continue
+                
+                if not demandado:
+                    logger.debug(f"  Saltando fila {index + 1} - sin demandado")
+                    errores += 1
+                    continue
+                
+                if not fecha_ingreso:
+                    logger.debug(f"  Saltando fila {index + 1} - sin fecha de ingreso")
+                    errores += 1
+                    continue
+                
+                if not solicitud:
+                    logger.debug(f"  Saltando fila {index + 1} - sin solicitud")
+                    errores += 1
+                    continue
                 
                 # Construir query dinámicamente basado en columnas disponibles
                 columns_to_insert = []
                 values_to_insert = []
                 placeholders = []
                 
-                # Columnas base (siempre intentar insertar)
+                # Columnas base requeridas (siempre insertar)
                 base_data = {
                     'radicado_completo': radicado_completo,
                     'radicado_corto': radicado_corto,
                     'demandante': demandante,
-                    'demandado': demandado
+                    'demandado': demandado,
+                    'fecha_ingreso': fecha_ingreso
                 }
                 
                 for col, value in base_data.items():
@@ -527,12 +720,17 @@ def procesar_excel_expedientes(filepath):
                         placeholders.append('%s')
                         values_to_insert.append(value)
                 
-                # Columnas opcionales con mapeo flexible
+                # Insertar solicitud en tipo_solicitud si existe esa columna
+                if 'tipo_solicitud' in available_columns and solicitud:
+                    columns_to_insert.append('tipo_solicitud')
+                    placeholders.append('%s')
+                    values_to_insert.append(solicitud)
+                
+                # Columnas opcionales con mapeo flexible (excluyendo tipo_solicitud que ya se procesó)
                 optional_mappings = {
                     'estado': ['ESTADO_EXPEDIENTE', 'estado', 'ESTADO', 'Estado'],
                     'responsable': ['RESPONSABLE', 'responsable', 'Responsable'],
                     'ubicacion': ['UBICACION', 'ubicacion', 'Ubicacion'],
-                    'tipo_solicitud': ['SOLICITUD', 'tipo_solicitud', 'TIPO_SOLICITUD', 'Tipo Solicitud'],
                     'observaciones': ['OBSERVACIONES', 'observaciones', 'Observaciones']
                 }
                 
@@ -548,7 +746,7 @@ def procesar_excel_expedientes(filepath):
                                     break
                 
                 # Manejar juzgado_origen (puede ser integer en la BD)
-                juzgado_origen_cols = ['JuzgadoOrigen', 'juzgado_origen', 'JUZGADO_ORIGEN', 'Juzgado Origen']
+                juzgado_origen_cols = ['JuzgadoOrigen', 'juzgado_origen', 'JUZGADO_ORIGEN', 'Juzgado Origen', 'J. ORIGEN']
                 for col_name in juzgado_origen_cols:
                     if col_name in df.columns and pd.notna(row.get(col_name)) and 'juzgado_origen' in available_columns:
                         juzgado_value = str(row.get(col_name)).strip()
@@ -564,23 +762,50 @@ def procesar_excel_expedientes(filepath):
                                 values_to_insert.append(juzgado_value)
                             break
                 
-                # Manejar fecha_ingreso si existe en la tabla
-                if 'fecha_ingreso' in available_columns:
-                    from datetime import date
-                    values_to_insert.append(date.today())
-                    columns_to_insert.append('fecha_ingreso')
-                    placeholders.append('%s')
-                
                 # Construir y ejecutar query
                 if columns_to_insert:  # Solo insertar si hay columnas válidas
                     query = f"""
                         INSERT INTO expediente 
                         ({', '.join(columns_to_insert)})
                         VALUES ({', '.join(placeholders)})
+                        RETURNING id
                     """
                     
                     logger.debug(f"  Ejecutando inserción con columnas: {columns_to_insert}")
                     cursor.execute(query, values_to_insert)
+                    
+                    # Obtener el ID del expediente insertado
+                    expediente_id = cursor.fetchone()[0]
+                    
+                    # Manejar asignación de turno si el estado es 'Activo Pendiente'
+                    estado_expediente = None
+                    for i, col in enumerate(columns_to_insert):
+                        if col == 'estado':
+                            estado_expediente = values_to_insert[i]
+                            break
+                    
+                    if estado_expediente == 'Activo Pendiente' and 'turno' in available_columns:
+                        logger.debug(f"  🎫 Expediente {expediente_id} creado con estado 'Activo Pendiente' - asignando turno")
+                        
+                        # Obtener el siguiente turno disponible
+                        cursor.execute("""
+                            SELECT MAX(turno) 
+                            FROM expediente 
+                            WHERE estado = 'Activo Pendiente' AND turno IS NOT NULL
+                        """)
+                        
+                        resultado = cursor.fetchone()
+                        ultimo_turno = resultado[0] if resultado and resultado[0] is not None else 0
+                        siguiente_turno = ultimo_turno + 1
+                        
+                        # Asignar turno al expediente recién creado
+                        cursor.execute("""
+                            UPDATE expediente 
+                            SET turno = %s 
+                            WHERE id = %s
+                        """, (siguiente_turno, expediente_id))
+                        
+                        logger.debug(f"  ✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
                     
                     procesados += 1
                     if procesados % 100 == 0:  # Log cada 100 registros procesados
