@@ -436,6 +436,18 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="form-group">
+                                    <label for="fecha_ingreso_expediente">Fecha de Ingreso:</label>
+                                    <input type="date" class="form-control" id="fecha_ingreso_expediente" 
+                                           name="fecha_ingreso_expediente"
+                                           value="{{ expediente.fecha_ingreso.strftime('%Y-%m-%d') if expediente.fecha_ingreso else '' }}">
+                                    <small class="form-text text-muted">
+                                        <i class="fas fa-info-circle"></i> 
+                                        Cambiar esta fecha recalculará automáticamente los turnos
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
                                     {% if session.administrador %}
                                         <label for="rol_responsable">Rol/Responsable:</label>
                                         <div class="input-group">

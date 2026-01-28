@@ -147,17 +147,9 @@ def manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_n
             logger.warning("La columna 'turno' no existe en la tabla expediente")
             return
         
-        # Caso 1: Cambio A "Activo Pendiente" - Asignar turno
+        # Caso 1: Cambio A "Activo Pendiente" - Asignar turno basado en fecha de ingreso
         if estado_nuevo == 'Activo Pendiente' and estado_anterior != 'Activo Pendiente':
-            siguiente_turno = obtener_siguiente_turno(cursor)
-            
-            cursor.execute("""
-                UPDATE expediente 
-                SET turno = %s 
-                WHERE id = %s
-            """, (siguiente_turno, expediente_id))
-            
-            logger.info(f"✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
+            asignar_turno_por_fecha_ingreso(cursor, expediente_id)
             
         # Caso 2: Cambio DESDE "Activo Pendiente" a otro estado - Quitar turno
         elif estado_anterior == 'Activo Pendiente' and estado_nuevo != 'Activo Pendiente':
@@ -168,6 +160,9 @@ def manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_n
             """, (expediente_id,))
             
             logger.info(f"🗑️ Turno removido del expediente {expediente_id} (cambió de 'Activo Pendiente' a '{estado_nuevo}')")
+            
+            # Recalcular turnos de todos los expedientes 'Activo Pendiente'
+            recalcular_todos_los_turnos(cursor)
         
         # Caso 3: No hay cambio relevante para turno
         else:
@@ -177,6 +172,217 @@ def manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_n
         
     except Exception as e:
         logger.error(f"Error manejando cambio de estado para turno: {str(e)}")
+        raise e
+
+def manejar_cambio_fecha_ingreso(cursor, expediente_id, fecha_anterior, fecha_nueva):
+    """
+    Maneja la actualización de turnos cuando cambia la fecha de ingreso
+    LÓGICA FINAL: Recalcula si el expediente está en 'Activo Pendiente' y tiene fecha de ingreso
+    (ya sea en expediente.fecha_ingreso O en tabla ingresos)
+    
+    Args:
+        cursor: Cursor de la base de datos
+        expediente_id: ID del expediente
+        fecha_anterior: Fecha de ingreso anterior
+        fecha_nueva: Nueva fecha de ingreso
+    """
+    try:
+        logger.info(f"=== INICIO manejar_cambio_fecha_ingreso ===")
+        logger.info(f"Expediente ID: {expediente_id}")
+        logger.info(f"Fecha anterior: {fecha_anterior}")
+        logger.info(f"Fecha nueva: {fecha_nueva}")
+        
+        # Verificar si el expediente está en estado 'Activo Pendiente'
+        cursor.execute("SELECT estado, fecha_ingreso FROM expediente WHERE id = %s", (expediente_id,))
+        resultado = cursor.fetchone()
+        
+        if not resultado:
+            logger.warning(f"Expediente {expediente_id} no encontrado")
+            return
+        
+        estado_actual = resultado[0]
+        fecha_ingreso_expediente = resultado[1]
+        
+        if estado_actual == 'Activo Pendiente':
+            # Verificar si tiene fecha de ingreso (en expediente O en tabla ingresos)
+            cursor.execute("""
+                SELECT EXISTS(SELECT 1 FROM ingresos WHERE expediente_id = %s)
+            """, (expediente_id,))
+            
+            tiene_ingresos = cursor.fetchone()[0]
+            
+            logger.info(f"📊 Verificación:")
+            logger.info(f"   - Estado: {estado_actual}")
+            logger.info(f"   - Fecha ingreso en expediente: {fecha_ingreso_expediente}")
+            logger.info(f"   - Tiene registros en tabla ingresos: {tiene_ingresos}")
+            
+            # LÓGICA FINAL: Si tiene fecha_ingreso en expediente O registros en tabla ingresos
+            tiene_fecha_para_turno = fecha_ingreso_expediente is not None or tiene_ingresos
+            
+            logger.info(f"   - Tiene fecha para turno: {tiene_fecha_para_turno}")
+            
+            if tiene_fecha_para_turno:
+                logger.info(f"📅 Expediente cumple criterios para turno - recalculando todos los turnos")
+                # Recalcular todos los turnos porque el orden puede haber cambiado
+                recalcular_todos_los_turnos(cursor)
+            else:
+                logger.info(f"ℹ️ Expediente NO tiene fecha de ingreso (ni en expediente ni en tabla ingresos)")
+        else:
+            logger.info(f"ℹ️ Expediente no está en 'Activo Pendiente' (estado: {estado_actual}) - no se recalculan turnos")
+        
+        logger.info("=== FIN manejar_cambio_fecha_ingreso ===")
+        
+    except Exception as e:
+        logger.error(f"Error manejando cambio de fecha de ingreso: {str(e)}")
+        raise e
+
+def asignar_turno_por_fecha_ingreso(cursor, expediente_id):
+    """
+    Asigna turno a un expediente específico basándose en su fecha de ingreso
+    en relación con otros expedientes 'Activo Pendiente'
+    """
+    try:
+        logger.info(f"🎫 Asignando turno por fecha de ingreso para expediente {expediente_id}")
+        
+        # Obtener la fecha de ingreso del expediente
+        cursor.execute("""
+            SELECT fecha_ingreso 
+            FROM expediente 
+            WHERE id = %s
+        """, (expediente_id,))
+        
+        resultado = cursor.fetchone()
+        if not resultado:
+            logger.error(f"Expediente {expediente_id} no encontrado")
+            return
+        
+        fecha_expediente = resultado[0]
+        logger.info(f"📅 Fecha de ingreso del expediente: {fecha_expediente}")
+        
+        # Recalcular todos los turnos para mantener consistencia
+        recalcular_todos_los_turnos(cursor)
+        
+    except Exception as e:
+        logger.error(f"Error asignando turno por fecha de ingreso: {str(e)}")
+        raise e
+
+def recalcular_todos_los_turnos(cursor):
+    """
+    Recalcula todos los turnos de expedientes 'Activo Pendiente' 
+    basándose en la LÓGICA FINAL:
+    1. Tomar fecha_ingreso del campo expediente.fecha_ingreso O última fecha de tabla ingresos
+    2. Asignar turno a TODOS los expedientes 'Activo Pendiente' que tengan fecha de ingreso
+    """
+    try:
+        logger.info("🔄 RECALCULANDO TODOS LOS TURNOS (LÓGICA FINAL)...")
+        
+        # Paso 1: Limpiar todos los turnos de expedientes 'Activo Pendiente'
+        cursor.execute("""
+            UPDATE expediente 
+            SET turno = NULL 
+            WHERE estado = 'Activo Pendiente'
+        """)
+        
+        limpiados = cursor.rowcount
+        logger.info(f"🧹 Turnos limpiados: {limpiados}")
+        
+        # Paso 2: Obtener TODOS los expedientes 'Activo Pendiente' que tienen fecha de ingreso
+        # LÓGICA CORREGIDA: Si tiene ingresos, usar la PRIMERA fecha de ingresos (más antigua)
+        # Si NO tiene ingresos, usar expediente.fecha_ingreso
+        cursor.execute("""
+            SELECT 
+                e.id,
+                e.radicado_completo,
+                CASE 
+                    WHEN EXISTS(SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id) THEN
+                        (SELECT i.fecha_ingreso 
+                         FROM ingresos i 
+                         WHERE i.expediente_id = e.id 
+                         ORDER BY i.fecha_ingreso ASC 
+                         LIMIT 1)
+                    ELSE 
+                        e.fecha_ingreso
+                END as fecha_para_turno
+            FROM expediente e
+            WHERE e.estado = 'Activo Pendiente'
+              AND (
+                  e.fecha_ingreso IS NOT NULL
+                  OR
+                  EXISTS (
+                      SELECT 1 FROM ingresos i 
+                      WHERE i.expediente_id = e.id
+                  )
+              )
+            ORDER BY CASE 
+                WHEN EXISTS(SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id) THEN
+                    (SELECT i.fecha_ingreso 
+                     FROM ingresos i 
+                     WHERE i.expediente_id = e.id 
+                     ORDER BY i.fecha_ingreso ASC 
+                     LIMIT 1)
+                ELSE 
+                    e.fecha_ingreso
+            END ASC, e.id ASC
+        """)
+        
+        expedientes = cursor.fetchall()
+        logger.info(f"📋 Expedientes que deben tener turno: {len(expedientes)}")
+        logger.info(f"   (Criterio: 'Activo Pendiente' + tiene fecha de ingreso)")
+        
+        if not expedientes:
+            logger.info("ℹ️ No hay expedientes que cumplan los criterios para asignar turnos")
+            return
+        
+        # Paso 3: Asignar turnos secuenciales
+        turnos_asignados = 0
+        
+        for turno, (exp_id, radicado, fecha_para_turno) in enumerate(expedientes, 1):
+            cursor.execute("""
+                UPDATE expediente 
+                SET turno = %s 
+                WHERE id = %s
+            """, (turno, exp_id))
+            
+            if cursor.rowcount == 1:
+                turnos_asignados += 1
+                if turnos_asignados <= 5:  # Log de los primeros 5
+                    fecha_str = fecha_para_turno.strftime('%Y-%m-%d') if fecha_para_turno else 'Sin fecha'
+                    logger.info(f"   ✅ Turno {turno}: {radicado} (Fecha para turno: {fecha_str})")
+                elif turnos_asignados % 100 == 0:  # Progreso cada 100
+                    logger.info(f"   📈 Procesados {turnos_asignados} expedientes...")
+        
+        logger.info(f"✅ Turnos recalculados: {turnos_asignados}")
+        
+        # Verificación rápida
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM expediente 
+            WHERE estado = 'Activo Pendiente' AND turno IS NOT NULL
+        """)
+        
+        verificacion = cursor.fetchone()[0]
+        
+        if verificacion == turnos_asignados:
+            logger.info(f"🎯 Verificación exitosa: {verificacion} turnos asignados correctamente")
+        else:
+            logger.error(f"❌ Error en verificación: esperados {turnos_asignados}, encontrados {verificacion}")
+        
+        # Log de estadísticas adicionales
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM expediente e
+            WHERE e.estado = 'Activo Pendiente'
+              AND e.fecha_ingreso IS NULL
+              AND NOT EXISTS (SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id)
+        """)
+        
+        sin_fechas = cursor.fetchone()[0]
+        
+        logger.info(f"📊 Expedientes 'Activo Pendiente' excluidos del turno:")
+        logger.info(f"   - Sin fecha de ingreso (ni en expediente ni en ingresos): {sin_fechas}")
+        
+    except Exception as e:
+        logger.error(f"Error recalculando turnos: {str(e)}")
         raise e
 
 def _construir_select_expediente(cursor, alias=''):
@@ -745,6 +951,7 @@ def actualizar_expediente():
         rol_responsable = request.form.get('rol_responsable', '').strip()
         observaciones = request.form.get('observaciones', '').strip()
         radicado_completo = request.form.get('radicado_completo', '').strip()
+        fecha_ingreso_expediente = request.form.get('fecha_ingreso_expediente', '').strip()
         
         logger.info("Datos del formulario:")
         logger.info(f"  - radicado_completo: '{radicado_completo}'")
@@ -755,19 +962,35 @@ def actualizar_expediente():
         logger.info(f"  - tipo_solicitud: '{tipo_solicitud}'")
         logger.info(f"  - juzgado_origen: '{juzgado_origen}'")
         logger.info(f"  - rol_responsable: '{rol_responsable}'")
+        logger.info(f"  - fecha_ingreso_expediente: '{fecha_ingreso_expediente}'")
         
         conn = obtener_conexion()
         cursor = conn.cursor()
         
-        # Obtener el estado anterior del expediente para manejar el turno
-        cursor.execute("SELECT estado FROM expediente WHERE id = %s", (expediente_id,))
-        resultado_estado = cursor.fetchone()
-        estado_anterior = resultado_estado[0] if resultado_estado else None
+        # Obtener el estado anterior y fecha anterior del expediente para manejar cambios
+        cursor.execute("SELECT estado, fecha_ingreso FROM expediente WHERE id = %s", (expediente_id,))
+        resultado_anterior = cursor.fetchone()
+        estado_anterior = resultado_anterior[0] if resultado_anterior else None
+        fecha_anterior = resultado_anterior[1] if resultado_anterior else None
         
         logger.info(f"Estado anterior del expediente: '{estado_anterior}'")
+        logger.info(f"Fecha anterior del expediente: '{fecha_anterior}'")
         
         # Detectar columnas disponibles
         available_columns = _detectar_columnas_disponibles(cursor)
+        
+        # Procesar fecha de ingreso si se proporciona
+        fecha_ingreso_obj = None
+        if fecha_ingreso_expediente:
+            try:
+                from datetime import datetime
+                fecha_ingreso_obj = datetime.strptime(fecha_ingreso_expediente, '%Y-%m-%d').date()
+                logger.info(f"Fecha de ingreso procesada: {fecha_ingreso_obj}")
+            except ValueError as e:
+                logger.warning(f"Error procesando fecha de ingreso '{fecha_ingreso_expediente}': {e}")
+                flash('Formato de fecha de ingreso inválido', 'error')
+                return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
+                               f'?buscar_id={expediente_id}')
         
         # Construir UPDATE dinámicamente
         update_fields = []
@@ -781,6 +1004,10 @@ def actualizar_expediente():
             'responsable': rol_responsable,
             'radicado_completo': radicado_completo
         }
+        
+        # Añadir fecha_ingreso si se proporciona y la columna existe
+        if fecha_ingreso_obj and 'fecha_ingreso' in available_columns:
+            base_fields['fecha_ingreso'] = fecha_ingreso_obj
         
         for field, value in base_fields.items():
             if field in available_columns:
@@ -831,8 +1058,12 @@ def actualizar_expediente():
             if estado_anterior != estado_actual:
                 logger.info(f"🔄 Detectado cambio de estado: '{estado_anterior}' -> '{estado_actual}'")
                 manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_actual)
+            # Manejar cambio de turno si la fecha de ingreso cambió (solo si el expediente está en 'Activo Pendiente')
+            elif fecha_ingreso_obj and fecha_anterior != fecha_ingreso_obj:
+                logger.info(f"📅 Detectado cambio de fecha de ingreso: '{fecha_anterior}' -> '{fecha_ingreso_obj}'")
+                manejar_cambio_fecha_ingreso(cursor, expediente_id, fecha_anterior, fecha_ingreso_obj)
             else:
-                logger.info("ℹ️ No hay cambio de estado, no se modifica turno")
+                logger.info("ℹ️ No hay cambios relevantes para turno (estado o fecha de ingreso)")
             
             conn.commit()
             logger.info("Expediente actualizado correctamente")
@@ -880,11 +1111,26 @@ def agregar_ingreso():
         conn = obtener_conexion()
         cursor = conn.cursor()
         
+        # Verificar el estado del expediente antes de agregar el ingreso
+        cursor.execute("SELECT estado FROM expediente WHERE id = %s", (expediente_id,))
+        resultado_estado = cursor.fetchone()
+        estado_actual = resultado_estado[0] if resultado_estado else None
+        
+        logger.info(f"📋 Agregando ingreso a expediente {expediente_id} (Estado: {estado_actual})")
+        logger.info(f"📅 Nueva fecha de ingreso: {fecha_ingreso_obj}")
+        
         cursor.execute("""
             INSERT INTO ingresos 
             (expediente_id, fecha_ingreso, observaciones, solicitud)
             VALUES (%s, %s, %s, %s)
         """, (expediente_id, fecha_ingreso_obj, observaciones_ingreso, motivo_ingreso))
+        
+        # Si el expediente está en 'Activo Pendiente', recalcular turnos
+        if estado_actual == 'Activo Pendiente':
+            logger.info(f"🔄 Expediente en 'Activo Pendiente' - recalculando turnos después de agregar ingreso")
+            recalcular_todos_los_turnos(cursor)
+        else:
+            logger.info(f"ℹ️ Expediente no está en 'Activo Pendiente' (estado: {estado_actual}) - no se recalculan turnos")
         
         conn.commit()
         cursor.close()
