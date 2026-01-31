@@ -668,8 +668,8 @@
                                                         <th style="width: 15%;">Clase</th>
                                                         <th style="width: 25%;">Auto/Anotación</th>
                                                         <th style="width: 20%;">Observaciones</th>
-                                                        <th style="width: 8%;">Act. ID</th>
-                                                        <th style="width: 8%;">Ing. ID</th>
+                                                        <!-- <th style="width: 8%;">Act. ID</th>
+                                                        <th style="width: 8%;">Ing. ID</th> -->
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -686,8 +686,8 @@
                                                         </td>
                                                         <td><small>{{ estado.observaciones or '—' }}</small>
                                                         </td>
-                                                        <td><small>{{ estado.actuacion_id or '—' }}</small></td>
-                                                        <td><small>{{ estado.ingresos_id or '—' }}</small></td>
+                                                        <!-- <td><small>{{ estado.actuacion_id or '—' }}</small></td>
+                                                        <td><small>{{ estado.ingresos_id or '—' }}</small></td> -->
                                                     </tr>
                                                     {% endfor %}
                                                 </tbody>
@@ -901,8 +901,6 @@
                                                 <th>Clase</th>
                                                 <th>Auto/Anotación</th>
                                                 <th>Observaciones</th>
-                                                <th>Act. ID</th>
-                                                <th>Ing. ID</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -917,10 +915,6 @@
                                                         clase' }}</span></td>
                                                 <td>{{ estado.auto_anotacion or '—' }}</td>
                                                 <td><small>{{ estado.observaciones or '—' }}</small></td>
-                                                <td><span class="badge badge-info">{{ estado.actuacion_id or '—'
-                                                        }}</span></td>
-                                                <td><span class="badge badge-success">{{ estado.ingresos_id or
-                                                        '—' }}</span></td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>

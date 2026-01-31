@@ -1,0 +1,275 @@
+from flask import Blueprint, render_template, request, flash, jsonify, send_file, redirect, url_for
+import sys
+import os
+import logging
+from datetime import datetime, timedelta, date
+from io import BytesIO
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import re
+
+# Configurar logging específico para expedientes
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Agregar el directorio padre al path para importar módulos
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from modelo.configBd import obtener_conexion
+
+vistaconsulta = Blueprint('vistaconsulta', __name__, template_folder='templates')
+
+@vistaconsulta.route('/consulta')
+def consulta_publica():
+    """Portal público de consulta de expedientes"""
+    return render_template('consulta.html')
+
+@vistaconsulta.route('/api/buscar_expediente', methods=['POST'])
+def buscar_expediente():
+    """API para búsqueda de expedientes por radicado"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No se recibieron datos'}), 400
+            
+        radicado = data.get('radicado', '').strip()
+        
+        if not radicado:
+            return jsonify({'error': 'Debe ingresar un número de radicado'}), 400
+        
+        # Limpiar y normalizar el radicado
+        radicado_limpio = re.sub(r'[^\d-]', '', radicado)
+        
+        if not radicado_limpio:
+            return jsonify({'error': 'Formato de radicado inválido'}), 400
+        
+        conexion = obtener_conexion()
+        cursor = conexion.cursor()
+        
+        # Búsqueda flexible por radicado (completo o parcial)
+        query = """
+        SELECT 
+            radicado_completo,
+            demandante,
+            demandado,
+            estado,
+            fecha_ingreso,
+            turno            
+        FROM expediente 
+        WHERE radicado_completo ILIKE %s 
+           OR radicado_corto ILIKE %s
+           OR radicado_completo ILIKE %s
+        ORDER BY fecha_ingreso DESC
+        LIMIT 10
+        """
+        
+        # Patrones de búsqueda
+        patron_completo = f"%{radicado_limpio}%"
+        patron_corto = f"%{radicado_limpio.split('-')[-1]}%" if '-' in radicado_limpio else patron_completo
+        
+        cursor.execute(query, (patron_completo, patron_corto, patron_completo))
+        resultados = cursor.fetchall()
+        
+        expedientes = []
+        for row in resultados:
+            expedientes.append({
+                'numero_radicado': row[0] or 'No disponible',  # radicado_completo
+                'demandante': row[1] or 'No disponible',
+                'demandado': row[2] or 'No disponible',
+                'estado': row[3] or 'pendiente',
+                'fecha_ingreso': row[4].strftime('%d/%m/%Y') if row[4] else 'No disponible',
+                'turno': row[5] or '',
+                'fecha_actuacion': 'No disponible',
+                'actuacion': 'Sin actuaciones'
+            })
+        
+        cursor.close()
+        conexion.close()
+        
+        return jsonify({
+            'success': True,
+            'expedientes': expedientes,
+            'total': len(expedientes)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error en búsqueda de expediente: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor. Intente nuevamente.'}), 500
+
+@vistaconsulta.route('/api/buscar_por_nombres', methods=['POST'])
+def buscar_por_nombres():
+    """API para búsqueda de expedientes por nombres de demandante/demandado"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No se recibieron datos'}), 400
+            
+        nombre = data.get('nombre', '').strip()
+        
+        if not nombre or len(nombre) < 3:
+            return jsonify({'error': 'Debe ingresar al menos 3 caracteres'}), 400
+        
+        conexion = obtener_conexion()
+        cursor = conexion.cursor()
+        
+        # Búsqueda por nombres (demandante o demandado)
+        query = """
+        SELECT 
+            radicado_completo,
+            demandante,
+            demandado,
+            estado,
+            fecha_ingreso,
+            turno
+        FROM expediente 
+        WHERE demandante ILIKE %s 
+           OR demandado ILIKE %s
+        ORDER BY fecha_ingreso DESC
+        LIMIT 20
+        """
+        
+        patron_busqueda = f"%{nombre}%"
+        cursor.execute(query, (patron_busqueda, patron_busqueda))
+        resultados = cursor.fetchall()
+        
+        expedientes = []
+        for row in resultados:
+            expedientes.append({
+                'numero_radicado': row[0] or 'No disponible',  # radicado_completo
+                'demandante': row[1] or 'No disponible',
+                'demandado': row[2] or 'No disponible',
+                'estado': row[3] or 'pendiente',
+                'fecha_ingreso': row[4].strftime('%d/%m/%Y') if row[4] else 'No disponible',
+                'turno': row[5] or '',
+                'fecha_actuacion': 'No disponible',
+                'actuacion': 'Sin actuaciones'
+            })
+        
+        cursor.close()
+        conexion.close()
+        
+        return jsonify({
+            'success': True,
+            'expedientes': expedientes,
+            'total': len(expedientes)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error en búsqueda por nombres: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor. Intente nuevamente.'}), 500
+
+@vistaconsulta.route('/api/turnos_del_dia')
+def turnos_del_dia():
+    """API para obtener los turnos programados para hoy"""
+    try:
+        fecha_hoy = date.today()
+        
+        conexion = obtener_conexion()
+        cursor = conexion.cursor()
+        
+        # Obtener turnos del día actual (expedientes con turno asignado)
+        query = """
+        SELECT 
+            radicado_completo,
+            demandante,
+            demandado,
+            turno,
+            estado
+        FROM expediente 
+        WHERE turno IS NOT NULL
+           AND turno != ''
+           AND estado = 'Activo Pendiente'
+        ORDER BY turno ASC
+        """
+        
+        cursor.execute(query)
+        resultados = cursor.fetchall()
+        
+        turnos = []
+        for row in resultados:
+            turnos.append({
+                'numero_radicado': row[0] or 'No disponible',  # radicado_completo
+                'demandante': row[1] or 'No disponible',
+                'demandado': row[2] or 'No disponible',
+                'turno': row[3] or '',
+                'estado': row[4] or 'pendiente',
+                'fecha_actuacion': fecha_hoy.strftime('%d/%m/%Y')
+            })
+        
+        cursor.close()
+        conexion.close()
+        
+        return jsonify({
+            'success': True,
+            'turnos': turnos,
+            'fecha': fecha_hoy.strftime('%d/%m/%Y'),
+            'total': len(turnos)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo turnos del día: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor. Intente nuevamente.'}), 500
+
+@vistaconsulta.route('/turnos')
+def vista_turnos():
+    """Vista pública de turnos del día"""
+    return render_template('turnos_publicos.html')
+
+@vistaconsulta.route('/api/turnos_publicos')
+def turnos_publicos():
+    """API para obtener turnos públicos con información básica"""
+    try:
+        fecha_hoy = date.today()
+        
+        conexion = obtener_conexion()
+        cursor = conexion.cursor()
+        
+        # Obtener turnos del día con información básica para mostrar públicamente
+        query = """
+        SELECT 
+            ROW_NUMBER() OVER (ORDER BY turno ASC) as numero,
+            CONCAT(SUBSTRING(demandante FROM 1 FOR 1), '***') as nombre_anonimo,
+            SUBSTRING(radicado_completo FROM LENGTH(radicado_completo) - 3) as cedula_parcial,
+            'Consulta General' as tipo,
+            turno as hora,
+            CASE 
+                WHEN estado = 'Inactivo Resuelto' THEN 'completado'
+                WHEN estado = 'Activo Pendiente' AND turno <= TO_CHAR(CURRENT_TIME, 'HH24:MI') THEN 'atendiendo'
+                ELSE 'esperando'
+            END as estado
+        FROM expediente 
+        WHERE turno IS NOT NULL
+           AND turno != ''
+           AND estado IN ('Activo Pendiente', 'Inactivo Resuelto')
+        ORDER BY turno ASC
+        LIMIT 50
+        """
+        
+        cursor.execute(query)
+        resultados = cursor.fetchall()
+        
+        turnos = []
+        for row in resultados:
+            turnos.append({
+                'numero': int(row[0]),
+                'nombre': row[1] or f"Usuario {row[0]}",
+                'cedula': f"***{row[2]}" if row[2] else "***",
+                'tipo': row[3],
+                'hora': row[4] or '09:00',
+                'estado': row[5]
+            })
+        
+        cursor.close()
+        conexion.close()
+        
+        return jsonify({
+            'success': True,
+            'turnos': turnos,
+            'fecha': fecha_hoy.strftime('%d/%m/%Y'),
+            'total': len(turnos)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo turnos públicos: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor. Intente nuevamente.'}), 500
+

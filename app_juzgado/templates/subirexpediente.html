@@ -249,7 +249,7 @@
                         
                         <div class="row mb-4">
                             <div class="col-md-6">
-                                <h6 class="text-primary"><i class="fas fa-list"></i> Columnas Requeridas:</h6>
+                                <h6 class="text-primary"><i class="fas fa-list"></i> Formato Tradicional - Columnas Requeridas:</h6>
                                 <ul class="list-group list-group-flush">
                                     <li class="list-group-item"><strong>RADICADO COMPLETO</strong></li>
                                     <li class="list-group-item"><strong>DEMANDANTE</strong></li>
@@ -271,6 +271,43 @@
                                     <li class="list-group-item">OBSERVACIONES</li>
                                 </ul>
                             </div>
+                        </div>
+                        
+                        <!-- Nueva sección para múltiples pestañas -->
+                        <div class="alert alert-success mb-4">
+                            <h6 class="text-success"><i class="fas fa-layer-group"></i> Nuevo: Formato con Múltiples Pestañas</h6>
+                            <p class="mb-2">Ahora puedes subir archivos Excel con múltiples pestañas para organizar mejor tu información:</p>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="text-success"><i class="fas fa-inbox"></i> Pestaña "ingreso":</h6>
+                                    <ul class="small mb-2">
+                                        <li><strong>RADICADO COMPLETO</strong> (requerido)</li>
+                                        <li><strong>DEMANDANTE</strong> (requerido)</li>
+                                        <li><strong>DEMANDADO</strong> (requerido)</li>
+                                        <li><strong>FECHA INGRESO</strong> (requerido)</li>
+                                        <li><strong>SOLICITUD</strong> (requerido)</li>
+                                        <li>ESTADO, RESPONSABLE, UBICACION (opcionales)</li>
+                                    </ul>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <h6 class="text-success"><i class="fas fa-clipboard-list"></i> Pestaña "estados":</h6>
+                                    <ul class="small mb-2">
+                                        <li><strong>RADICADO COMPLETO</strong> (requerido)</li>
+                                        <li><strong>CLASE</strong> (requerido)</li>
+                                        <li><strong>DEMANDANTE</strong> (requerido)</li>
+                                        <li><strong>DEMANDADO</strong> (requerido)</li>
+                                        <li><strong>FECHA ESTADO</strong> (requerido)</li>
+                                        <li><strong>AUTO / ANOTACION</strong> (requerido)</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                <strong>Detección Automática:</strong> El sistema detectará automáticamente si tu archivo tiene pestañas llamadas "ingreso" y "estados" y las procesará de forma especializada.
+                            </small>
                         </div>
                         
                         <form method="POST" enctype="multipart/form-data" action="{{ url_for('idvistasubirexpediente.vista_subirexpediente') }}">

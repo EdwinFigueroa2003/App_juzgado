@@ -17,6 +17,7 @@ from vista.vistaroles import vistaroles
 from vista.vistaasignacion import vistaasignacion
 from vista.vistausuarios import vistausuarios
 from vista.vistasecurity import vistasecurity
+from vista.vistaconsulta import vistaconsulta
 
 app = Flask(__name__)
 
@@ -32,6 +33,12 @@ if os.getenv('FLASK_ENV') == 'development':
 
 # 🔒 SEGURIDAD: Protección CSRF
 csrf = CSRFProtect(app)
+
+# Exentar APIs públicas del CSRF
+csrf.exempt('vistaconsulta.buscar_expediente')
+csrf.exempt('vistaconsulta.buscar_por_nombres')
+csrf.exempt('vistaconsulta.turnos_del_dia')
+csrf.exempt('vistaconsulta.turnos_publicos')
 
 # 🔒 SEGURIDAD: Headers de seguridad
 @app.after_request
@@ -73,6 +80,7 @@ app.register_blueprint(vistaroles)
 app.register_blueprint(vistaasignacion)
 app.register_blueprint(vistausuarios)
 app.register_blueprint(vistasecurity)
+app.register_blueprint(vistaconsulta)
 
 @app.route('/')
 def home():

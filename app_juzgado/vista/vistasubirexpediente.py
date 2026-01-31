@@ -137,9 +137,30 @@ def procesar_archivo_excel():
             logger.info(f"Guardando archivo en: {filepath}")
             file.save(filepath)
             
-            # Procesar Excel
-            logger.info("Iniciando procesamiento de Excel")
-            resultados = procesar_excel_expedientes(filepath)
+            # Verificar si el archivo tiene múltiples pestañas (ingreso y estados)
+            logger.info("Verificando estructura del archivo Excel")
+            try:
+                excel_file = pd.ExcelFile(filepath)
+                hojas_disponibles = excel_file.sheet_names
+                logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
+                excel_file.close()
+                
+                # Verificar si tiene pestañas específicas para ingreso y estados
+                tiene_pestaña_ingreso = any(hoja.lower() in ['ingreso', 'ingresos'] for hoja in hojas_disponibles)
+                tiene_pestaña_estados = any(hoja.lower() in ['estado', 'estados'] for hoja in hojas_disponibles)
+                
+                if tiene_pestaña_ingreso and tiene_pestaña_estados:
+                    logger.info("Detectado archivo Excel con pestañas múltiples (ingreso y estados)")
+                    resultados = procesar_excel_multiples_pestañas(filepath, hojas_disponibles)
+                else:
+                    logger.info("Procesando archivo Excel con formato tradicional")
+                    resultados = procesar_excel_expedientes(filepath)
+                    
+            except Exception as e:
+                logger.warning(f"Error verificando estructura del Excel: {e}")
+                logger.info("Procesando como archivo Excel tradicional")
+                resultados = procesar_excel_expedientes(filepath)
+            
             logger.info(f"Resultados del procesamiento: {resultados}")
             
             # Eliminar archivo temporal con manejo de errores
@@ -161,16 +182,27 @@ def procesar_archivo_excel():
                 logger.warning(f"Error eliminando archivo temporal: {str(e)}")
             
             # Crear mensaje de resultado más detallado
-            mensaje_resultado = f'Archivo procesado usando hoja "{resultados["hoja_usada"]}". '
-            mensaje_resultado += f'{resultados["procesados"]} expedientes agregados exitosamente'
-            
-            if resultados["errores"] > 0:
-                mensaje_resultado += f', {resultados["errores"]} filas omitidas por errores de validación'
-            
-            mensaje_resultado += f' de {resultados["total_filas"]} filas procesadas.'
-            
-            if resultados["errores"] > 0:
-                mensaje_resultado += f' Revise que los radicados completos tengan exactamente 23 dígitos y que todos los campos requeridos estén presentes.'
+            if 'hoja_usada' in resultados:
+                # Formato tradicional
+                mensaje_resultado = f'Archivo procesado usando hoja "{resultados["hoja_usada"]}". '
+                mensaje_resultado += f'{resultados["procesados"]} expedientes agregados exitosamente'
+                
+                if resultados["errores"] > 0:
+                    mensaje_resultado += f', {resultados["errores"]} filas omitidas por errores de validación'
+                
+                mensaje_resultado += f' de {resultados["total_filas"]} filas procesadas.'
+                
+                if resultados["errores"] > 0:
+                    mensaje_resultado += f' Revise que los radicados completos tengan exactamente 23 dígitos y que todos los campos requeridos estén presentes.'
+            else:
+                # Formato múltiples pestañas
+                mensaje_resultado = f'Archivo procesado con múltiples pestañas. '
+                mensaje_resultado += f'{resultados["expedientes_procesados"]} expedientes procesados, '
+                mensaje_resultado += f'{resultados["ingresos_procesados"]} ingresos agregados, '
+                mensaje_resultado += f'{resultados["estados_procesados"]} estados agregados.'
+                
+                if resultados["errores"] > 0:
+                    mensaje_resultado += f' {resultados["errores"]} errores encontrados.'
             
             flash(mensaje_resultado, 'success' if resultados["errores"] == 0 else 'warning')
             logger.info("=== FIN procesar_archivo_excel - ÉXITO ===")
@@ -840,3 +872,436 @@ def procesar_excel_expedientes(filepath):
         logger.error(f"ERROR GENERAL en procesar_excel_expedientes: {str(e)}")
         logger.error(f"Tipo de error: {type(e).__name__}")
         raise Exception(f"Error leyendo archivo Excel: {str(e)}")
+
+def procesar_excel_multiples_pestañas(filepath, hojas_disponibles):
+    """
+    Procesa un archivo Excel con múltiples pestañas:
+    - Pestaña 'ingreso': Información actual de expedientes
+    - Pestaña 'estados': RADICADO COMPLETO, CLASE, DEMANDANTE, DEMANDADO, FECHA ESTADO, AUTO / ANOTACION
+    """
+    logger.info("=== INICIO procesar_excel_multiples_pestañas ===")
+    logger.info(f"Archivo: {filepath}")
+    logger.info(f"Hojas disponibles: {hojas_disponibles}")
+    
+    try:
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        # Verificar estructura de las tablas
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'expediente'
+        """)
+        expediente_columns = [row[0] for row in cursor.fetchall()]
+        
+        cursor.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_name IN ('ingresos', 'estados')
+        """)
+        tablas_relacionadas = [row[0] for row in cursor.fetchall()]
+        
+        logger.info(f"Columnas en tabla expediente: {expediente_columns}")
+        logger.info(f"Tablas relacionadas disponibles: {tablas_relacionadas}")
+        
+        resultados = {
+            'expedientes_procesados': 0,
+            'ingresos_procesados': 0,
+            'estados_procesados': 0,
+            'errores': 0
+        }
+        
+        # Procesar pestaña de ingresos
+        pestaña_ingreso = None
+        for hoja in hojas_disponibles:
+            if hoja.lower() in ['ingreso', 'ingresos', 'INGRESO', 'INGRESOS']:
+                pestaña_ingreso = hoja
+                break
+        
+        if pestaña_ingreso:
+            logger.info(f"Procesando pestaña de ingresos: {pestaña_ingreso}")
+            try:
+                df_ingresos = pd.read_excel(filepath, sheet_name=pestaña_ingreso)
+                logger.info(f"Pestaña '{pestaña_ingreso}' leída: {len(df_ingresos)} filas, columnas: {list(df_ingresos.columns)}")
+                
+                # Procesar expedientes desde la pestaña de ingresos
+                resultado_ingresos = procesar_pestaña_ingresos(df_ingresos, cursor, expediente_columns)
+                resultados['expedientes_procesados'] += resultado_ingresos['procesados']
+                resultados['ingresos_procesados'] += resultado_ingresos['ingresos_creados']
+                resultados['errores'] += resultado_ingresos['errores']
+                
+            except Exception as e:
+                logger.error(f"Error procesando pestaña de ingresos: {e}")
+                resultados['errores'] += 1
+        
+        # Procesar pestaña de estados
+        pestaña_estados = None
+        for hoja in hojas_disponibles:
+            if hoja.lower() in ['estado', 'estados', 'ESTADO', 'ESTADOS']:
+                pestaña_estados = hoja
+                break
+        
+        if pestaña_estados and 'estados' in tablas_relacionadas:
+            logger.info(f"Procesando pestaña de estados: {pestaña_estados}")
+            try:
+                df_estados = pd.read_excel(filepath, sheet_name=pestaña_estados)
+                logger.info(f"Pestaña '{pestaña_estados}' leída: {len(df_estados)} filas, columnas: {list(df_estados.columns)}")
+                
+                # Procesar estados
+                resultado_estados = procesar_pestaña_estados(df_estados, cursor)
+                resultados['estados_procesados'] += resultado_estados['procesados']
+                resultados['errores'] += resultado_estados['errores']
+                
+            except Exception as e:
+                logger.error(f"Error procesando pestaña de estados: {e}")
+                resultados['errores'] += 1
+        elif pestaña_estados and 'estados' not in tablas_relacionadas:
+            logger.warning("Pestaña de estados encontrada pero tabla 'estados' no existe en la BD")
+            resultados['errores'] += 1
+        
+        conn.commit()
+        logger.info("Transacción confirmada (COMMIT)")
+        
+        cursor.close()
+        conn.close()
+        
+        logger.info(f"=== FIN procesar_excel_multiples_pestañas - Resultado: {resultados} ===")
+        return resultados
+        
+    except Exception as e:
+        logger.error(f"ERROR GENERAL en procesar_excel_multiples_pestañas: {str(e)}")
+        raise Exception(f"Error procesando archivo Excel con múltiples pestañas: {str(e)}")
+
+def procesar_pestaña_ingresos(df, cursor, expediente_columns):
+    """Procesa la pestaña de ingresos con información actual de expedientes"""
+    logger.info("=== INICIO procesar_pestaña_ingresos ===")
+    
+    resultado = {
+        'procesados': 0,
+        'ingresos_creados': 0,
+        'errores': 0
+    }
+    
+    try:
+        # Verificar columnas requeridas para ingresos
+        columnas_requeridas = ['RADICADO COMPLETO', 'DEMANDANTE', 'DEMANDADO', 'FECHA INGRESO', 'SOLICITUD']
+        columnas_faltantes = []
+        
+        for col_req in columnas_requeridas:
+            encontrada = False
+            for col_df in df.columns:
+                if col_req.lower() in col_df.lower() or col_df.lower() in col_req.lower():
+                    encontrada = True
+                    break
+            if not encontrada:
+                columnas_faltantes.append(col_req)
+        
+        if columnas_faltantes:
+            logger.error(f"Faltan columnas requeridas en pestaña ingresos: {columnas_faltantes}")
+            resultado['errores'] = len(df)
+            return resultado
+        
+        logger.info("✅ Todas las columnas requeridas están presentes en pestaña ingresos")
+        
+        # Procesar cada fila
+        for index, row in df.iterrows():
+            try:
+                # Extraer datos con mapeo flexible
+                radicado_completo = extraer_valor_flexible(row, df.columns, ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio'])
+                demandante = extraer_valor_flexible(row, df.columns, ['DEMANDANTE', 'demandante', 'DEMANDANTE_HOMOLOGADO'])
+                demandado = extraer_valor_flexible(row, df.columns, ['DEMANDADO', 'demandado', 'DEMANDADO_HOMOLOGADO'])
+                fecha_ingreso = extraer_fecha_flexible(row, df.columns, ['FECHA INGRESO', 'fecha_ingreso', 'FECHA_INGRESO'])
+                solicitud = extraer_valor_flexible(row, df.columns, ['SOLICITUD', 'solicitud', 'TIPO_SOLICITUD'])
+                
+                # Validaciones básicas
+                if not radicado_completo or not demandante or not demandado or not fecha_ingreso or not solicitud:
+                    logger.debug(f"Saltando fila {index + 1} - faltan datos requeridos")
+                    resultado['errores'] += 1
+                    continue
+                
+                # Validar radicado completo
+                es_valido, mensaje_error = validar_radicado_completo(radicado_completo)
+                if not es_valido:
+                    logger.debug(f"Saltando fila {index + 1} - {mensaje_error}")
+                    resultado['errores'] += 1
+                    continue
+                
+                # Verificar si el expediente ya existe
+                cursor.execute("""
+                    SELECT id FROM expediente WHERE radicado_completo = %s
+                """, (radicado_completo,))
+                
+                expediente_existente = cursor.fetchone()
+                
+                if expediente_existente:
+                    expediente_id = expediente_existente[0]
+                    logger.debug(f"Expediente {radicado_completo} ya existe (ID: {expediente_id})")
+                else:
+                    # Crear nuevo expediente
+                    expediente_id = crear_expediente_desde_ingreso(cursor, expediente_columns, {
+                        'radicado_completo': radicado_completo,
+                        'demandante': demandante,
+                        'demandado': demandado,
+                        'fecha_ingreso': fecha_ingreso,
+                        'tipo_solicitud': solicitud,
+                        'estado': extraer_valor_flexible(row, df.columns, ['ESTADO', 'estado', 'ESTADO_EXPEDIENTE']),
+                        'responsable': extraer_valor_flexible(row, df.columns, ['RESPONSABLE', 'responsable']),
+                        'ubicacion': extraer_valor_flexible(row, df.columns, ['UBICACION', 'ubicacion']),
+                        'observaciones': extraer_valor_flexible(row, df.columns, ['OBSERVACIONES', 'observaciones'])
+                    })
+                    
+                    if expediente_id:
+                        resultado['procesados'] += 1
+                        logger.debug(f"Expediente creado: {radicado_completo} (ID: {expediente_id})")
+                    else:
+                        resultado['errores'] += 1
+                        continue
+                
+                # Crear registro en tabla ingresos si existe
+                cursor.execute("""
+                    SELECT table_name FROM information_schema.tables WHERE table_name = 'ingresos'
+                """)
+                
+                if cursor.fetchone():
+                    try:
+                        cursor.execute("""
+                            INSERT INTO ingresos (expediente_id, fecha_ingreso, solicitud, observaciones)
+                            VALUES (%s, %s, %s, %s)
+                        """, (expediente_id, fecha_ingreso, solicitud, 
+                              extraer_valor_flexible(row, df.columns, ['OBSERVACIONES', 'observaciones']) or 'Ingreso desde Excel'))
+                        
+                        resultado['ingresos_creados'] += 1
+                        logger.debug(f"Ingreso creado para expediente {expediente_id}")
+                        
+                    except Exception as ingreso_error:
+                        logger.warning(f"Error creando ingreso para expediente {expediente_id}: {ingreso_error}")
+                
+            except Exception as row_error:
+                logger.error(f"Error procesando fila {index + 1} en pestaña ingresos: {row_error}")
+                resultado['errores'] += 1
+                continue
+        
+        logger.info(f"=== FIN procesar_pestaña_ingresos - Resultado: {resultado} ===")
+        return resultado
+        
+    except Exception as e:
+        logger.error(f"ERROR en procesar_pestaña_ingresos: {str(e)}")
+        resultado['errores'] = len(df)
+        return resultado
+
+def procesar_pestaña_estados(df, cursor):
+    """
+    Procesa la pestaña de estados con columnas requeridas:
+    RADICADO COMPLETO, CLASE, FECHA ESTADO, AUTO / ANOTACION
+    """
+    logger.info("=== INICIO procesar_pestaña_estados ===")
+    
+    resultado = {
+        'procesados': 0,
+        'errores': 0
+    }
+    
+    try:
+        # Verificar columnas requeridas para estados (solo las esenciales)
+        columnas_requeridas = ['RADICADO COMPLETO', 'CLASE', 'FECHA ESTADO', 'AUTO / ANOTACION']
+        columnas_faltantes = []
+        
+        for col_req in columnas_requeridas:
+            encontrada = False
+            for col_df in df.columns:
+                if col_req.lower().replace(' / ', '_').replace(' ', '_') in col_df.lower().replace(' / ', '_').replace(' ', '_'):
+                    encontrada = True
+                    break
+            if not encontrada:
+                columnas_faltantes.append(col_req)
+        
+        if columnas_faltantes:
+            logger.error(f"Faltan columnas requeridas en pestaña estados: {columnas_faltantes}")
+            resultado['errores'] = len(df)
+            return resultado
+        
+        logger.info("✅ Todas las columnas requeridas están presentes en pestaña estados")
+        
+        # Procesar cada fila
+        for index, row in df.iterrows():
+            try:
+                # Extraer datos con mapeo flexible (solo los requeridos)
+                radicado_completo = extraer_valor_flexible(row, df.columns, ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio'])
+                clase = extraer_valor_flexible(row, df.columns, ['CLASE', 'clase'])
+                fecha_estado = extraer_fecha_flexible(row, df.columns, ['FECHA ESTADO', 'fecha_estado', 'FECHA_ESTADO'])
+                auto_anotacion = extraer_valor_flexible(row, df.columns, ['AUTO / ANOTACION', 'auto_anotacion', 'AUTO_ANOTACION', 'AUTO', 'ANOTACION'])
+                
+                # Extraer datos opcionales para observaciones
+                demandante = extraer_valor_flexible(row, df.columns, ['DEMANDANTE', 'demandante'])
+                demandado = extraer_valor_flexible(row, df.columns, ['DEMANDADO', 'demandado'])
+                observaciones = extraer_valor_flexible(row, df.columns, ['OBSERVACIONES', 'observaciones'])
+                
+                # Validaciones básicas (solo campos requeridos)
+                if not radicado_completo or not clase or not fecha_estado or not auto_anotacion:
+                    logger.debug(f"Saltando fila {index + 1} - faltan datos requeridos para estado (radicado: {radicado_completo}, clase: {clase}, fecha: {fecha_estado}, auto: {auto_anotacion})")
+                    resultado['errores'] += 1
+                    continue
+                
+                # Buscar el expediente por radicado completo
+                cursor.execute("""
+                    SELECT id FROM expediente WHERE radicado_completo = %s
+                """, (radicado_completo,))
+                
+                expediente_existente = cursor.fetchone()
+                
+                if not expediente_existente:
+                    logger.debug(f"Expediente {radicado_completo} no encontrado para crear estado")
+                    resultado['errores'] += 1
+                    continue
+                
+                expediente_id = expediente_existente[0]
+                
+                # Crear observaciones combinadas si hay demandante/demandado
+                observaciones_finales = observaciones or ""
+                if demandante or demandado:
+                    info_adicional = f"Estado desde Excel"
+                    if demandante:
+                        info_adicional += f" - Demandante: {demandante}"
+                    if demandado:
+                        info_adicional += f" - Demandado: {demandado}"
+                    
+                    if observaciones_finales:
+                        observaciones_finales = f"{observaciones_finales}. {info_adicional}"
+                    else:
+                        observaciones_finales = info_adicional
+                
+                # Crear registro en tabla estados
+                try:
+                    cursor.execute("""
+                        INSERT INTO estados (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (expediente_id, clase, fecha_estado, auto_anotacion, observaciones_finales))
+                    
+                    resultado['procesados'] += 1
+                    logger.debug(f"Estado creado para expediente {radicado_completo} (ID: {expediente_id})")
+                    
+                except Exception as estado_error:
+                    logger.error(f"Error creando estado para expediente {expediente_id}: {estado_error}")
+                    resultado['errores'] += 1
+                    continue
+                
+            except Exception as row_error:
+                logger.error(f"Error procesando fila {index + 1} en pestaña estados: {row_error}")
+                resultado['errores'] += 1
+                continue
+        
+        logger.info(f"=== FIN procesar_pestaña_estados - Resultado: {resultado} ===")
+        return resultado
+        
+    except Exception as e:
+        logger.error(f"ERROR en procesar_pestaña_estados: {str(e)}")
+        resultado['errores'] = len(df)
+        return resultado
+
+def extraer_valor_flexible(row, columnas_df, posibles_nombres):
+    """Extrae un valor de una fila usando nombres de columnas flexibles"""
+    for nombre in posibles_nombres:
+        for col_df in columnas_df:
+            if nombre.lower().replace(' ', '_') in col_df.lower().replace(' ', '_') or col_df.lower().replace(' ', '_') in nombre.lower().replace(' ', '_'):
+                valor = row.get(col_df)
+                if pd.notna(valor) and str(valor).strip():
+                    return str(valor).strip()
+    return None
+
+def extraer_fecha_flexible(row, columnas_df, posibles_nombres):
+    """Extrae una fecha de una fila usando nombres de columnas flexibles"""
+    from datetime import datetime
+    
+    for nombre in posibles_nombres:
+        for col_df in columnas_df:
+            if nombre.lower().replace(' ', '_') in col_df.lower().replace(' ', '_') or col_df.lower().replace(' ', '_') in nombre.lower().replace(' ', '_'):
+                fecha_valor = row.get(col_df)
+                if pd.notna(fecha_valor):
+                    try:
+                        if isinstance(fecha_valor, str):
+                            # Intentar diferentes formatos de fecha
+                            for formato in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
+                                try:
+                                    return datetime.strptime(fecha_valor.strip(), formato).date()
+                                except ValueError:
+                                    continue
+                        else:
+                            # Si ya es un objeto datetime o date
+                            if hasattr(fecha_valor, 'date'):
+                                return fecha_valor.date()
+                            else:
+                                return fecha_valor
+                    except Exception:
+                        continue
+    return None
+
+def crear_expediente_desde_ingreso(cursor, expediente_columns, datos):
+    """Crea un nuevo expediente desde los datos de ingreso"""
+    try:
+        # Construir query dinámicamente basado en columnas disponibles
+        columns_to_insert = []
+        values_to_insert = []
+        placeholders = []
+        
+        # Mapeo de datos a columnas de BD
+        mapeo_columnas = {
+            'radicado_completo': datos.get('radicado_completo'),
+            'demandante': datos.get('demandante'),
+            'demandado': datos.get('demandado'),
+            'fecha_ingreso': datos.get('fecha_ingreso'),
+            'tipo_solicitud': datos.get('tipo_solicitud'),
+            'estado': datos.get('estado') or 'Activo Pendiente',  # Estado por defecto
+            'responsable': datos.get('responsable'),
+            'ubicacion': datos.get('ubicacion'),
+            'observaciones': datos.get('observaciones')
+        }
+        
+        for col, value in mapeo_columnas.items():
+            if col in expediente_columns and value:
+                columns_to_insert.append(col)
+                placeholders.append('%s')
+                values_to_insert.append(value)
+        
+        if not columns_to_insert:
+            logger.error("No hay columnas válidas para insertar expediente")
+            return None
+        
+        # Construir y ejecutar query
+        query = f"""
+            INSERT INTO expediente 
+            ({', '.join(columns_to_insert)})
+            VALUES ({', '.join(placeholders)})
+            RETURNING id
+        """
+        
+        cursor.execute(query, values_to_insert)
+        expediente_id = cursor.fetchone()[0]
+        
+        # Manejar asignación de turno si el estado es 'Activo Pendiente'
+        if datos.get('estado') == 'Activo Pendiente' or (not datos.get('estado') and 'turno' in expediente_columns):
+            # Obtener el siguiente turno disponible
+            cursor.execute("""
+                SELECT MAX(turno) 
+                FROM expediente 
+                WHERE estado = 'Activo Pendiente' AND turno IS NOT NULL
+            """)
+            
+            resultado = cursor.fetchone()
+            ultimo_turno = resultado[0] if resultado and resultado[0] is not None else 0
+            siguiente_turno = ultimo_turno + 1
+            
+            # Asignar turno al expediente recién creado
+            cursor.execute("""
+                UPDATE expediente 
+                SET turno = %s 
+                WHERE id = %s
+            """, (siguiente_turno, expediente_id))
+            
+            logger.debug(f"✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
+        
+        return expediente_id
+        
+    except Exception as e:
+        logger.error(f"Error creando expediente desde ingreso: {str(e)}")
+        return None
