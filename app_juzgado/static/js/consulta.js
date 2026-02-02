@@ -6,6 +6,8 @@
 // Variables globales
 let expedientesCache = [];
 let turnosCache = [];
+let paginacionActual = {};
+let nombreBusquedaActual = '';
 
 /**
  * Configuración de la aplicación
@@ -117,7 +119,7 @@ async function manejarBusquedaRadicado(event) {
         mostrarResultadosExpedientes(expedientes);
     } catch (error) {
         console.error('Error en búsqueda por radicado:', error);
-        mostrarError('Error al buscar el expediente. Intente nuevamente.');
+        mostrarError('Error al buscar el expediente. Para mayor información de esta consulta, llevela a la ventanilla de juzgado');
     }
 }
 
@@ -135,11 +137,14 @@ async function manejarBusquedaNombres(event) {
         return;
     }
 
+    nombreBusquedaActual = nombre;
     mostrarCargando();
     
     try {
-        const expedientes = await buscarPorNombre(nombre);
-        mostrarResultadosExpedientes(expedientes);
+        const resultado = await buscarPorNombre(nombre, 1);
+        if (resultado.expedientes) {
+            mostrarResultadosExpedientes(resultado.expedientes, resultado.paginacion);
+        }
     } catch (error) {
         console.error('Error en búsqueda por nombre:', error);
         mostrarError('Error al buscar expedientes. Intente nuevamente.');
@@ -175,14 +180,15 @@ async function buscarPorRadicado(radicado) {
 /**
  * Busca expedientes por nombre
  * @param {string} nombre - Nombre a buscar
- * @returns {Promise<Array>} Lista de expedientes
+ * @param {number} pagina - Número de página
+ * @returns {Promise<Object>} Resultado con expedientes y paginación
  */
-async function buscarPorNombre(nombre) {
+async function buscarPorNombre(nombre, pagina = 1) {
     try {
         const response = await fetch(`${CONFIG.API_BASE_URL}/buscar_por_nombres`, {
             method: 'POST',
             headers: getDefaultHeaders(),
-            body: JSON.stringify({ nombre: nombre })
+            body: JSON.stringify({ nombre: nombre, pagina: pagina })
         });
 
         const data = await response.json();
@@ -191,7 +197,10 @@ async function buscarPorNombre(nombre) {
             throw new Error(data.error || 'Error en la búsqueda');
         }
 
-        return data.expedientes || [];
+        return {
+            expedientes: data.expedientes || [],
+            paginacion: data.paginacion || {}
+        };
     } catch (error) {
         console.error('Error en buscarPorNombre:', error);
         throw error;
@@ -238,10 +247,12 @@ async function obtenerTurnosDelDia() {
 /**
  * Muestra los resultados de expedientes
  * @param {Array} expedientes - Lista de expedientes
+ * @param {Object} paginacion - Información de paginación
  */
-function mostrarResultadosExpedientes(expedientes) {
+function mostrarResultadosExpedientes(expedientes, paginacion = null) {
     const container = document.getElementById('resultados');
     const resultadosContainer = document.getElementById('resultados-container');
+    const paginacionContainer = document.getElementById('paginacion-container');
     
     if (!container || !resultadosContainer) return;
     
@@ -256,6 +267,7 @@ function mostrarResultadosExpedientes(expedientes) {
                 <p>No hay expedientes que coincidan con su búsqueda.</p>
             </div>
         `;
+        if (paginacionContainer) paginacionContainer.style.display = 'none';
         return;
     }
     
@@ -277,6 +289,15 @@ function mostrarResultadosExpedientes(expedientes) {
     `).join('');
     
     container.innerHTML = expedientesHTML;
+    
+    // Mostrar paginación si hay datos
+    if (paginacion && paginacion.total_paginas > 1) {
+        paginacionActual = paginacion;
+        mostrarPaginacion(paginacion);
+        if (paginacionContainer) paginacionContainer.style.display = 'block';
+    } else {
+        if (paginacionContainer) paginacionContainer.style.display = 'none';
+    }
 }
 
 /**
@@ -418,6 +439,92 @@ function obtenerTextoEstado(estado) {
     };
     
     return estados[estado.toLowerCase()] || estado;
+}
+
+/**
+ * Muestra los controles de paginación
+ * @param {Object} paginacion - Información de paginación
+ */
+function mostrarPaginacion(paginacion) {
+    // Actualizar información
+    document.getElementById('inicio-item').textContent = paginacion.inicio_item;
+    document.getElementById('fin-item').textContent = paginacion.fin_item;
+    document.getElementById('total-items').textContent = paginacion.total_items;
+    document.getElementById('pagina-actual').textContent = paginacion.pagina_actual;
+    document.getElementById('total-paginas').textContent = paginacion.total_paginas;
+    
+    // Botón anterior
+    const btnAnterior = document.getElementById('btn-anterior');
+    if (paginacion.tiene_anterior) {
+        btnAnterior.classList.remove('disabled');
+        btnAnterior.querySelector('a').onclick = (e) => {
+            e.preventDefault();
+            irAPagina(paginacion.pagina_anterior);
+        };
+    } else {
+        btnAnterior.classList.add('disabled');
+        btnAnterior.querySelector('a').onclick = (e) => e.preventDefault();
+    }
+    
+    // Botón siguiente - obtener referencia ANTES de modificar
+    const btnSiguiente = document.getElementById('btn-siguiente');
+    
+    // Limpiar números de página anteriores (si existen)
+    const paginationList = document.getElementById('pagination-list');
+    const paginasAnteriores = paginationList.querySelectorAll('li.page-item:not(#btn-anterior):not(#btn-siguiente)');
+    paginasAnteriores.forEach(li => li.remove());
+    
+    // Generar HTML para números de página
+    let paginasHTML = '';
+    for (let num of paginacion.paginas_mostrar) {
+        if (num === paginacion.pagina_actual) {
+            paginasHTML += `
+                <li class="page-item active">
+                    <span class="page-link">${num}</span>
+                </li>
+            `;
+        } else {
+            paginasHTML += `
+                <li class="page-item">
+                    <a class="page-link" href="#" onclick="irAPagina(${num}); return false;">${num}</a>
+                </li>
+            `;
+        }
+    }
+    
+    // Insertar números de página ANTES del botón siguiente
+    btnSiguiente.insertAdjacentHTML('beforebegin', paginasHTML);
+    
+    // Configurar botón siguiente
+    if (paginacion.tiene_siguiente) {
+        btnSiguiente.classList.remove('disabled');
+        btnSiguiente.querySelector('a').onclick = (e) => {
+            e.preventDefault();
+            irAPagina(paginacion.pagina_siguiente);
+        };
+    } else {
+        btnSiguiente.classList.add('disabled');
+        btnSiguiente.querySelector('a').onclick = (e) => e.preventDefault();
+    }
+}
+
+/**
+ * Navega a una página específica
+ * @param {number} pagina - Número de página
+ */
+async function irAPagina(pagina) {
+    mostrarCargando();
+    try {
+        const resultado = await buscarPorNombre(nombreBusquedaActual, pagina);
+        if (resultado.expedientes !== undefined) {
+            mostrarResultadosExpedientes(resultado.expedientes, resultado.paginacion);
+            // Scroll al inicio de resultados
+            document.getElementById('resultados-container').scrollIntoView({ behavior: 'smooth' });
+        }
+    } catch (error) {
+        console.error('Error al navegar a página:', error);
+        mostrarError('Error al cargar los expedientes.');
+    }
 }
 
 /**

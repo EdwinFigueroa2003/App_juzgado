@@ -98,13 +98,15 @@ def buscar_expediente():
 
 @vistaconsulta.route('/api/buscar_por_nombres', methods=['POST'])
 def buscar_por_nombres():
-    """API para búsqueda de expedientes por nombres de demandante/demandado"""
+    """API para búsqueda de expedientes por nombres de demandante/demandado con paginación"""
     try:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No se recibieron datos'}), 400
             
         nombre = data.get('nombre', '').strip()
+        pagina = data.get('pagina', 1)
+        items_por_pagina = 10
         
         if not nombre or len(nombre) < 3:
             return jsonify({'error': 'Debe ingresar al menos 3 caracteres'}), 400
@@ -112,7 +114,7 @@ def buscar_por_nombres():
         conexion = obtener_conexion()
         cursor = conexion.cursor()
         
-        # Búsqueda por nombres (demandante o demandado)
+        # Búsqueda por nombres (demandante o demandado) - traer todos los resultados
         query = """
         SELECT 
             radicado_completo,
@@ -125,15 +127,28 @@ def buscar_por_nombres():
         WHERE demandante ILIKE %s 
            OR demandado ILIKE %s
         ORDER BY fecha_ingreso DESC
-        LIMIT 20
         """
         
         patron_busqueda = f"%{nombre}%"
         cursor.execute(query, (patron_busqueda, patron_busqueda))
         resultados = cursor.fetchall()
         
+        total_items = len(resultados)
+        total_paginas = (total_items + items_por_pagina - 1) // items_por_pagina if total_items > 0 else 1
+        
+        # Validar página
+        if pagina < 1:
+            pagina = 1
+        elif pagina > total_paginas:
+            pagina = total_paginas
+        
+        # Calcular índices para el slice
+        indice_inicio = (pagina - 1) * items_por_pagina
+        indice_fin = indice_inicio + items_por_pagina
+        resultados_pagina = resultados[indice_inicio:indice_fin]
+        
         expedientes = []
-        for row in resultados:
+        for row in resultados_pagina:
             expedientes.append({
                 'numero_radicado': row[0] or 'No disponible',  # radicado_completo
                 'demandante': row[1] or 'No disponible',
@@ -148,10 +163,35 @@ def buscar_por_nombres():
         cursor.close()
         conexion.close()
         
+        # Calcular información de paginación
+        inicio_item = indice_inicio + 1 if total_items > 0 else 0
+        fin_item = min(indice_fin, total_items)
+        
+        # Generar lista de páginas a mostrar (máximo 5 páginas)
+        paginas_inicio = max(1, pagina - 2)
+        paginas_fin = min(total_paginas, pagina + 2)
+        paginas_mostrar = list(range(paginas_inicio, paginas_fin + 1))
+        
+        paginacion = {
+            'pagina_actual': pagina,
+            'total_paginas': total_paginas,
+            'total_items': total_items,
+            'items_por_pagina': items_por_pagina,
+            'inicio_item': inicio_item,
+            'fin_item': fin_item,
+            'tiene_anterior': pagina > 1,
+            'tiene_siguiente': pagina < total_paginas,
+            'pagina_anterior': pagina - 1,
+            'pagina_siguiente': pagina + 1,
+            'paginas_mostrar': paginas_mostrar,
+            'nombre': nombre
+        }
+        
         return jsonify({
             'success': True,
             'expedientes': expedientes,
-            'total': len(expedientes)
+            'total': total_items,
+            'paginacion': paginacion
         })
         
     except Exception as e:
