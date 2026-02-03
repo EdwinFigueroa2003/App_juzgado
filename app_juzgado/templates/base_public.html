@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistema Judicial{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/files.png') }}">
+    
+    <!-- CSS personalizado -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/public.css') }}">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-light">
+    <!-- Header público simplificado -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
+        <div class="container">
+            <!-- <a class="navbar-brand" href="{{ url_for('vistaconsulta.consulta_publica') }}"> -->
+            <a class="navbar-brand">
+                <!-- <i class="fas fa-balance-scale me-2"></i> -->
+                <strong>Sistema Judicial</strong>
+                <small class="d-block" style="font-size: 0.7rem; opacity: 0.8;">Consulta Pública</small>
+            </a>
+            
+            <!-- Botones de navegación pública -->
+            <!-- <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('vistaconsulta.consulta_publica') }}">
+                    <i class="fas fa-search me-1"></i>
+                    Consultar Expediente
+                </a>
+                <a class="nav-link" href="{{ url_for('vistaconsulta.vista_turnos') }}">
+                    <i class="fas fa-calendar-day me-1"></i>
+                    Turnos del Día
+                </a>
+            </div> -->
+        </div>
+    </nav>
+
+    <!-- Contenido principal -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer público -->
+    <footer class="bg-dark text-light py-4 mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-8">
+                    <h6><i class="fas fa-info-circle me-2"></i>Sistema de Consulta Pública</h6>
+                    <p class="small mb-0">
+                        Consulte el estado de sus expedientes y turnos asignados de forma gratuita.
+                        Para más información, contacte con la oficina judicial correspondiente.
+                    </p>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <small class="text-muted">
+                        <i class="fas fa-shield-alt me-1"></i>
+                        Conexión segura
+                    </small>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

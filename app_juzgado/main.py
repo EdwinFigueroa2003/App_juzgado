@@ -18,6 +18,7 @@ from vista.vistaasignacion import vistaasignacion
 from vista.vistausuarios import vistausuarios
 from vista.vistasecurity import vistasecurity
 from vista.vistaconsulta import vistaconsulta
+from vista.vistatest import vistatest  # Blueprint de pruebas
 
 app = Flask(__name__)
 
@@ -81,10 +82,70 @@ app.register_blueprint(vistaasignacion)
 app.register_blueprint(vistausuarios)
 app.register_blueprint(vistasecurity)
 app.register_blueprint(vistaconsulta)
+app.register_blueprint(vistatest)  # Blueprint de pruebas
+
+# 🔒 MANEJADOR ESPECÍFICO PARA ERRORES CSRF
+from flask_wtf.csrf import CSRFError
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    """Maneja específicamente errores de CSRF token"""
+    # Detectar si es una página pública
+    is_public_page = (
+        request.endpoint and 
+        ('consulta' in request.endpoint or 
+         'turnos_publicos' in request.endpoint or
+         request.path.startswith('/consulta') or
+         request.path.startswith('/api/buscar'))
+    )
+    
+    if is_public_page:
+        return render_template('errors/400_public.html', csrf_error=True, reason=str(e)), 400
+    else:
+        return render_template('errors/400.html', csrf_error=True, reason=str(e)), 400
+
+# 🚨 MANEJADORES DE ERRORES
+@app.errorhandler(400)
+def bad_request_error(error):
+    """Maneja errores 400 - Bad Request (incluyendo CSRF token mismatch)"""
+    # Detectar si es una página pública (consulta)
+    is_public_page = (
+        request.endpoint and 
+        ('consulta' in request.endpoint or 
+         'turnos_publicos' in request.endpoint or
+         request.path.startswith('/consulta') or
+         request.path.startswith('/api/buscar'))
+    )
+    
+    if is_public_page:
+        return render_template('errors/400_public.html', csrf_error=True), 400
+    else:
+        return render_template('errors/400.html', csrf_error=True), 400
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    """Maneja errores 403 - Forbidden"""
+    return render_template('errors/403.html'), 403
+
+@app.errorhandler(404)
+def not_found_error(error):
+    """Maneja errores 404 - Not Found"""
+    return render_template('errors/404.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Maneja errores 500 - Internal Server Error"""
+    return render_template('errors/500.html'), 500
 
 @app.route('/')
 def home():
     return render_template('login.html')
+
+@app.route('/csrf-token')
+def csrf_token():
+    """Endpoint para obtener un nuevo token CSRF"""
+    from flask_wtf.csrf import generate_csrf
+    return {'csrf_token': generate_csrf()}
 
 if __name__ == '__main__':
     # Configuración para Railway

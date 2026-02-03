@@ -1,0 +1,241 @@
+/* Estilos específicos para páginas públicas */
+
+/* Variables de colores corporativos */
+:root {
+    --primary-dark: #0f172a;
+    --primary-slate: #1e293b;
+    --accent-gold: #f59e0b;
+    --success-green: #10b981;
+    --warning-amber: #f59e0b;
+    --error-red: #ef4444;
+    --neutral-gray: #6b7280;
+}
+
+/* Header público */
+.navbar-brand small {
+    font-weight: 300;
+    letter-spacing: 0.5px;
+}
+
+/* Cards de consulta pública */
+.public-card {
+    border: none;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.public-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Botones públicos */
+.btn-public-primary {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-slate) 100%);
+    border: none;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-public-primary:hover {
+    background: linear-gradient(135deg, var(--primary-slate) 0%, var(--primary-dark) 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.3);
+    color: white;
+}
+
+.btn-public-secondary {
+    background: linear-gradient(135deg, var(--accent-gold) 0%, #fbbf24 100%);
+    border: none;
+    color: var(--primary-dark);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-public-secondary:hover {
+    background: linear-gradient(135deg, #fbbf24 0%, var(--accent-gold) 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+    color: var(--primary-dark);
+}
+
+/* Footer público */
+footer {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-slate) 100%) !important;
+}
+
+/* Formularios públicos */
+.public-form {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.public-form .form-control {
+    border-radius: 8px;
+    border: 2px solid #e5e7eb;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.public-form .form-control:focus {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
+/* Resultados de consulta pública */
+.public-result {
+    background: white;
+    border-radius: 12px;
+    border-left: 4px solid var(--accent-gold);
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.public-result-header {
+    color: var(--primary-dark);
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.public-badge {
+    background: linear-gradient(135deg, var(--accent-gold) 0%, #fbbf24 100%);
+    color: var(--primary-dark);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Estados específicos para consulta pública */
+.estado-activo-pendiente {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    border: 1px solid #f59e0b;
+}
+
+.estado-activo-resuelto {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #065f46;
+    border: 1px solid #10b981;
+}
+
+.estado-inactivo {
+    background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+    color: #374151;
+    border: 1px solid #6b7280;
+}
+
+/* Información de turnos públicos */
+.turno-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border-left: 4px solid var(--success-green);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1rem;
+}
+
+.turno-numero {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-dark);
+}
+
+.turno-expediente {
+    color: var(--neutral-gray);
+    font-size: 0.875rem;
+}
+
+/* Responsive para móviles */
+@media (max-width: 768px) {
+    .public-form {
+        padding: 1.5rem;
+        margin: 1rem;
+    }
+    
+    .public-result {
+        margin: 1rem;
+        padding: 1rem;
+    }
+    
+    .turno-card {
+        margin: 1rem;
+        padding: 1rem;
+    }
+    
+    .turno-numero {
+        font-size: 1.5rem;
+    }
+}
+
+/* Animaciones */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in-up {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+/* Loading states para consultas */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(245, 158, 11, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--accent-gold);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Mensajes de estado para usuarios públicos */
+.public-message {
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    border-left: 4px solid;
+}
+
+.public-message.info {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1e40af;
+}
+
+.public-message.success {
+    background: #f0fdf4;
+    border-color: var(--success-green);
+    color: #166534;
+}
+
+.public-message.warning {
+    background: #fffbeb;
+    border-color: var(--warning-amber);
+    color: #92400e;
+}
+
+.public-message.error {
+    background: #fef2f2;
+    border-color: var(--error-red);
+    color: #991b1b;
+}

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}Error 400 - Solicitud Inválida{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/errors.css') }}">
+<div class="error-page">
+    <div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Error 400 - Solicitud Inválida
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning" role="alert">
+                        <h5 class="alert-heading">
+                            <i class="fas fa-shield-alt"></i>
+                            {% if csrf_error %}
+                            Token de seguridad CSRF inválido
+                            {% else %}
+                            Solicitud inválida
+                            {% endif %}
+                        </h5>
+                        <p class="mb-3">
+                            {% if csrf_error %}
+                            La solicitud no pudo ser procesada debido a un problema con el token de seguridad CSRF.
+                            {% if reason %}
+                            <br><strong>Razón:</strong> {{ reason }}
+                            {% endif %}
+                            {% else %}
+                            La solicitud no pudo ser procesada correctamente.
+                            {% endif %}
+                            Esto puede ocurrir por:
+                        </p>
+                        <ul class="mb-3">
+                            <li>La página ha estado abierta por mucho tiempo</li>
+                            <li>Se abrió la misma página en múltiples pestañas</li>
+                            <li>Problemas de conectividad de red</li>
+                            <li>Cookies deshabilitadas en el navegador</li>
+                        </ul>
+                        <hr>
+                        <h6><i class="fas fa-tools"></i> Soluciones recomendadas:</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card bg-light mb-3">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <i class="fas fa-sync-alt text-primary"></i>
+                                            Recargar la página
+                                        </h6>
+                                        <p class="card-text small">
+                                            Presiona F5 o Ctrl+R para recargar la página y obtener un nuevo token.
+                                        </p>
+                                        <button onclick="window.location.reload()" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-redo"></i> Recargar ahora
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light mb-3">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <i class="fas fa-home text-success"></i>
+                                            Volver al inicio
+                                        </h6>
+                                        <p class="card-text small">
+                                            Regresa a la página principal y vuelve a intentar.
+                                        </p>
+                                        <a href="{{ url_for('idvistahome.vista_home') }}" class="btn btn-success btn-sm">
+                                            <i class="fas fa-home"></i> Ir al inicio
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Información técnica (colapsable) -->
+                    <div class="mt-4">
+                        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" 
+                                data-target="#technical-info" aria-expanded="false" aria-controls="technical-info">
+                            <i class="fas fa-info-circle"></i> Información técnica
+                        </button>
+                        <div class="collapse mt-3" id="technical-info">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6><i class="fas fa-code"></i> Detalles del error:</h6>
+                                    <ul class="small text-muted mb-0">
+                                        <li><strong>Código:</strong> HTTP 400 Bad Request</li>
+                                        <li><strong>Causa:</strong> CSRF token mismatch</li>
+                                        <li><strong>Endpoint:</strong> {{ request.endpoint or 'No disponible' }}</li>
+                                        <li><strong>Método:</strong> {{ request.method }}</li>
+                                        <li><strong>Timestamp:</strong> {{ moment().format('DD/MM/YYYY HH:mm:ss') if moment else 'No disponible' }}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer text-muted text-center">
+                    <small>
+                        <i class="fas fa-clock"></i>
+                        Si el problema persiste, contacta al administrador del sistema
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-reload después de 30 segundos si el usuario no hace nada
+let countdown = 30;
+const autoReloadNotice = document.createElement('div');
+autoReloadNotice.className = 'alert alert-info auto-reload-notice';
+autoReloadNotice.innerHTML = `
+    <strong><i class="fas fa-clock"></i> Auto-recarga en <span id="countdown">${countdown}</span>s</strong>
+    <button type="button" class="btn btn-sm btn-outline-info ml-2" onclick="clearAutoReload()">Cancelar</button>
+`;
+document.body.appendChild(autoReloadNotice);
+
+const countdownElement = document.getElementById('countdown');
+const autoReloadTimer = setInterval(function() {
+    countdown--;
+    countdownElement.textContent = countdown;
+    
+    if (countdown <= 0) {
+        window.location.reload();
+    }
+}, 1000);
+
+function clearAutoReload() {
+    clearInterval(autoReloadTimer);
+    autoReloadNotice.remove();
+}
+
+// Función para copiar información técnica
+function copyTechnicalInfo() {
+    const info = `Error 400 - CSRF Token Mismatch
+Endpoint: {{ request.endpoint or 'No disponible' }}
+Método: {{ request.method }}
+Timestamp: ${new Date().toLocaleString()}`;
+    
+    navigator.clipboard.writeText(info).then(function() {
+        alert('Información copiada al portapapeles');
+    });
+}
+</script>
+{% endblock %}

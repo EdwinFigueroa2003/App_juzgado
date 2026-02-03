@@ -1,13 +1,13 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consulta Pública de Expedientes - Sistema Judicial</title>
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+{% extends "base_public.html" %}
+
+{% block title %}Consulta Pública de Expedientes - Sistema Judicial{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/consulta.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
+
+{% block content %}
     <link href="{{ url_for('static', filename='css/base.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/dashboard.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/consulta.css') }}" rel="stylesheet">
@@ -181,7 +181,71 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/base.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/consulta.js') }}"></script>
-</body>
-</html>
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/consulta.js') }}"></script>
+
+<!-- Script de pruebas para desarrollo -->
+{% if config.get('FLASK_ENV') == 'development' %}
+<script>
+// Agregar botones de prueba en modo desarrollo
+document.addEventListener('DOMContentLoaded', function() {
+    // Crear panel de pruebas
+    const testPanel = document.createElement('div');
+    testPanel.style.cssText = `
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background: #f8f9fa;
+        border: 2px solid #007bff;
+        border-radius: 8px;
+        padding: 10px;
+        z-index: 9999;
+        font-size: 12px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    `;
+    
+    testPanel.innerHTML = `
+        <div style="font-weight: bold; margin-bottom: 8px; color: #007bff;">
+            🧪 Panel de Pruebas
+        </div>
+        <button onclick="forzarErrorCSRF()" class="btn btn-sm btn-warning mb-1" style="width: 100%;">
+            Forzar Error CSRF
+        </button>
+        <button onclick="window.open('/test/menu', '_blank')" class="btn btn-sm btn-info mb-1" style="width: 100%;">
+            Ver Todas las Pantallas
+        </button>
+        <button onclick="testPanel.style.display='none'" class="btn btn-sm btn-secondary" style="width: 100%;">
+            Ocultar
+        </button>
+    `;
+    
+    document.body.appendChild(testPanel);
+    window.testPanel = testPanel;
+});
+
+// Función para forzar error CSRF
+function forzarErrorCSRF() {
+    // Eliminar el token CSRF del formulario
+    const csrfInputs = document.querySelectorAll('input[name="csrf_token"]');
+    csrfInputs.forEach(input => input.value = 'token_invalido');
+    
+    // Hacer una búsqueda que fallará por CSRF
+    fetch('/api/buscar_expediente', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'radicado=123456789&csrf_token=token_invalido'
+    }).then(response => {
+        if (response.status === 400) {
+            // Redirigir a la página de error
+            window.location.href = '/test/csrf-error-public';
+        }
+    }).catch(error => {
+        console.error('Error:', error);
+        alert('Error forzado. Revisa la consola del navegador.');
+    });
+}
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,160 @@
+{% extends "base_public.html" %}
+
+{% block title %}Error de Seguridad - Consulta Pública{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/errors.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card border-warning error-card">
+                    <div class="card-header bg-warning text-dark">
+                        <h4 class="mb-0">
+                            <i class="fas fa-exclamation-triangle error-icon"></i>
+                            Token de Seguridad Expirado
+                        </h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning" role="alert">
+                            <h5 class="alert-heading">
+                                <i class="fas fa-shield-alt"></i>
+                                Su sesión de consulta ha expirado
+                            </h5>
+                            <p class="mb-3">
+                                Por motivos de seguridad, su sesión de consulta pública ha expirado.
+                                {% if csrf_error and reason %}
+                                <br><small class="text-muted"><strong>Detalle técnico:</strong> {{ reason }}</small>
+                                {% endif %}
+                            </p>
+                            <p class="mb-3">
+                                <strong>¿Qué significa esto?</strong><br>
+                                El sistema protege sus consultas con tokens de seguridad que expiran automáticamente 
+                                para prevenir accesos no autorizados.
+                            </p>
+                            
+                            <hr>
+                            <h6><i class="fas fa-tools"></i> Solución simple:</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card bg-light mb-3">
+                                        <div class="card-body text-center">
+                                            <h6 class="card-title">
+                                                <i class="fas fa-sync-alt text-primary"></i>
+                                                Recargar Página
+                                            </h6>
+                                            <p class="card-text small">
+                                                Recarga la página para obtener un nuevo token de seguridad
+                                            </p>
+                                            <button onclick="window.location.reload()" class="btn btn-primary">
+                                                <i class="fas fa-redo"></i> Recargar Ahora
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card bg-light mb-3">
+                                        <div class="card-body text-center">
+                                            <h6 class="card-title">
+                                                <i class="fas fa-search text-success"></i>
+                                                Nueva Consulta
+                                            </h6>
+                                            <p class="card-text small">
+                                                Ir a la página principal de consultas
+                                            </p>
+                                            <a href="{{ url_for('vistaconsulta.consulta_publica') }}" class="btn btn-success">
+                                                <i class="fas fa-search"></i> Consultar Expediente
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Información adicional para usuarios públicos -->
+                        <div class="alert alert-info mt-4">
+                            <h6><i class="fas fa-info-circle"></i> Información importante:</h6>
+                            <ul class="mb-0 small">
+                                <li><strong>Gratuito:</strong> Este servicio de consulta es completamente gratuito</li>
+                                <li><strong>Seguro:</strong> Sus consultas están protegidas con medidas de seguridad</li>
+                                <li><strong>Disponible 24/7:</strong> Puede consultar en cualquier momento</li>
+                                <li><strong>Sin registro:</strong> No necesita crear una cuenta para consultar</li>
+                            </ul>
+                        </div>
+
+                        <!-- Botones de acción principales -->
+                        <div class="text-center error-actions mt-4">
+                            <button onclick="window.location.reload()" class="btn btn-warning btn-lg me-2">
+                                <i class="fas fa-redo"></i> Recargar Página
+                            </button>
+                            <a href="{{ url_for('vistaconsulta.consulta_publica') }}" class="btn btn-primary btn-lg me-2">
+                                <i class="fas fa-search"></i> Nueva Consulta
+                            </a>
+                            <a href="{{ url_for('vistaconsulta.vista_turnos') }}" class="btn btn-info btn-lg">
+                                <i class="fas fa-calendar-day"></i> Ver Turnos
+                            </a>
+                        </div>
+                    </div>
+                    <div class="card-footer text-muted text-center">
+                        <small>
+                            <i class="fas fa-clock"></i>
+                            La página se recargará automáticamente en <span id="countdown">15</span> segundos
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-reload específico para consulta pública (más rápido)
+let countdown = 15;
+const countdownElement = document.getElementById('countdown');
+
+const autoReloadTimer = setInterval(function() {
+    countdown--;
+    countdownElement.textContent = countdown;
+    
+    if (countdown <= 0) {
+        // Redirigir a la página de consulta en lugar de recargar
+        window.location.href = "{{ url_for('vistaconsulta.consulta_publica') }}";
+    }
+}, 1000);
+
+// Permitir cancelar el auto-reload haciendo clic en cualquier botón
+document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        clearInterval(autoReloadTimer);
+    });
+});
+
+// Mostrar mensaje de bienvenida después de recargar
+if (performance.navigation.type === performance.navigation.TYPE_RELOAD) {
+    setTimeout(() => {
+        const toast = document.createElement('div');
+        toast.className = 'toast show position-fixed top-0 end-0 m-3';
+        toast.innerHTML = `
+            <div class="toast-header bg-success text-white">
+                <strong class="me-auto"><i class="fas fa-check-circle"></i> Listo</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body">
+                Token de seguridad renovado. Ya puede realizar su consulta.
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        // Auto-ocultar después de 5 segundos
+        setTimeout(() => {
+            toast.remove();
+        }, 5000);
+    }, 500);
+}
+</script>
+{% endblock %}
