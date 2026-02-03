@@ -369,6 +369,21 @@ def vista_expediente():
             'limite': request.args.get('limite', request.form.get('limite', 50))
         }
     
+    # Depuración: si se busca el radicado de prueba, volcar ingresos/estados
+    try:
+        if radicado_buscar and '08001405300920230073500' in radicado_buscar:
+            import pprint
+            logger.info('--- DEBUG: datos entregados al template ---')
+            for exp in expedientes:
+                logger.info(f"Expediente ID={exp.get('id')} radicado={exp.get('radicado_completo')}")
+                logger.info('Ingresos:')
+                logger.info(pprint.pformat(exp.get('ingresos')))
+                logger.info('Estados:')
+                logger.info(pprint.pformat(exp.get('estados')))
+            logger.info('--- FIN DEBUG ---')
+    except Exception:
+        logger.exception('Error durante debug de expedientes')
+
     return render_template('expediente.html', 
                          expedientes=expedientes, 
                          radicado_buscar=radicado_buscar,
@@ -603,6 +618,31 @@ def buscar_expedientes(radicado):
                 expediente['fecha_actuacion'] = max(fechas_estado)  # Última fecha de estado
             else:
                 expediente['fecha_actuacion'] = None  # N/A - "para resolver"
+
+            # Calcular fecha de ingreso más antigua SIN estado posterior (usada para asignar turno)
+            fecha_mas_antigua_sin_salida = None
+            try:
+                for ingreso in expediente['ingresos']:
+                    fi = normalize_date(ingreso.get('fecha_ingreso'))
+                    if not fi:
+                        continue
+                    tiene_salida = False
+                    for estado in expediente['estados']:
+                        fe = normalize_date(estado.get('fecha_estado'))
+                        if fe and fe > fi:
+                            tiene_salida = True
+                            break
+                    if not tiene_salida:
+                        if fecha_mas_antigua_sin_salida is None or fi < fecha_mas_antigua_sin_salida:
+                            fecha_mas_antigua_sin_salida = fi
+            except Exception:
+                logger.exception('Error calculando fecha_ingreso_mas_antigua_sin_salida')
+
+            # Fallback a la fecha de ingreso del expediente si no hay ingresos sin salida
+            if fecha_mas_antigua_sin_salida is None:
+                fecha_mas_antigua_sin_salida = normalize_date(expediente.get('fecha_ingreso'))
+
+            expediente['fecha_ingreso_mas_antigua_sin_salida'] = fecha_mas_antigua_sin_salida
             
             expedientes_completos.append(expediente)
         

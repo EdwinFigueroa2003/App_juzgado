@@ -49,6 +49,7 @@ def buscar_expediente():
         # Búsqueda flexible por radicado (completo o parcial)
         query = """
         SELECT 
+            id,
             radicado_completo,
             demandante,
             demandado,
@@ -70,17 +71,58 @@ def buscar_expediente():
         cursor.execute(query, (patron_completo, patron_corto, patron_completo))
         resultados = cursor.fetchall()
         
+        # Helper para convertir a date
+        def _to_date(v):
+            if v is None:
+                return None
+            if isinstance(v, date):
+                return v
+            if isinstance(v, datetime):
+                return v.date()
+            try:
+                return datetime.fromisoformat(str(v)).date()
+            except Exception:
+                return None
+
         expedientes = []
         for row in resultados:
+            exp_id = row[0]
+            radicado_val = row[1]
+            fecha_ingreso_val = row[5]
+
+            # Calcular fecha_ingreso_mas_antigua_sin_salida consultando tablas relacionadas
+            try:
+                cursor.execute("SELECT fecha_ingreso FROM ingresos WHERE expediente_id = %s ORDER BY fecha_ingreso ASC", (exp_id,))
+                ingresos_rows = cursor.fetchall()
+                cursor.execute("SELECT fecha_estado FROM estados WHERE expediente_id = %s ORDER BY fecha_estado ASC", (exp_id,))
+                estados_rows = cursor.fetchall()
+
+                fecha_mas_antigua = None
+                ingresos_dates = [_to_date(r[0]) for r in ingresos_rows]
+                estados_dates = [_to_date(r[0]) for r in estados_rows]
+
+                for fi in ingresos_dates:
+                    if not fi:
+                        continue
+                    tiene_salida = any(fe and fe > fi for fe in estados_dates)
+                    if not tiene_salida:
+                        if fecha_mas_antigua is None or fi < fecha_mas_antigua:
+                            fecha_mas_antigua = fi
+            except Exception:
+                logger.exception('Error calculando ingresos/estados para consulta pública')
+                fecha_mas_antigua = None
+
             expedientes.append({
-                'numero_radicado': row[0] or 'No disponible',  # radicado_completo
-                'demandante': row[1] or 'No disponible',
-                'demandado': row[2] or 'No disponible',
-                'estado': row[3] or 'pendiente',
-                'fecha_ingreso': row[4].strftime('%d/%m/%Y') if row[4] else 'No disponible',
-                'turno': row[5] or '',
+                'id': exp_id,
+                'numero_radicado': radicado_val or 'No disponible',
+                'demandante': row[2] or 'No disponible',
+                'demandado': row[3] or 'No disponible',
+                'estado': row[4] or 'pendiente',
+                'fecha_ingreso': fecha_ingreso_val.strftime('%d/%m/%Y') if fecha_ingreso_val else 'No disponible',
+                'turno': row[6] or '',
                 'fecha_actuacion': 'No disponible',
-                'actuacion': 'Sin actuaciones'
+                'actuacion': 'Sin actuaciones',
+                'fecha_ingreso_mas_antigua_sin_salida': fecha_mas_antigua.strftime('%d/%m/%Y') if fecha_mas_antigua else (fecha_ingreso_val.strftime('%d/%m/%Y') if fecha_ingreso_val else 'No disponible')
             })
         
         cursor.close()
@@ -117,6 +159,7 @@ def buscar_por_nombres():
         # Búsqueda por nombres (demandante o demandado) - traer todos los resultados
         query = """
         SELECT 
+            id,
             radicado_completo,
             demandante,
             demandado,
@@ -147,17 +190,57 @@ def buscar_por_nombres():
         indice_fin = indice_inicio + items_por_pagina
         resultados_pagina = resultados[indice_inicio:indice_fin]
         
+        # Helper para convertir a date
+        def _to_date(v):
+            if v is None:
+                return None
+            if isinstance(v, date):
+                return v
+            if isinstance(v, datetime):
+                return v.date()
+            try:
+                return datetime.fromisoformat(str(v)).date()
+            except Exception:
+                return None
+
         expedientes = []
         for row in resultados_pagina:
+            exp_id = row[0]
+            radicado_val = row[1]
+            fecha_ingreso_val = row[5]
+
+            try:
+                cursor.execute("SELECT fecha_ingreso FROM ingresos WHERE expediente_id = %s ORDER BY fecha_ingreso ASC", (exp_id,))
+                ingresos_rows = cursor.fetchall()
+                cursor.execute("SELECT fecha_estado FROM estados WHERE expediente_id = %s ORDER BY fecha_estado ASC", (exp_id,))
+                estados_rows = cursor.fetchall()
+
+                fecha_mas_antigua = None
+                ingresos_dates = [_to_date(r[0]) for r in ingresos_rows]
+                estados_dates = [_to_date(r[0]) for r in estados_rows]
+
+                for fi in ingresos_dates:
+                    if not fi:
+                        continue
+                    tiene_salida = any(fe and fe > fi for fe in estados_dates)
+                    if not tiene_salida:
+                        if fecha_mas_antigua is None or fi < fecha_mas_antigua:
+                            fecha_mas_antigua = fi
+            except Exception:
+                logger.exception('Error calculando ingresos/estados para búsqueda por nombres')
+                fecha_mas_antigua = None
+
             expedientes.append({
-                'numero_radicado': row[0] or 'No disponible',  # radicado_completo
-                'demandante': row[1] or 'No disponible',
-                'demandado': row[2] or 'No disponible',
-                'estado': row[3] or 'pendiente',
-                'fecha_ingreso': row[4].strftime('%d/%m/%Y') if row[4] else 'No disponible',
-                'turno': row[5] or '',
+                'id': exp_id,
+                'numero_radicado': radicado_val or 'No disponible',
+                'demandante': row[2] or 'No disponible',
+                'demandado': row[3] or 'No disponible',
+                'estado': row[4] or 'pendiente',
+                'fecha_ingreso': fecha_ingreso_val.strftime('%d/%m/%Y') if fecha_ingreso_val else 'No disponible',
+                'turno': row[6] or '',
                 'fecha_actuacion': 'No disponible',
-                'actuacion': 'Sin actuaciones'
+                'actuacion': 'Sin actuaciones',
+                'fecha_ingreso_mas_antigua_sin_salida': fecha_mas_antigua.strftime('%d/%m/%Y') if fecha_mas_antigua else (fecha_ingreso_val.strftime('%d/%m/%Y') if fecha_ingreso_val else 'No disponible')
             })
         
         cursor.close()

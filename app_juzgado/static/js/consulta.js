@@ -281,7 +281,7 @@ function mostrarResultadosExpedientes(expedientes, paginacion = null) {
                 <h5><i class="fas fa-gavel me-2"></i>Información del Expediente</h5>
                 <p><strong>Demandante:</strong> ${exp.demandante}</p>
                 <p><strong>Demandado:</strong> ${exp.demandado}</p>
-                <p><strong>Fecha de Ingreso:</strong> ${exp.fecha_ingreso}</p>
+                <p><strong>Fecha de Ingreso:</strong> ${exp.fecha_ingreso_mas_antigua_sin_salida ? exp.fecha_ingreso_mas_antigua_sin_salida : exp.fecha_ingreso}</p>
                 ${exp.turno ? `<p><strong>Turno:</strong> ${exp.turno}</p>` : ''}
                 ${exp.actuacion && exp.actuacion !== 'Sin actuaciones' ? `<p><strong>Actuación:</strong> ${exp.actuacion}</p>` : ''}
             </div>

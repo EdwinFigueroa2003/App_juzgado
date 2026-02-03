@@ -509,18 +509,16 @@
                                     <!-- Fechas -->
                                     <div class="row mb-3 pb-3 border-bottom">
                                         <div class="col-md-4">
-                                            <small class="text-muted d-block">Fecha de Ingreso</small>
-                                            <strong class="text-dark">
-                                                {% if expediente.ingresos %}
-                                                {% set ultima_fecha = expediente.ingresos |
-                                                map(attribute='fecha_ingreso') | select('ne', None) | list | sort | last
-                                                %}
-                                                {{ ultima_fecha.strftime('%d/%m/%Y') if ultima_fecha else 'N/A' }}
-                                                {% else %}
-                                                {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') if
-                                                expediente.fecha_ingreso else 'N/A' }}
-                                                {% endif %}
-                                            </strong>
+                                            <small class="text-muted d-block">Fecha de Ingreso (Más Antigua sin Salida)</small>
+                                                                                        <strong class="text-dark" title="Fecha de ingreso más antigua sin estado posterior - Usada para asignar turno">
+                                                                                                {% if expediente.fecha_ingreso_mas_antigua_sin_salida %}
+                                                                                                        {{ expediente.fecha_ingreso_mas_antigua_sin_salida.strftime('%d/%m/%Y') }}
+                                                                                                {% elif expediente.fecha_ingreso %}
+                                                                                                        {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') }}
+                                                                                                {% else %}
+                                                                                                        N/A
+                                                                                                {% endif %}
+                                                                                        </strong>
                                         </div>
                                         <div class="col-md-4">
                                             <small class="text-muted d-block">Última Actuación</small>
@@ -777,18 +775,15 @@
                             </div>
 
                             <div class="col-md-3">
-                                <h6 class="text-muted small">Fecha de Ingreso</h6>
-                                <p class="mb-3"><strong>
-                                        {% if expediente.ingresos %}
-                                        {% set ultima_fecha = expediente.ingresos |
-                                        map(attribute='fecha_ingreso') | select('ne', None) | list | sort | last
-                                        %}
-                                        {{ ultima_fecha.strftime('%d/%m/%Y') if ultima_fecha else 'No
-                                        disponible' }}
-                                        {% else %}
-                                        {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') if
-                                        expediente.fecha_ingreso else 'No disponible' }}
-                                        {% endif %}
+                                <h6 class="text-muted small">Fecha de Ingreso (Más Antigua sin Salida)</h6>
+                                <p class="mb-3" title="Fecha de ingreso más antigua sin estado posterior - Usada para asignar turno"><strong>
+                                                                                {% if expediente.fecha_ingreso_mas_antigua_sin_salida %}
+                                                                                        {{ expediente.fecha_ingreso_mas_antigua_sin_salida.strftime('%d/%m/%Y') }}
+                                                                                {% elif expediente.fecha_ingreso %}
+                                                                                        {{ expediente.fecha_ingreso.strftime('%d/%m/%Y') }}
+                                                                                {% else %}
+                                                                                        No disponible
+                                                                                {% endif %}
                                     </strong></p>
 
                                 <h6 class="text-muted small">Última Actuación</h6>
