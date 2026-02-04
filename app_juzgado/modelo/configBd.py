@@ -8,7 +8,7 @@ load_dotenv()  # Busca .env en directorio actual
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))  # app_juzgado/.env
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'))  # raíz/.env
 
-"""def obtener_conexion():
+def obtener_conexion():
     #Conexión que funciona tanto en desarrollo como en producción (Railway)
     try:
         # Verificar si estamos en modo desarrollo
@@ -138,3 +138,4 @@ def obtener_conexion():
     except Exception as e:
         print(f"❌ Error conectando a BD: {e}")
         raise
+"""

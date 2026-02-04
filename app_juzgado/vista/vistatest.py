@@ -4,6 +4,13 @@ from flask_wtf.csrf import CSRFError
 # Blueprint para pruebas de errores
 vistatest = Blueprint('vistatest', __name__, template_folder='templates')
 
+@vistatest.route('/test/error-400-external')
+def test_error_400_external():
+    """Forzar error 400 para usuarios completamente externos"""
+    # Simular que es una página externa
+    request.endpoint = 'vistaconsulta.consulta_publica'
+    return render_template('errors/400_external.html', csrf_error=True, reason="Sesión expirada (PRUEBA)"), 400
+
 @vistatest.route('/test/error-400-public')
 def test_error_400_public():
     """Forzar error 400 para páginas públicas"""
@@ -80,15 +87,20 @@ def test_menu():
                                 <div class="col-md-6">
                                     <h5><i class="fas fa-shield-alt text-warning"></i> Errores CSRF (400)</h5>
                                     <div class="list-group mb-4">
+                                        <a href="/test/error-400-external" class="list-group-item list-group-item-action">
+                                            <i class="fas fa-globe text-success"></i>
+                                            Error 400 - Usuario Externo
+                                            <small class="d-block text-muted">Para ciudadanos sin acceso al sistema</small>
+                                        </a>
                                         <a href="/test/error-400-public" class="list-group-item list-group-item-action">
                                             <i class="fas fa-users text-info"></i>
-                                            Error 400 - Página Pública
-                                            <small class="d-block text-muted">Sin menú de administración</small>
+                                            Error 400 - Usuario Público Interno
+                                            <small class="d-block text-muted">Para usuarios con acceso limitado</small>
                                         </a>
                                         <a href="/test/error-400-private" class="list-group-item list-group-item-action">
                                             <i class="fas fa-user-shield text-warning"></i>
-                                            Error 400 - Página Privada
-                                            <small class="d-block text-muted">Con menú de administración</small>
+                                            Error 400 - Usuario Privado
+                                            <small class="d-block text-muted">Para administradores del sistema</small>
                                         </a>
                                         <a href="/test/csrf-error-public" class="list-group-item list-group-item-action">
                                             <i class="fas fa-exclamation-triangle text-danger"></i>

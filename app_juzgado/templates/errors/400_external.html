@@ -1,0 +1,209 @@
+{% extends "base_external.html" %}
+
+{% block title %}Sesión Expirada - Consulta Pública{% endblock %}
+
+{% block extra_css %}
+<style>
+.error-container {
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+}
+
+.error-card {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    border-radius: 15px;
+    overflow: hidden;
+    animation: slideInUp 0.6s ease-out;
+}
+
+.countdown-badge {
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+    color: #92400e;
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    font-weight: 600;
+    display: inline-block;
+    animation: pulse 2s infinite;
+}
+
+@keyframes slideInUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.solution-card {
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.solution-card:hover {
+    border-color: #f59e0b;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(245, 158, 11, 0.15);
+}
+
+.public-info {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-left: 4px solid #3b82f6;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                <div class="card error-card border-0">
+                    <div class="card-header text-center py-4" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                        <div class="mb-3">
+                            <i class="fas fa-clock fa-3x text-warning"></i>
+                        </div>
+                        <h4 class="mb-2 text-dark">
+                            <strong>Sesión Expirada</strong>
+                        </h4>
+                        <p class="mb-0 text-muted">
+                            Su consulta ha expirado por seguridad
+                        </p>
+                    </div>
+                    
+                    <div class="card-body p-4">
+                        <div class="text-center mb-4">
+                            <div class="countdown-badge mb-3">
+                                <i class="fas fa-redo me-2"></i>
+                                Recargando en <span id="countdown">10</span> segundos
+                            </div>
+                            <p class="text-muted mb-0">
+                                La página se actualizará automáticamente para su comodidad
+                            </p>
+                        </div>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <div class="card solution-card h-100 bg-light">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-sync-alt fa-2x text-primary mb-3"></i>
+                                        <h6 class="card-title">Recargar Página</h6>
+                                        <p class="card-text small text-muted mb-3">
+                                            Actualiza la página para continuar con su consulta
+                                        </p>
+                                        <button onclick="window.location.reload()" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-redo me-1"></i> Recargar Ahora
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card solution-card h-100 bg-light">
+                                    <div class="card-body text-center">
+                                        <i class="fas fa-search fa-2x text-success mb-3"></i>
+                                        <h6 class="card-title">Nueva Consulta</h6>
+                                        <p class="card-text small text-muted mb-3">
+                                            Ir a la página principal de consultas
+                                        </p>
+                                        <a href="{{ url_for('vistaconsulta.consulta_publica') }}" class="btn btn-success btn-sm">
+                                            <i class="fas fa-search me-1"></i> Consultar
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="public-info p-3 rounded mb-4">
+                            <h6 class="mb-2">
+                                <i class="fas fa-info-circle text-primary me-2"></i>
+                                ¿Por qué ocurre esto?
+                            </h6>
+                            <p class="small mb-2">
+                                <strong>Por su seguridad</strong>, las consultas públicas tienen un tiempo límite.
+                                Esto protege su información y evita accesos no autorizados.
+                            </p>
+                            <ul class="small mb-0 ps-3">
+                                <li>Su consulta es <strong>completamente gratuita</strong></li>
+                                <li>No necesita crear una cuenta</li>
+                                <li>Puede consultar las veces que necesite</li>
+                                <li>Sus datos están protegidos</li>
+                            </ul>
+                        </div>
+
+                        <div class="text-center">
+                            <div class="btn-group" role="group">
+                                <button onclick="window.location.reload()" class="btn btn-warning">
+                                    <i class="fas fa-redo me-1"></i> Recargar
+                                </button>
+                                <a href="{{ url_for('vistaconsulta.consulta_publica') }}" class="btn btn-primary">
+                                    <i class="fas fa-search me-1"></i> Nueva Consulta
+                                </a>
+                                <a href="{{ url_for('vistaconsulta.vista_turnos') }}" class="btn btn-info">
+                                    <i class="fas fa-calendar-day me-1"></i> Ver Turnos
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-recarga más rápida para usuarios externos (10 segundos)
+let countdown = 10;
+const countdownElement = document.getElementById('countdown');
+
+const autoReloadTimer = setInterval(function() {
+    countdown--;
+    countdownElement.textContent = countdown;
+    
+    if (countdown <= 0) {
+        // Redirigir a la página de consulta
+        window.location.href = "{{ url_for('vistaconsulta.consulta_publica') }}";
+    }
+}, 1000);
+
+// Cancelar auto-reload si el usuario hace clic en cualquier botón
+document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        clearInterval(autoReloadTimer);
+    });
+});
+
+// Mostrar mensaje de bienvenida si viene de una recarga
+if (document.referrer.includes('/consulta') || performance.navigation.type === performance.navigation.TYPE_RELOAD) {
+    setTimeout(() => {
+        // Crear toast de bienvenida
+        const toast = document.createElement('div');
+        toast.className = 'position-fixed top-0 end-0 m-3';
+        toast.style.zIndex = '9999';
+        toast.innerHTML = `
+            <div class="toast show" role="alert">
+                <div class="toast-header bg-success text-white">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong class="me-auto">Listo para consultar</strong>
+                    <button type="button" class="btn-close btn-close-white" onclick="this.closest('.toast').remove()"></button>
+                </div>
+                <div class="toast-body">
+                    Ya puede realizar su consulta de forma segura.
+                </div>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        // Auto-ocultar después de 4 segundos
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 4000);
+    }, 500);
+}
+</script>
+{% endblock %}
