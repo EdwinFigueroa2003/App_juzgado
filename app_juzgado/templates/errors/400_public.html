@@ -12,7 +12,7 @@
         <div class="row justify-content-center">
             <div class="col-md-8">
                 <div class="card border-warning error-card">
-                    <div class="card-header bg-warning text-dark">
+                    <div class="card-header bg-warning text-warning">
                         <h4 class="mb-0">
                             <i class="fas fa-exclamation-triangle error-icon"></i>
                             Token de Seguridad Expirado
@@ -27,7 +27,7 @@
                             <p class="mb-3">
                                 Por motivos de seguridad, su sesión de consulta pública ha expirado.
                                 {% if csrf_error and reason %}
-                                <br><small class="text-muted"><strong>Detalle técnico:</strong> {{ reason }}</small>
+                                <!-- <br><small class="text-muted"><strong>Detalle técnico:</strong> {{ reason }}</small> -->
                                 {% endif %}
                             </p>
                             <p class="mb-3">
@@ -36,7 +36,7 @@
                                 para prevenir accesos no autorizados.
                             </p>
                             
-                            <hr>
+                            <!-- <hr>
                             <h6><i class="fas fa-tools"></i> Solución simple:</h6>
                             <div class="row">
                                 <div class="col-md-6">
@@ -71,7 +71,7 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </div> -->
                         </div>
 
                         <!-- Información adicional para usuarios públicos -->
@@ -86,17 +86,17 @@
                         </div>
 
                         <!-- Botones de acción principales -->
-                        <div class="text-center error-actions mt-4">
-                            <button onclick="window.location.reload()" class="btn btn-warning btn-lg me-2">
+                        <!-- <div class="text-center error-actions mt-4">
+                             <button onclick="window.location.reload()" class="btn btn-warning btn-lg me-2">
                                 <i class="fas fa-redo"></i> Recargar Página
                             </button>
                             <a href="{{ url_for('vistaconsulta.consulta_publica') }}" class="btn btn-primary btn-lg me-2">
                                 <i class="fas fa-search"></i> Nueva Consulta
                             </a>
-                            <a href="{{ url_for('vistaconsulta.vista_turnos') }}" class="btn btn-info btn-lg">
+                             <a href="{{ url_for('vistaconsulta.vista_turnos') }}" class="btn btn-info btn-lg">
                                 <i class="fas fa-calendar-day"></i> Ver Turnos
-                            </a>
-                        </div>
+                            </a> 
+                        </div> -->
                     </div>
                     <div class="card-footer text-muted text-center">
                         <small>

@@ -18,19 +18,19 @@
                         <i class="fas fa-file-excel fa-5x text-info mb-3"></i>
                         <h5>La página que buscas no existe</h5>
                         <p class="text-muted">
-                            La URL solicitada no se encuentra disponible o ha sido movida.
+                            La URL solicitada no se encuentra disponible o ha sido movida, vuelve al Login.
                         </p>
                     </div>
                     
                     <div class="row">
                         <div class="col-md-4">
-                            <a href="{{ url_for('idvistahome.vista_home') }}" class="btn btn-primary mb-2">
-                                <i class="fas fa-home"></i> Inicio
-                            </a>
+                            <!-- <a href="{{ url_for('idvistahome.logout') }}" class="btn btn-primary mb-2">
+                                <i class="fas fa-home"></i> Login
+                            </a> -->
                         </div>
                         <div class="col-md-4">
-                            <a href="{{ url_for('idvistaexpediente.vista_expediente') }}" class="btn btn-success mb-2">
-                                <i class="fas fa-search"></i> Buscar Expediente
+                            <a href="{{ url_for('idvistahome.logout') }}" class="btn btn-success mb-2">
+                                <i class="fas fa-sign-in-alt"></i> Login
                             </a>
                         </div>
                     </div>

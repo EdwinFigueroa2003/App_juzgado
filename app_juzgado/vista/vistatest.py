@@ -7,22 +7,19 @@ vistatest = Blueprint('vistatest', __name__, template_folder='templates')
 @vistatest.route('/test/error-400-external')
 def test_error_400_external():
     """Forzar error 400 para usuarios completamente externos"""
-    # Simular que es una página externa
-    request.endpoint = 'vistaconsulta.consulta_publica'
+    # Renderizar directamente el template externo
     return render_template('errors/400_external.html', csrf_error=True, reason="Sesión expirada (PRUEBA)"), 400
 
 @vistatest.route('/test/error-400-public')
 def test_error_400_public():
-    """Forzar error 400 para páginas públicas"""
-    # Simular que es una página pública
-    request.endpoint = 'vistaconsulta.consulta_publica'
+    """Forzar error 400 para usuarios públicos internos"""
+    # Renderizar directamente el template público
     return render_template('errors/400_public.html', csrf_error=True, reason="Token CSRF inválido (PRUEBA)"), 400
 
 @vistatest.route('/test/error-400-private')
 def test_error_400_private():
     """Forzar error 400 para páginas privadas"""
-    # Simular que es una página privada
-    request.endpoint = 'idvistaexpediente.vista_expediente'
+    # Renderizar directamente el template privado
     return render_template('errors/400.html', csrf_error=True, reason="Token CSRF inválido (PRUEBA)"), 400
 
 @vistatest.route('/test/error-403')
@@ -43,20 +40,23 @@ def test_error_500():
 @vistatest.route('/test/csrf-error-public')
 def test_csrf_error_public():
     """Forzar error CSRF específico para páginas públicas"""
-    # Simular CSRFError
+    # Renderizar directamente el template público
     error = CSRFError("The CSRF token is missing.")
-    # Simular que es una página pública
-    request.endpoint = 'vistaconsulta.consulta_publica'
     return render_template('errors/400_public.html', csrf_error=True, reason=str(error)), 400
 
 @vistatest.route('/test/csrf-error-private')
 def test_csrf_error_private():
     """Forzar error CSRF específico para páginas privadas"""
-    # Simular CSRFError
+    # Renderizar directamente el template privado
     error = CSRFError("The CSRF tokens do not match.")
-    # Simular que es una página privada
-    request.endpoint = 'idvistaexpediente.vista_expediente'
     return render_template('errors/400.html', csrf_error=True, reason=str(error)), 400
+
+@vistatest.route('/test/csrf-error-external')
+def test_csrf_error_external():
+    """Forzar error CSRF específico para usuarios externos"""
+    # Renderizar directamente el template externo
+    error = CSRFError("The CSRF session token is missing.")
+    return render_template('errors/400_external.html', csrf_error=True, reason=str(error)), 400
 
 @vistatest.route('/test/menu')
 def test_menu():
@@ -102,15 +102,20 @@ def test_menu():
                                             Error 400 - Usuario Privado
                                             <small class="d-block text-muted">Para administradores del sistema</small>
                                         </a>
+                                        <a href="/test/csrf-error-external" class="list-group-item list-group-item-action">
+                                            <i class="fas fa-exclamation-triangle text-success"></i>
+                                            CSRF Error - Usuario Externo
+                                            <small class="d-block text-muted">Error CSRF para ciudadanos</small>
+                                        </a>
                                         <a href="/test/csrf-error-public" class="list-group-item list-group-item-action">
-                                            <i class="fas fa-exclamation-triangle text-danger"></i>
-                                            CSRF Error - Página Pública
-                                            <small class="d-block text-muted">Error específico de CSRF</small>
+                                            <i class="fas fa-exclamation-triangle text-info"></i>
+                                            CSRF Error - Usuario Público Interno
+                                            <small class="d-block text-muted">Error CSRF para usuarios con acceso limitado</small>
                                         </a>
                                         <a href="/test/csrf-error-private" class="list-group-item list-group-item-action">
                                             <i class="fas fa-exclamation-triangle text-danger"></i>
-                                            CSRF Error - Página Privada
-                                            <small class="d-block text-muted">Error específico de CSRF</small>
+                                            CSRF Error - Usuario Privado
+                                            <small class="d-block text-muted">Error CSRF para administradores</small>
                                         </a>
                                     </div>
                                 </div>
@@ -136,10 +141,10 @@ def test_menu():
                             <div class="alert alert-info">
                                 <h6><i class="fas fa-info-circle"></i> Instrucciones:</h6>
                                 <ul class="mb-0">
-                                    <li><strong>Páginas Públicas:</strong> Usan base_public.html (sin menú admin)</li>
-                                    <li><strong>Páginas Privadas:</strong> Usan base.html (con menú admin)</li>
-                                    <li><strong>Auto-recarga:</strong> Las páginas públicas se recargan en 15s, las privadas en 30s</li>
-                                    <li><strong>Navegación:</strong> Cada error tiene botones específicos para su contexto</li>
+                                    <li><strong>Usuarios Externos:</strong> Ciudadanos que solo consultan (base_external.html)</li>
+                                    <li><strong>Usuarios Públicos Internos:</strong> Con acceso limitado al sistema (base_public.html)</li>
+                                    <li><strong>Usuarios Privados:</strong> Administradores con acceso completo (base.html)</li>
+                                    <li><strong>Auto-recarga:</strong> Externa: 10s, Pública: 15s, Privada: 30s</li>
                                 </ul>
                             </div>
                             

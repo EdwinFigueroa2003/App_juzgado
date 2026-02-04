@@ -40,16 +40,16 @@
                         
                         {% if session.rol_nombre in ['ESCRIBIENTE', 'SUSTANCIADOR'] %}
                         <div class="col-md-6">
-                            <a href="{{ url_for('idvistahome.vista_home') }}" class="btn btn-primary">
-                                <i class="fas fa-home"></i> Volver al inicio
+                            <a href="{{ url_for('idvistahome.logout') }}" class="btn btn-primary">
+                                <i class="fas fa-home"></i> Volver al login
                             </a>
                         </div>
                         {% endif %}
 
                         {% if session.administrador %}
                         <div class="col-md-6">
-                            <a href="{{ url_for('idvistahome.vista_home') }}" class="btn btn-primary">
-                                <i class="fas fa-home"></i> Volver al inicio
+                            <a href="{{ url_for('idvistahome.logout') }}" class="btn btn-primary">
+                                <i class="fas fa-home"></i> Volver al login
                             </a>
                         </div>
                         {% endif %}
