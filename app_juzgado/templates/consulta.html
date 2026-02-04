@@ -8,6 +8,16 @@
 {% endblock %}
 
 {% block content %}
+    <link href="{{ url_for('static', filename='css/base.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/dashboard.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/consulta.css') }}" rel="stylesheet">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/files.png') }}">
+    
+</head>
+<body>
+
     <div class="container main-container">
         <!-- Header -->
         <div class="row justify-content-center">
