@@ -702,25 +702,19 @@
                                             <table class="table table-sm table-striped mb-0">
                                                 <thead class="thead-light">
                                                     <tr>
-                                                        <!-- <th style="width: 10%;">Número</th> -->
                                                         <th style="width: 15%;">Tipo</th>
-                                                        <!-- <th style="width: 50%;">Descripción</th> -->
                                                         <th>Descripción</th>
-                                                        <!-- <th style="width: 15%;">Archivo</th> -->
-                                                        <!-- <th style="width: 10%;">Fecha</th> -->
                                                         <th>Fecha</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {% for actuacion in expediente.actuaciones %}
                                                     <tr>
-                                                        <!-- <td><small><span class="badge badge-primary">{{ actuacion.numero_actuacion or '—' }}</span></small></td> -->
-                                                        <td><small><span class="badge badge-info">{{
+                                                        <td><small><span class="badge badge-secondary">{{
                                                                     actuacion.tipo_origen or '—'
                                                                     }}</span></small></td>
                                                         <td><small>{{ actuacion.descripcion_actuacion or '—'
                                                                 }}</small></td>
-                                                        <!-- <td><small>{{ actuacion.archivo_origen or '—' }}</small></td> -->
                                                         <td><small>{{
                                                                 actuacion.fecha_actuacion.strftime('%d/%m/%Y')
                                                                 if actuacion.fecha_actuacion else 'N/A'
