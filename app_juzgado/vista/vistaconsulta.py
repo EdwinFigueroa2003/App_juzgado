@@ -108,9 +108,27 @@ def buscar_expediente():
                     if not tiene_salida:
                         if fecha_mas_antigua is None or fi < fecha_mas_antigua:
                             fecha_mas_antigua = fi
+                            
+                # Para expedientes "Activo Resuelto", obtener la última fecha de estado
+                fecha_ultima_actuacion = None
+                if row[4] == 'Activo Resuelto' and estados_dates:
+                    # Obtener la fecha más reciente de estados
+                    fechas_validas = [fe for fe in estados_dates if fe is not None]
+                    if fechas_validas:
+                        fecha_ultima_actuacion = max(fechas_validas)
+                        
             except Exception:
                 logger.exception('Error calculando ingresos/estados para consulta pública')
                 fecha_mas_antigua = None
+                fecha_ultima_actuacion = None
+
+            # Determinar qué fecha mostrar según el estado
+            if row[4] == 'Activo Resuelto' and fecha_ultima_actuacion:
+                fecha_actuacion_mostrar = fecha_ultima_actuacion.strftime('%d/%m/%Y')
+                actuacion_texto = 'Resuelto'
+            else:
+                fecha_actuacion_mostrar = 'No disponible'
+                actuacion_texto = 'Sin actuaciones'
 
             expedientes.append({
                 'id': exp_id,
@@ -120,9 +138,10 @@ def buscar_expediente():
                 'estado': row[4] or 'pendiente',
                 'fecha_ingreso': fecha_ingreso_val.strftime('%d/%m/%Y') if fecha_ingreso_val else 'No disponible',
                 'turno': row[6] or '',
-                'fecha_actuacion': 'No disponible',
-                'actuacion': 'Sin actuaciones',
-                'fecha_ingreso_mas_antigua_sin_salida': fecha_mas_antigua.strftime('%d/%m/%Y') if fecha_mas_antigua else (fecha_ingreso_val.strftime('%d/%m/%Y') if fecha_ingreso_val else 'No disponible')
+                'fecha_actuacion': fecha_actuacion_mostrar,
+                'actuacion': actuacion_texto,
+                'fecha_ingreso_mas_antigua_sin_salida': fecha_mas_antigua.strftime('%d/%m/%Y') if fecha_mas_antigua else (fecha_ingreso_val.strftime('%d/%m/%Y') if fecha_ingreso_val else 'No disponible'),
+                'fecha_ultima_estado': fecha_ultima_actuacion.strftime('%d/%m/%Y') if fecha_ultima_actuacion else None
             })
         
         cursor.close()

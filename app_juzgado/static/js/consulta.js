@@ -271,22 +271,38 @@ function mostrarResultadosExpedientes(expedientes, paginacion = null) {
         return;
     }
     
-    const expedientesHTML = expedientes.map(exp => `
+    const expedientesHTML = expedientes.map(exp => {
+        // Determinar qué información mostrar según el estado
+        let fechaInfo = '';
+        let actuacionInfo = '';
+        
+        if (exp.estado === 'Activo Resuelto' && exp.fecha_ultima_estado) {
+            fechaInfo = `<p><strong>Fecha de Resolución:</strong> <span class="text-success">${exp.fecha_ultima_estado}</span></p>`;
+            /* actuacionInfo = `<p><strong>Estado:</strong> <span class="text-success"><i class="fas fa-check-circle me-1"></i>Resuelto</span></p>`; */
+        } else {
+            fechaInfo = `<p><strong>Fecha de Ingreso:</strong> ${exp.fecha_ingreso_mas_antigua_sin_salida ? exp.fecha_ingreso_mas_antigua_sin_salida : exp.fecha_ingreso}</p>`;
+            if (exp.actuacion && exp.actuacion !== 'Sin actuaciones') {
+                actuacionInfo = `<p><strong>Actuación:</strong> ${exp.actuacion}</p>`;
+            }
+        }
+        
+        return `
         <div class="expediente-card">
             <div class="expediente-header">
                 <span class="radicado-badge">${exp.numero_radicado}</span>
-                <span class="estado-badge estado-${exp.estado.toLowerCase()}">${obtenerTextoEstado(exp.estado)}</span>
+                <span class="estado-badge estado-${exp.estado.toLowerCase().replace(/\s+/g, '-')}">${obtenerTextoEstado(exp.estado)}</span>
             </div>
             <div class="expediente-info">
                 <h5><i class="fas fa-gavel me-2"></i>Información del Expediente</h5>
                 <p><strong>Demandante:</strong> ${exp.demandante}</p>
                 <p><strong>Demandado:</strong> ${exp.demandado}</p>
-                <p><strong>Fecha de Ingreso:</strong> ${exp.fecha_ingreso_mas_antigua_sin_salida ? exp.fecha_ingreso_mas_antigua_sin_salida : exp.fecha_ingreso}</p>
-                ${exp.turno ? `<p><strong>Turno:</strong> ${exp.turno}</p>` : ''}
-                ${exp.actuacion && exp.actuacion !== 'Sin actuaciones' ? `<p><strong>Actuación:</strong> ${exp.actuacion}</p>` : ''}
+                ${fechaInfo}
+                ${actuacionInfo}
+                ${exp.turno ? `<p><strong>Turno:</strong> <span class="badge bg-primary">${exp.turno}</span></p>` : ''}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
     
     container.innerHTML = expedientesHTML;
     

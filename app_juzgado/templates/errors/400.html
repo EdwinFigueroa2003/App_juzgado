@@ -4,12 +4,12 @@
 
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/errors.css') }}">
-<div class="error-page">
+<div class="error-page" style="border-radius: 5%;">
     <div class="container mt-5">
     <div class="row justify-content-center">
         <div class="col-md-8">
             <div class="card border-warning">
-                <div class="card-header bg-warning text-dark">
+                <div class="card-header bg-warning text-warning">
                     <h4 class="mb-0">
                         <i class="fas fa-exclamation-triangle"></i>
                         Error 400 - Solicitud Inválida
@@ -43,10 +43,10 @@
                             <li>Cookies deshabilitadas en el navegador</li>
                         </ul>
                         <hr>
-                        <h6><i class="fas fa-tools"></i> Soluciones recomendadas:</h6>
+                        <h6><i class="fas fa-tools"></i> Solución recomendada:</h6>
                         <div class="row">
                             <div class="col-md-6">
-                                <div class="card bg-light mb-3">
+                                <!-- <div class="card bg-light mb-3">
                                     <div class="card-body">
                                         <h6 class="card-title">
                                             <i class="fas fa-sync-alt text-primary"></i>
@@ -59,17 +59,17 @@
                                             <i class="fas fa-redo"></i> Recargar ahora
                                         </button>
                                     </div>
-                                </div>
+                                </div> -->
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-6" style="margin-right: 25%;">
                                 <div class="card bg-light mb-3">
                                     <div class="card-body">
                                         <h6 class="card-title">
                                             <i class="fas fa-home text-success"></i>
-                                            Volver al inicio
+                                            Volver al login
                                         </h6>
                                         <p class="card-text small">
-                                            Regresa a la página principal y vuelve a intentar.
+                                            Regresa a la página de login y vuelve a ingresar para obtener un token.
                                         </p>
                                         <a href="{{ url_for('idvistahome.logout') }}" class="btn btn-success btn-sm">
                                             <i class="fas fa-sign-in-alt"></i> Ir al login
@@ -81,7 +81,7 @@
                     </div>
 
                     <!-- Información técnica (colapsable) -->
-                    <div class="mt-4">
+                    <!-- <div class="mt-4">
                         <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" 
                                 data-target="#technical-info" aria-expanded="false" aria-controls="technical-info">
                             <i class="fas fa-info-circle"></i> Información técnica
@@ -100,7 +100,7 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </div> -->
                 </div>
                 <div class="card-footer text-muted text-center">
                     <small>
@@ -119,8 +119,16 @@ let countdown = 30;
 const autoReloadNotice = document.createElement('div');
 autoReloadNotice.className = 'alert alert-info auto-reload-notice';
 autoReloadNotice.innerHTML = `
-    <strong><i class="fas fa-clock"></i> Auto-recarga en <span id="countdown">${countdown}</span>s</strong>
-    <button type="button" class="btn btn-sm btn-outline-info ml-2" onclick="clearAutoReload()">Cancelar</button>
+    <div style="margin-left: 53%;">
+        <strong>
+            <i class="fas fa-clock"></i>
+            Auto-recarga en <span id="countdown">${countdown}</span>s
+            </strong>
+        <button type="button" class="btn btn-sm btn-outline-info ml-2" 
+            onclick="clearAutoReload()">
+            Cancelar
+        </button>
+    </div>
 `;
 document.body.appendChild(autoReloadNotice);
 

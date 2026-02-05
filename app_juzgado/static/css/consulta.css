@@ -216,6 +216,24 @@
     box-shadow: var(--shadow-sm);
 }
 
+/* Información específica para expedientes resueltos */
+.fecha-resolucion {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border-left: 4px solid #10b981;
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin: 0.5rem 0;
+}
+
+.estado-resuelto-info {
+    color: #047857;
+    font-weight: 600;
+}
+
+.estado-resuelto-info i {
+    color: #10b981;
+}
+
 /* Badges de estado */
 .estado-badge {
     padding: 0.5rem 1rem;
@@ -229,6 +247,22 @@
 .estado-activo { 
     background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
     color: white; 
+}
+
+.estado-activo-resuelto { 
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    animation: pulse-success 2s infinite;
+}
+
+@keyframes pulse-success {
+    0%, 100% { 
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); 
+    }
+    50% { 
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5); 
+    }
 }
 
 .estado-pendiente { 
