@@ -289,6 +289,26 @@ def procesar_formulario_manual():
         cursor = conn.cursor()
         
         try:
+            # VALIDACIÓN DE DUPLICADOS: Verificar si el radicado_completo ya existe
+            if radicado_completo:
+                cursor.execute("""
+                    SELECT id, radicado_completo, demandante, demandado 
+                    FROM expediente 
+                    WHERE radicado_completo = %s
+                """, (radicado_completo,))
+                
+                expediente_existente = cursor.fetchone()
+                
+                if expediente_existente:
+                    exp_id, rad, dem_ante, dem_ado = expediente_existente
+                    logger.warning(f"DUPLICADO DETECTADO: Radicado {radicado_completo} ya existe (ID: {exp_id})")
+                    flash(f'⚠️ El radicado {radicado_completo} ya existe en la base de datos. Demandante: {dem_ante}, Demandado: {dem_ado}', 'error.' 'Para realizar cambios al expediente escrito ir a "Actualizar expedientes".' )
+                    cursor.close()
+                    conn.close()
+                    return redirect(request.url)
+                else:
+                    logger.info(f"✅ Radicado {radicado_completo} no existe - puede proceder con la inserción")
+            
             # Verificar estructura actual de la tabla
             cursor.execute("""
                 SELECT column_name 
@@ -439,18 +459,21 @@ def procesar_formulario_manual():
             
             # Manejar asignación de turno si el estado es 'Activo Pendiente'
             if estado_actual == 'Activo Pendiente' and 'turno' in available_columns:
-                logger.info("🎫 Expediente creado con estado 'Activo Pendiente' - asignando turno")
+                logger.info("🎫 Expediente creado con estado 'Activo Pendiente' - asignando turno automáticamente")
                 
                 # Obtener el siguiente turno disponible
                 cursor.execute("""
-                    SELECT MAX(turno) 
+                    SELECT COALESCE(MAX(turno), 0) 
                     FROM expediente 
-                    WHERE estado = 'Activo Pendiente' AND turno IS NOT NULL
+                    WHERE estado = 'Activo Pendiente' 
+                      AND turno IS NOT NULL
                 """)
                 
                 resultado = cursor.fetchone()
                 ultimo_turno = resultado[0] if resultado and resultado[0] is not None else 0
                 siguiente_turno = ultimo_turno + 1
+                
+                logger.info(f"📊 Último turno asignado: {ultimo_turno}, Siguiente turno: {siguiente_turno}")
                 
                 # Asignar turno al expediente recién creado
                 cursor.execute("""
@@ -459,14 +482,18 @@ def procesar_formulario_manual():
                     WHERE id = %s
                 """, (siguiente_turno, expediente_id))
                 
-                logger.info(f"✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
+                logger.info(f"✅ Turno {siguiente_turno} asignado exitosamente al expediente {expediente_id}")
+                flash(f'Expediente creado exitosamente con ID: {expediente_id}. Turno asignado: {siguiente_turno}', 'success')
             else:
-                logger.info("ℹ️ No se requiere asignación de turno (estado diferente a 'Activo Pendiente' o columna turno no existe)")
+                if estado_actual != 'Activo Pendiente':
+                    logger.info(f"ℹ️ No se asigna turno - Estado es '{estado_actual}' (solo se asigna para 'Activo Pendiente')")
+                else:
+                    logger.info("ℹ️ No se asigna turno - Columna 'turno' no existe en la tabla")
+                
+                flash(f'Expediente creado exitosamente con ID: {expediente_id}.', 'success')
             
             conn.commit()
             logger.info("Transacción confirmada (COMMIT)")
-            
-            flash(f'Expediente creado exitosamente con ID: {expediente_id}.', 'success')
             logger.info("=== FIN procesar_formulario_manual - ÉXITO ===")
             return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
             
