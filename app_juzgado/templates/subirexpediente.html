@@ -52,7 +52,10 @@
                     <i class="fas fa-edit"></i> Ingreso Manual
                 </button>
                 <button class="tablinks" onclick="openTab(event, 'Excel')">
-                    <i class="fas fa-file-excel"></i> Subir desde Excel
+                    <i class="fas fa-file-excel"></i> Subir desde Excel Nuevos
+                </button>
+                <button class="tablinks" onclick="openTab(event, 'Excel_actualizacion')">
+                    <i class="fas fa-file-excel"></i> Subir desde Excel Actualizaciones
                 </button>
             </div>
             
@@ -241,11 +244,11 @@
                 <div class="card">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0">
-                            <i class="fas fa-file-excel"></i> Subir Expedientes desde Excel
+                            <i class="fas fa-file-excel"></i> Subir Expedientes Nuevos desde Excel
                         </h5>
                     </div>
                     <div class="card-body">
-                        <p class="card-text mb-4">Sube un archivo Excel con múltiples expedientes. El sistema detectará automáticamente la hoja más apropiada y las columnas disponibles:</p>
+                        <p class="card-text mb-4">Sube un archivo Excel con múltiples expedientes <strong>NUEVOS</strong>. El sistema detectará automáticamente la hoja más apropiada y las columnas disponibles:</p>
                         
                         <div class="row mb-4">
                             <div class="col-md-6">
@@ -335,6 +338,88 @@
                             
                             <button type="submit" class="btn btn-primary btn-lg">
                                 <i class="fas fa-upload"></i> Subir Archivo Excel
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Contenido: Actualizar desde Excel -->
+            <div id="Excel_actualizacion" class="tabcontent">
+                <div class="card">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">
+                            <i class="fas fa-sync-alt"></i> Actualizar Expedientes Existentes desde Excel
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text mb-4">Sube un archivo Excel para <strong>ACTUALIZAR</strong> expedientes existentes. El sistema buscará los expedientes por radicado completo y actualizará su información:</p>
+                        
+                        <div class="alert alert-warning mb-4">
+                            <h6 class="text-warning"><i class="fas fa-exclamation-triangle"></i> Importante - Modo Actualización</h6>
+                            <ul class="mb-0">
+                                <li><strong>Solo actualiza expedientes existentes</strong> - No crea nuevos expedientes</li>
+                                <li><strong>Busca por RADICADO COMPLETO</strong> - Debe coincidir exactamente</li>
+                                <li><strong>Actualiza solo los campos proporcionados</strong> - Los campos vacíos no se modifican</li>
+                                <li><strong>Radicados no encontrados se omiten</strong> - Se reportan en el resumen</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <h6 class="text-warning"><i class="fas fa-list"></i> Columnas Requeridas:</h6>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item"><strong>RADICADO COMPLETO</strong> <span class="badge badge-danger">Obligatorio</span></li>
+                                </ul>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6 class="text-secondary"><i class="fas fa-list"></i> Columnas Actualizables:</h6>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item">DEMANDANTE</li>
+                                    <li class="list-group-item">DEMANDADO</li>
+                                    <li class="list-group-item">ESTADO</li>
+                                    <li class="list-group-item">FECHA INGRESO</li>
+                                    <li class="list-group-item">SOLICITUD</li>
+                                    <li class="list-group-item">RESPONSABLE</li>
+                                    <li class="list-group-item">OBSERVACIONES</li>
+                                    <li class="list-group-item">UBICACION</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <form method="POST" enctype="multipart/form-data" action="{{ url_for('idvistasubirexpediente.vista_subirexpediente') }}">
+                        <!-- 🔒 CSRF Protection -->
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="modo_actualizacion" value="true"/>
+                            <div class="form-group">
+                                <label for="archivo_excel_actualizacion" class="font-weight-bold">
+                                    <i class="fas fa-file-upload"></i> Seleccionar archivo Excel para actualización:
+                                </label>
+                                <input type="file" 
+                                       class="form-control-file" 
+                                       id="archivo_excel_actualizacion" 
+                                       name="archivo_excel" 
+                                       accept=".xlsx,.xls"
+                                       required>
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-info-circle"></i> Formatos permitidos: .xlsx, .xls (máximo 10MB)
+                                </small>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <i class="fas fa-lightbulb"></i>
+                                <strong>Proceso de Actualización:</strong>
+                                <ol class="mb-0 mt-2">
+                                    <li>El sistema busca cada expediente por su RADICADO COMPLETO</li>
+                                    <li>Si el expediente existe, actualiza los campos proporcionados</li>
+                                    <li>Si el expediente NO existe, se omite y se reporta</li>
+                                    <li>Al finalizar, recibirás un resumen detallado de las actualizaciones</li>
+                                </ol>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-warning btn-lg">
+                                <i class="fas fa-sync-alt"></i> Actualizar Expedientes desde Excel
                             </button>
                         </form>
                     </div>

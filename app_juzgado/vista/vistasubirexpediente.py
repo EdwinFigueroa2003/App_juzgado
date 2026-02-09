@@ -115,6 +115,10 @@ def procesar_archivo_excel():
     """Procesa la subida de archivo Excel"""
     logger.info("=== INICIO procesar_archivo_excel ===")
     
+    # Detectar si es modo actualización
+    modo_actualizacion = request.form.get('modo_actualizacion') == 'true'
+    logger.info(f"Modo de operación: {'ACTUALIZACIÓN' if modo_actualizacion else 'CREACIÓN'}")
+    
     try:
         file = request.files['archivo_excel']
         logger.info(f"Archivo recibido: {file.filename}")
@@ -137,29 +141,34 @@ def procesar_archivo_excel():
             logger.info(f"Guardando archivo en: {filepath}")
             file.save(filepath)
             
-            # Verificar si el archivo tiene múltiples pestañas (ingreso y estados)
-            logger.info("Verificando estructura del archivo Excel")
-            try:
-                excel_file = pd.ExcelFile(filepath)
-                hojas_disponibles = excel_file.sheet_names
-                logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
-                excel_file.close()
-                
-                # Verificar si tiene pestañas específicas para ingreso y estados
-                tiene_pestaña_ingreso = any(hoja.lower() in ['ingreso', 'ingresos'] for hoja in hojas_disponibles)
-                tiene_pestaña_estados = any(hoja.lower() in ['estado', 'estados'] for hoja in hojas_disponibles)
-                
-                if tiene_pestaña_ingreso and tiene_pestaña_estados:
-                    logger.info("Detectado archivo Excel con pestañas múltiples (ingreso y estados)")
-                    resultados = procesar_excel_multiples_pestañas(filepath, hojas_disponibles)
-                else:
-                    logger.info("Procesando archivo Excel con formato tradicional")
-                    resultados = procesar_excel_expedientes(filepath)
+            # Procesar según el modo
+            if modo_actualizacion:
+                logger.info("Procesando archivo en MODO ACTUALIZACIÓN")
+                resultados = procesar_excel_actualizacion(filepath)
+            else:
+                logger.info("Procesando archivo en MODO CREACIÓN")
+                # Verificar si el archivo tiene múltiples pestañas (ingreso y estados)
+                try:
+                    excel_file = pd.ExcelFile(filepath)
+                    hojas_disponibles = excel_file.sheet_names
+                    logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
+                    excel_file.close()
                     
-            except Exception as e:
-                logger.warning(f"Error verificando estructura del Excel: {e}")
-                logger.info("Procesando como archivo Excel tradicional")
-                resultados = procesar_excel_expedientes(filepath)
+                    # Verificar si tiene pestañas específicas para ingreso y estados
+                    tiene_pestaña_ingreso = any(hoja.lower() in ['ingreso', 'ingresos'] for hoja in hojas_disponibles)
+                    tiene_pestaña_estados = any(hoja.lower() in ['estado', 'estados'] for hoja in hojas_disponibles)
+                    
+                    if tiene_pestaña_ingreso and tiene_pestaña_estados:
+                        logger.info("Detectado archivo Excel con pestañas múltiples (ingreso y estados)")
+                        resultados = procesar_excel_multiples_pestañas(filepath, hojas_disponibles)
+                    else:
+                        logger.info("Procesando archivo Excel con formato tradicional")
+                        resultados = procesar_excel_expedientes(filepath)
+                        
+                except Exception as e:
+                    logger.warning(f"Error verificando estructura del Excel: {e}")
+                    logger.info("Procesando como archivo Excel tradicional")
+                    resultados = procesar_excel_expedientes(filepath)
             
             logger.info(f"Resultados del procesamiento: {resultados}")
             
@@ -182,7 +191,27 @@ def procesar_archivo_excel():
                 logger.warning(f"Error eliminando archivo temporal: {str(e)}")
             
             # Crear mensaje de resultado más detallado
-            if 'hoja_usada' in resultados:
+            if modo_actualizacion:
+                # Mensaje para modo actualización
+                mensaje_resultado = f'Archivo procesado en MODO ACTUALIZACIÓN. '
+                mensaje_resultado += f'{resultados["actualizados"]} expedientes actualizados exitosamente'
+                
+                if resultados.get("no_encontrados", 0) > 0:
+                    mensaje_resultado += f', {resultados["no_encontrados"]} radicados no encontrados'
+                
+                if resultados["errores"] > 0:
+                    mensaje_resultado += f', {resultados["errores"]} errores'
+                
+                mensaje_resultado += f' de {resultados["total_filas"]} filas procesadas.'
+                
+                # Mostrar radicados no encontrados si existen
+                if resultados.get("radicados_no_encontrados") and len(resultados["radicados_no_encontrados"]) > 0:
+                    radicados_lista = ', '.join(resultados["radicados_no_encontrados"])
+                    mensaje_resultado += f' Radicados NO encontrados: {radicados_lista}'
+                    if resultados.get("no_encontrados", 0) > len(resultados["radicados_no_encontrados"]):
+                        mensaje_resultado += f' (y {resultados["no_encontrados"] - len(resultados["radicados_no_encontrados"])} más)'
+                
+            elif 'hoja_usada' in resultados:
                 # Formato tradicional
                 mensaje_resultado = f'Archivo procesado usando hoja "{resultados["hoja_usada"]}". '
                 mensaje_resultado += f'{resultados["procesados"]} expedientes agregados exitosamente'
@@ -192,8 +221,24 @@ def procesar_archivo_excel():
                 
                 mensaje_resultado += f' de {resultados["total_filas"]} filas procesadas.'
                 
-                if resultados["errores"] > 0:
-                    mensaje_resultado += f' Revise que los radicados completos tengan exactamente 23 dígitos y que todos los campos requeridos estén presentes.'
+                # Mostrar detalles de expedientes rechazados
+                if resultados.get("rechazados_detalle"):
+                    detalles = resultados["rechazados_detalle"]
+                    
+                    if detalles.get("duplicados"):
+                        mensaje_resultado += f' DUPLICADOS ({len(detalles["duplicados"])}): {", ".join(detalles["duplicados"][:5])}'
+                        if len(detalles["duplicados"]) > 5:
+                            mensaje_resultado += f' (y {len(detalles["duplicados"]) - 5} más)'
+                    
+                    if detalles.get("radicado_invalido"):
+                        mensaje_resultado += f' RADICADO INVÁLIDO ({len(detalles["radicado_invalido"])}): {", ".join(detalles["radicado_invalido"][:5])}'
+                        if len(detalles["radicado_invalido"]) > 5:
+                            mensaje_resultado += f' (y {len(detalles["radicado_invalido"]) - 5} más)'
+                    
+                    if detalles.get("campos_faltantes"):
+                        mensaje_resultado += f' CAMPOS FALTANTES ({len(detalles["campos_faltantes"])}): {", ".join(detalles["campos_faltantes"][:5])}'
+                        if len(detalles["campos_faltantes"]) > 5:
+                            mensaje_resultado += f' (y {len(detalles["campos_faltantes"]) - 5} más)'
             else:
                 # Formato múltiples pestañas
                 mensaje_resultado = f'Archivo procesado con múltiples pestañas. '
@@ -514,6 +559,240 @@ def procesar_formulario_manual():
         flash(f'Error creando expediente: {str(e)}', 'error')
         return redirect(request.url)
 
+def procesar_excel_actualizacion(filepath):
+    """
+    Procesa un archivo Excel para ACTUALIZAR expedientes existentes
+    
+    Busca expedientes por radicado_completo y actualiza sus campos.
+    No crea expedientes nuevos.
+    
+    Args:
+        filepath: Ruta del archivo Excel
+        
+    Returns:
+        dict: Estadísticas del procesamiento (actualizados, no_encontrados, errores)
+    """
+    logger.info("=== INICIO procesar_excel_actualizacion ===")
+    logger.info(f"Archivo a procesar: {filepath}")
+    
+    try:
+        # Leer Excel - intentar diferentes nombres de hojas
+        logger.info("Intentando leer archivo Excel...")
+        
+        try:
+            excel_file = pd.ExcelFile(filepath)
+            hojas_disponibles = excel_file.sheet_names
+            logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
+            excel_file.close()
+        except Exception as e:
+            logger.error(f"Error leyendo archivo Excel: {str(e)}")
+            raise Exception(f"Error leyendo archivo Excel: {str(e)}")
+        
+        # Intentar diferentes nombres de hojas en orden de prioridad
+        nombres_hojas_posibles = [
+            "Resumen por Expediente",
+            "Resumen",
+            "Expedientes",
+            "Actualizacion",
+            "Actualización",
+            "Hoja1",
+            "Sheet1",
+            hojas_disponibles[0] if hojas_disponibles else None
+        ]
+        
+        df = None
+        hoja_usada = None
+        
+        for nombre_hoja in nombres_hojas_posibles:
+            if nombre_hoja and nombre_hoja in hojas_disponibles:
+                try:
+                    logger.info(f"Intentando leer hoja: '{nombre_hoja}'")
+                    df = pd.read_excel(filepath, sheet_name=nombre_hoja)
+                    hoja_usada = nombre_hoja
+                    logger.info(f"✓ Hoja '{nombre_hoja}' leída exitosamente")
+                    break
+                except Exception as e:
+                    logger.warning(f"Error leyendo hoja '{nombre_hoja}': {str(e)}")
+                    continue
+        
+        if df is None:
+            raise Exception(f"No se pudo leer ninguna hoja del archivo. Hojas disponibles: {hojas_disponibles}")
+        
+        logger.info(f"Excel leído correctamente usando hoja '{hoja_usada}'. Filas: {len(df)}, Columnas: {len(df.columns)}")
+        logger.info(f"Columnas disponibles: {list(df.columns)}")
+        
+        # Validar que tenga al menos la columna RADICADO COMPLETO
+        columnas_radicado = ['radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO COMPLETO', 'RADICADO_COMPLETO', 'Radicado Completo']
+        radicado_encontrado = False
+        col_radicado_usada = None
+        
+        for col_req in columnas_radicado:
+            if col_req in df.columns:
+                radicado_encontrado = True
+                col_radicado_usada = col_req
+                break
+        
+        if not radicado_encontrado:
+            logger.error("No se encontró columna de RADICADO COMPLETO")
+            raise Exception(f'El archivo Excel debe contener una columna de RADICADO COMPLETO. Columnas disponibles: {", ".join(df.columns)}')
+        
+        logger.info(f"✅ Columna de radicado encontrada: '{col_radicado_usada}'")
+        
+        conn = obtener_conexion()
+        logger.info("Conexión a BD establecida para procesamiento de actualizaciones")
+        cursor = conn.cursor()
+        
+        # Verificar estructura de la tabla
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'expediente'
+        """)
+        
+        available_columns = [row[0] for row in cursor.fetchall()]
+        logger.info(f"Columnas disponibles en tabla expediente: {available_columns}")
+        
+        actualizados = 0
+        no_encontrados = 0
+        errores = 0
+        radicados_no_encontrados = []
+        
+        logger.info("Iniciando procesamiento de actualizaciones fila por fila...")
+        
+        for index, row in df.iterrows():
+            try:
+                logger.debug(f"Procesando fila {index + 1}")
+                
+                # Obtener radicado completo
+                radicado_completo = None
+                if pd.notna(row.get(col_radicado_usada)):
+                    radicado_completo = str(row.get(col_radicado_usada)).strip()
+                
+                if not radicado_completo:
+                    logger.debug(f"  Saltando fila {index + 1} - sin radicado")
+                    errores += 1
+                    continue
+                
+                logger.debug(f"  Buscando expediente con radicado: '{radicado_completo}'")
+                
+                # Buscar si el expediente existe
+                cursor.execute("""
+                    SELECT id 
+                    FROM expediente 
+                    WHERE radicado_completo = %s
+                """, (radicado_completo,))
+                
+                resultado = cursor.fetchone()
+                
+                if not resultado:
+                    logger.debug(f"  ⚠️ Expediente NO encontrado: {radicado_completo}")
+                    no_encontrados += 1
+                    radicados_no_encontrados.append(radicado_completo)
+                    continue
+                
+                expediente_id = resultado[0]
+                logger.debug(f"  ✓ Expediente encontrado (ID: {expediente_id})")
+                
+                # Construir UPDATE dinámicamente con los campos disponibles
+                campos_actualizar = []
+                valores_actualizar = []
+                
+                # Mapear columnas del Excel a campos de la BD
+                mapeo_columnas = {
+                    'demandante': ['DEMANDANTE_HOMOLOGADO', 'DEMANDANTE', 'demandante', 'Demandante'],
+                    'demandado': ['DEMANDADO_HOMOLOGADO', 'DEMANDADO', 'demandado', 'Demandado'],
+                    'estado': ['ESTADO', 'estado', 'Estado', 'ESTADO_ACTUAL', 'estado_actual'],
+                    'responsable': ['RESPONSABLE', 'responsable', 'Responsable'],
+                    'observaciones': ['OBSERVACIONES', 'observaciones', 'Observaciones'],
+                    'ubicacion': ['UBICACION', 'ubicacion', 'Ubicación', 'UBICACIÓN']
+                }
+                
+                # Procesar cada campo actualizable
+                for campo_bd, posibles_columnas in mapeo_columnas.items():
+                    if campo_bd in available_columns:
+                        for col_excel in posibles_columnas:
+                            if col_excel in df.columns and pd.notna(row.get(col_excel)):
+                                valor = str(row.get(col_excel)).strip()
+                                if valor:  # Solo actualizar si no está vacío
+                                    campos_actualizar.append(f"{campo_bd} = %s")
+                                    valores_actualizar.append(valor)
+                                    logger.debug(f"    Actualizando {campo_bd}: '{valor}'")
+                                break
+                
+                # Procesar FECHA INGRESO si existe
+                if 'fecha_ingreso' in available_columns:
+                    for col_name in ['FECHA INGRESO', 'FECHA_INGRESO', 'fecha_ingreso', 'Fecha Ingreso']:
+                        if col_name in df.columns and pd.notna(row.get(col_name)):
+                            fecha_valor = row.get(col_name)
+                            try:
+                                from datetime import datetime
+                                if isinstance(fecha_valor, str):
+                                    for formato in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
+                                        try:
+                                            fecha_ingreso = datetime.strptime(fecha_valor.strip(), formato).date()
+                                            campos_actualizar.append("fecha_ingreso = %s")
+                                            valores_actualizar.append(fecha_ingreso)
+                                            logger.debug(f"    Actualizando fecha_ingreso: '{fecha_ingreso}'")
+                                            break
+                                        except ValueError:
+                                            continue
+                                else:
+                                    campos_actualizar.append("fecha_ingreso = %s")
+                                    valores_actualizar.append(fecha_valor)
+                                    logger.debug(f"    Actualizando fecha_ingreso: '{fecha_valor}'")
+                            except Exception as e:
+                                logger.warning(f"Error procesando fecha en fila {index + 1}: {e}")
+                            break
+                
+                # Si hay campos para actualizar, ejecutar UPDATE
+                if campos_actualizar:
+                    query = f"""
+                        UPDATE expediente 
+                        SET {', '.join(campos_actualizar)}
+                        WHERE id = %s
+                    """
+                    valores_actualizar.append(expediente_id)
+                    
+                    logger.debug(f"  Ejecutando UPDATE con {len(campos_actualizar)} campo(s)")
+                    cursor.execute(query, valores_actualizar)
+                    
+                    actualizados += 1
+                    logger.debug(f"  ✅ Expediente {radicado_completo} actualizado exitosamente")
+                else:
+                    logger.debug(f"  ℹ️ No hay campos para actualizar en fila {index + 1}")
+                    errores += 1
+                
+            except Exception as e:
+                logger.error(f"Error procesando fila {index + 1}: {str(e)}")
+                errores += 1
+                continue
+        
+        # Commit de todas las actualizaciones
+        conn.commit()
+        logger.info(f"✅ Transacción confirmada - {actualizados} expedientes actualizados")
+        
+        cursor.close()
+        conn.close()
+        
+        # Preparar resultados
+        resultados = {
+            'actualizados': actualizados,
+            'no_encontrados': no_encontrados,
+            'errores': errores,
+            'total_filas': len(df),
+            'hoja_usada': hoja_usada,
+            'radicados_no_encontrados': radicados_no_encontrados[:10]  # Solo primeros 10
+        }
+        
+        logger.info(f"=== FIN procesar_excel_actualizacion ===")
+        logger.info(f"Resultados: {actualizados} actualizados, {no_encontrados} no encontrados, {errores} errores")
+        
+        return resultados
+        
+    except Exception as e:
+        logger.error(f"ERROR en procesar_excel_actualizacion: {str(e)}")
+        raise e
+
 def procesar_excel_expedientes(filepath):
     """Procesa un archivo Excel con expedientes"""
     logger.info("=== INICIO procesar_excel_expedientes ===")
@@ -651,6 +930,13 @@ def procesar_excel_expedientes(filepath):
         procesados = 0
         errores = 0
         
+        # Tracking detallado de rechazados
+        rechazados_detalle = {
+            'duplicados': [],
+            'radicado_invalido': [],
+            'campos_faltantes': []
+        }
+        
         logger.info("Iniciando procesamiento fila por fila...")
         for index, row in df.iterrows():
             try:
@@ -726,14 +1012,30 @@ def procesar_excel_expedientes(filepath):
                 # Validar campos requeridos
                 if not radicado_completo and not radicado_corto:
                     logger.debug(f"  Saltando fila {index + 1} - sin radicado")
+                    rechazados_detalle['campos_faltantes'].append(f"Fila {index + 1}: Sin radicado")
                     errores += 1
                     continue
+                
+                # VALIDACIÓN DE DUPLICADOS: Verificar si el radicado_completo ya existe
+                if radicado_completo:
+                    cursor.execute("""
+                        SELECT id 
+                        FROM expediente 
+                        WHERE radicado_completo = %s
+                    """, (radicado_completo,))
+                    
+                    if cursor.fetchone():
+                        logger.debug(f"  Saltando fila {index + 1} - radicado duplicado: {radicado_completo}")
+                        rechazados_detalle['duplicados'].append(radicado_completo)
+                        errores += 1
+                        continue
                 
                 # Validación específica del radicado completo (debe tener exactamente 23 dígitos)
                 if radicado_completo:
                     es_valido, mensaje_error = validar_radicado_completo(radicado_completo)
                     if not es_valido:
                         logger.debug(f"  Saltando fila {index + 1} - {mensaje_error}")
+                        rechazados_detalle['radicado_invalido'].append(f"{radicado_completo} ({len(radicado_completo)} dígitos)")
                         errores += 1
                         continue
                     
@@ -741,21 +1043,25 @@ def procesar_excel_expedientes(filepath):
                 
                 if not demandante:
                     logger.debug(f"  Saltando fila {index + 1} - sin demandante")
+                    rechazados_detalle['campos_faltantes'].append(f"Fila {index + 1}: Sin demandante")
                     errores += 1
                     continue
                 
                 if not demandado:
                     logger.debug(f"  Saltando fila {index + 1} - sin demandado")
+                    rechazados_detalle['campos_faltantes'].append(f"Fila {index + 1}: Sin demandado")
                     errores += 1
                     continue
                 
                 if not fecha_ingreso:
                     logger.debug(f"  Saltando fila {index + 1} - sin fecha de ingreso")
+                    rechazados_detalle['campos_faltantes'].append(f"Fila {index + 1}: Sin fecha de ingreso")
                     errores += 1
                     continue
                 
                 if not solicitud:
                     logger.debug(f"  Saltando fila {index + 1} - sin solicitud")
+                    rechazados_detalle['campos_faltantes'].append(f"Fila {index + 1}: Sin solicitud")
                     errores += 1
                     continue
                 
@@ -889,7 +1195,8 @@ def procesar_excel_expedientes(filepath):
             'procesados': procesados,
             'errores': errores,
             'hoja_usada': hoja_usada,
-            'total_filas': len(df)
+            'total_filas': len(df),
+            'rechazados_detalle': rechazados_detalle
         }
         
         logger.info(f"=== FIN procesar_excel_expedientes - Resultado: {result} ===")
