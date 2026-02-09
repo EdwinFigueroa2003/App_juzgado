@@ -874,7 +874,13 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
 
 
 def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limite=50):
-    """Filtra expedientes por solicitud desde la tabla ingresos Y opcionalmente por estado"""
+    """
+    Filtra expedientes por solicitud desde la tabla ingresos Y opcionalmente por estado.
+    
+    IMPORTANTE: Solo considera solicitudes PENDIENTES que sean las MÁS RECIENTES.
+    - Una solicitud está pendiente si su fecha_ingreso > última fecha_estado
+    - Solo muestra expedientes donde la solicitud buscada es la MÁS RECIENTE de las pendientes
+    """
     try:
         conn = obtener_conexion()
         cursor = conn.cursor()
@@ -882,7 +888,7 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
         # Construir la consulta para buscar en la tabla ingresos
         orden_sql = 'DESC' if orden_fecha == 'DESC' else 'ASC'
         
-        # Consulta que busca en la columna solicitud de la tabla ingresos
+        # Consulta CORREGIDA V2: Solo muestra si la solicitud es la MÁS RECIENTE pendiente
         query = f"""
             SELECT DISTINCT
                 e.id, e.radicado_completo, e.radicado_corto, e.demandante, e.demandado,
@@ -890,7 +896,27 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
                 COALESCE(e.fecha_ingreso, CURRENT_DATE) as fecha_orden
             FROM expediente e
             INNER JOIN ingresos i ON e.id = i.expediente_id
-            WHERE i.solicitud ILIKE %s"""
+            LEFT JOIN (
+                SELECT expediente_id, MAX(fecha_estado) as ultima_fecha_estado
+                FROM estados
+                GROUP BY expediente_id
+            ) est ON e.id = est.expediente_id
+            WHERE i.solicitud ILIKE %s
+              AND (
+                -- La solicitud debe estar pendiente
+                i.fecha_ingreso > est.ultima_fecha_estado
+                OR est.ultima_fecha_estado IS NULL
+              )
+              AND i.fecha_ingreso = (
+                -- Y debe ser la MÁS RECIENTE de las pendientes
+                SELECT MAX(i2.fecha_ingreso)
+                FROM ingresos i2
+                WHERE i2.expediente_id = e.id
+                  AND (
+                    i2.fecha_ingreso > COALESCE(est.ultima_fecha_estado, '1900-01-01'::date)
+                    OR est.ultima_fecha_estado IS NULL
+                  )
+              )"""
         
         parametros = [f'%{solicitud}%']
         
