@@ -269,12 +269,20 @@ def asignar_turno_por_fecha_ingreso(cursor, expediente_id):
 def recalcular_todos_los_turnos(cursor):
     """
     Recalcula todos los turnos de expedientes 'Activo Pendiente' 
-    basándose en la LÓGICA FINAL:
-    1. Tomar fecha_ingreso del campo expediente.fecha_ingreso O última fecha de tabla ingresos
-    2. Asignar turno a TODOS los expedientes 'Activo Pendiente' que tengan fecha de ingreso
+    basándose en la LÓGICA COMPLEJA CON CRITERIOS MÚLTIPLES:
+    
+    Criterios de ordenamiento (en orden de prioridad):
+    1. Fecha de ingreso sin salida (más antigua) - Criterio principal
+       - "Sin salida" = ingreso que NO tiene estado posterior
+       - Se selecciona la fecha más ANTIGUA de los ingresos sin salida
+    2. Fecha de ingreso del expediente (más antigua) - Desempate 1
+    3. Última actuación (más antigua, sin actuación al final) - Desempate 2
+       - Expedientes SIN estados quedan de ÚLTIMOS (NULLS LAST)
+    4. ID del expediente - Desempate final
     """
     try:
-        logger.info("🔄 RECALCULANDO TODOS LOS TURNOS (LÓGICA FINAL)...")
+        logger.info("🔄 RECALCULANDO TODOS LOS TURNOS (LÓGICA COMPLEJA)...")
+        logger.info("📋 Criterios: fecha sin salida → antigüedad expediente → última actuación → ID")
         
         # Paso 1: Limpiar todos los turnos de expedientes 'Activo Pendiente'
         cursor.execute("""
@@ -286,48 +294,73 @@ def recalcular_todos_los_turnos(cursor):
         limpiados = cursor.rowcount
         logger.info(f"🧹 Turnos limpiados: {limpiados}")
         
-        # Paso 2: Obtener TODOS los expedientes 'Activo Pendiente' que tienen fecha de ingreso
-        # LÓGICA CORREGIDA: Si tiene ingresos, usar la PRIMERA fecha de ingresos (más antigua)
-        # Si NO tiene ingresos, usar expediente.fecha_ingreso
+        # Paso 2: Obtener TODOS los expedientes 'Activo Pendiente' con lógica compleja
+        # Esta es la MISMA lógica que usa el script actualizar_turnos.py
         cursor.execute("""
+            WITH expedientes_activos AS (
+                SELECT 
+                    e.id,
+                    e.radicado_completo,
+                    e.fecha_ingreso as fecha_ingreso_expediente
+                FROM expediente e
+                WHERE e.estado = 'Activo Pendiente'
+            ),
+            ingresos_expedientes AS (
+                SELECT 
+                    i.expediente_id,
+                    i.fecha_ingreso
+                FROM ingresos i
+                WHERE i.fecha_ingreso IS NOT NULL
+            ),
+            ingresos_sin_salida AS (
+                -- Identificar qué ingresos NO tienen estado posterior
+                SELECT 
+                    ie.expediente_id,
+                    ie.fecha_ingreso
+                FROM ingresos_expedientes ie
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM estados est 
+                    WHERE est.expediente_id = ie.expediente_id 
+                      AND est.fecha_estado > ie.fecha_ingreso
+                )
+            ),
+            fecha_ingreso_mas_antigua_sin_salida AS (
+                -- Para cada expediente, obtener la fecha de ingreso MÁS ANTIGUA sin salida
+                SELECT 
+                    expediente_id,
+                    MIN(fecha_ingreso) as fecha_ingreso_sin_salida
+                FROM ingresos_sin_salida
+                GROUP BY expediente_id
+            ),
+            ultima_actuacion_expediente AS (
+                -- Para cada expediente, obtener la fecha de la última actuación
+                SELECT 
+                    expediente_id,
+                    MAX(fecha_estado) as ultima_actuacion
+                FROM estados
+                WHERE fecha_estado IS NOT NULL
+                GROUP BY expediente_id
+            )
             SELECT 
-                e.id,
-                e.radicado_completo,
-                CASE 
-                    WHEN EXISTS(SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id) THEN
-                        (SELECT i.fecha_ingreso 
-                         FROM ingresos i 
-                         WHERE i.expediente_id = e.id 
-                         ORDER BY i.fecha_ingreso ASC 
-                         LIMIT 1)
-                    ELSE 
-                        e.fecha_ingreso
-                END as fecha_para_turno
-            FROM expediente e
-            WHERE e.estado = 'Activo Pendiente'
-              AND (
-                  e.fecha_ingreso IS NOT NULL
-                  OR
-                  EXISTS (
-                      SELECT 1 FROM ingresos i 
-                      WHERE i.expediente_id = e.id
-                  )
-              )
-            ORDER BY CASE 
-                WHEN EXISTS(SELECT 1 FROM ingresos i WHERE i.expediente_id = e.id) THEN
-                    (SELECT i.fecha_ingreso 
-                     FROM ingresos i 
-                     WHERE i.expediente_id = e.id 
-                     ORDER BY i.fecha_ingreso ASC 
-                     LIMIT 1)
-                ELSE 
-                    e.fecha_ingreso
-            END ASC, e.id ASC
+                ea.id,
+                ea.radicado_completo,
+                COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) as fecha_para_turno,
+                ea.fecha_ingreso_expediente,
+                uae.ultima_actuacion
+            FROM expedientes_activos ea
+            LEFT JOIN fecha_ingreso_mas_antigua_sin_salida fimass ON ea.id = fimass.expediente_id
+            LEFT JOIN ultima_actuacion_expediente uae ON ea.id = uae.expediente_id
+            WHERE COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) IS NOT NULL
+            ORDER BY 
+                COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) ASC,
+                ea.fecha_ingreso_expediente ASC,
+                uae.ultima_actuacion ASC NULLS LAST,
+                ea.id ASC
         """)
         
         expedientes = cursor.fetchall()
         logger.info(f"📋 Expedientes que deben tener turno: {len(expedientes)}")
-        logger.info(f"   (Criterio: 'Activo Pendiente' + tiene fecha de ingreso)")
+        logger.info(f"   (Criterio: 'Activo Pendiente' + lógica compleja de ordenamiento)")
         
         if not expedientes:
             logger.info("ℹ️ No hay expedientes que cumplan los criterios para asignar turnos")
@@ -336,7 +369,7 @@ def recalcular_todos_los_turnos(cursor):
         # Paso 3: Asignar turnos secuenciales
         turnos_asignados = 0
         
-        for turno, (exp_id, radicado, fecha_para_turno) in enumerate(expedientes, 1):
+        for turno, (exp_id, radicado, fecha_para_turno, fecha_ing_exp, ultima_act) in enumerate(expedientes, 1):
             cursor.execute("""
                 UPDATE expediente 
                 SET turno = %s 
@@ -347,11 +380,19 @@ def recalcular_todos_los_turnos(cursor):
                 turnos_asignados += 1
                 if turnos_asignados <= 5:  # Log de los primeros 5
                     fecha_str = fecha_para_turno.strftime('%Y-%m-%d') if fecha_para_turno else 'Sin fecha'
-                    logger.info(f"   ✅ Turno {turno}: {radicado} (Fecha para turno: {fecha_str})")
+                    fecha_exp_str = fecha_ing_exp.strftime('%Y-%m-%d') if fecha_ing_exp else 'Sin fecha'
+                    ultima_act_str = ultima_act.strftime('%Y-%m-%d') if ultima_act else 'Sin estados'
+                    logger.info(f"   ✅ Turno {turno}: {radicado}")
+                    logger.info(f"      Fecha para turno: {fecha_str}, Fecha exp: {fecha_exp_str}, Última act: {ultima_act_str}")
                 elif turnos_asignados % 100 == 0:  # Progreso cada 100
                     logger.info(f"   📈 Procesados {turnos_asignados} expedientes...")
         
         logger.info(f"✅ Turnos recalculados: {turnos_asignados}")
+        logger.info(f"   Criterios aplicados:")
+        logger.info(f"   1. Fecha de ingreso sin salida (más antigua)")
+        logger.info(f"   2. Fecha de ingreso del expediente (más antigua)")
+        logger.info(f"   3. Última actuación (más antigua, sin actuación al final)")
+        logger.info(f"   4. ID del expediente")
         
         # Verificación rápida
         cursor.execute("""
@@ -378,8 +419,21 @@ def recalcular_todos_los_turnos(cursor):
         
         sin_fechas = cursor.fetchone()[0]
         
-        logger.info(f"📊 Expedientes 'Activo Pendiente' excluidos del turno:")
-        logger.info(f"   - Sin fecha de ingreso (ni en expediente ni en ingresos): {sin_fechas}")
+        # Contar expedientes sin estados (que quedan de últimos)
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM expediente e
+            WHERE e.estado = 'Activo Pendiente'
+              AND e.turno IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM estados est WHERE est.expediente_id = e.id)
+        """)
+        
+        sin_estados = cursor.fetchone()[0]
+        
+        logger.info(f"📊 Estadísticas de asignación:")
+        logger.info(f"   - Expedientes con turno asignado: {turnos_asignados}")
+        logger.info(f"   - Expedientes sin estados (quedan de últimos): {sin_estados}")
+        logger.info(f"   - Expedientes 'Activo Pendiente' sin fecha (excluidos): {sin_fechas}")
         
     except Exception as e:
         logger.error(f"Error recalculando turnos: {str(e)}")
