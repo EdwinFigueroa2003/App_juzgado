@@ -588,6 +588,9 @@ def procesar_excel_actualizacion(filepath):
             logger.error(f"Error leyendo archivo Excel: {str(e)}")
             raise Exception(f"Error leyendo archivo Excel: {str(e)}")
         
+        # Definir columnas posibles para radicado
+        columnas_radicado = ['radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO COMPLETO', 'RADICADO_COMPLETO', 'Radicado Completo']
+        
         # Intentar diferentes nombres de hojas en orden de prioridad
         nombres_hojas_posibles = [
             "Resumen por Expediente",
@@ -597,44 +600,65 @@ def procesar_excel_actualizacion(filepath):
             "Actualización",
             "Hoja1",
             "Sheet1",
-            hojas_disponibles[0] if hojas_disponibles else None
         ]
         
         df = None
         hoja_usada = None
+        col_radicado_usada = None
         
+        # Primero, intentar con hojas prioritarias
         for nombre_hoja in nombres_hojas_posibles:
-            if nombre_hoja and nombre_hoja in hojas_disponibles:
+            if nombre_hoja in hojas_disponibles:
+                try:
+                    logger.info(f"Intentando leer hoja prioritaria: '{nombre_hoja}'")
+                    df_temp = pd.read_excel(filepath, sheet_name=nombre_hoja)
+                    
+                    # Verificar si tiene columna de radicado
+                    for col_req in columnas_radicado:
+                        if col_req in df_temp.columns:
+                            df = df_temp
+                            hoja_usada = nombre_hoja
+                            col_radicado_usada = col_req
+                            logger.info(f"✓ Hoja prioritaria '{nombre_hoja}' leída exitosamente con columna '{col_req}'")
+                            break
+                    
+                    if df is not None:
+                        break
+                except Exception as e:
+                    logger.warning(f"Error leyendo hoja '{nombre_hoja}': {str(e)}")
+                    continue
+        
+        # Si no encontró en hojas prioritarias, buscar en TODAS las hojas hasta encontrar una con RADICADO COMPLETO
+        if df is None:
+            logger.info("No se encontró en hojas prioritarias. Buscando en todas las hojas por columna RADICADO COMPLETO...")
+            
+            for nombre_hoja in hojas_disponibles:
                 try:
                     logger.info(f"Intentando leer hoja: '{nombre_hoja}'")
-                    df = pd.read_excel(filepath, sheet_name=nombre_hoja)
-                    hoja_usada = nombre_hoja
-                    logger.info(f"✓ Hoja '{nombre_hoja}' leída exitosamente")
-                    break
+                    df_temp = pd.read_excel(filepath, sheet_name=nombre_hoja)
+                    logger.debug(f"  Columnas en hoja '{nombre_hoja}': {list(df_temp.columns)}")
+                    
+                    # Verificar si tiene columna de radicado
+                    for col_req in columnas_radicado:
+                        if col_req in df_temp.columns:
+                            df = df_temp
+                            hoja_usada = nombre_hoja
+                            col_radicado_usada = col_req
+                            logger.info(f"✓ Hoja '{nombre_hoja}' tiene columna '{col_req}' - usando esta hoja")
+                            break
+                    
+                    if df is not None:
+                        break
                 except Exception as e:
                     logger.warning(f"Error leyendo hoja '{nombre_hoja}': {str(e)}")
                     continue
         
         if df is None:
-            raise Exception(f"No se pudo leer ninguna hoja del archivo. Hojas disponibles: {hojas_disponibles}")
+            raise Exception(f"No se encontró ninguna hoja con columna RADICADO COMPLETO. Hojas disponibles: {hojas_disponibles}")
         
         logger.info(f"Excel leído correctamente usando hoja '{hoja_usada}'. Filas: {len(df)}, Columnas: {len(df.columns)}")
         logger.info(f"Columnas disponibles: {list(df.columns)}")
-        
-        # Validar que tenga al menos la columna RADICADO COMPLETO
-        columnas_radicado = ['radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO COMPLETO', 'RADICADO_COMPLETO', 'Radicado Completo']
-        radicado_encontrado = False
-        col_radicado_usada = None
-        
-        for col_req in columnas_radicado:
-            if col_req in df.columns:
-                radicado_encontrado = True
-                col_radicado_usada = col_req
-                break
-        
-        if not radicado_encontrado:
-            logger.error("No se encontró columna de RADICADO COMPLETO")
-            raise Exception(f'El archivo Excel debe contener una columna de RADICADO COMPLETO. Columnas disponibles: {", ".join(df.columns)}')
+        logger.info(f"✅ Columna de radicado encontrada: '{col_radicado_usada}'")
         
         logger.info(f"✅ Columna de radicado encontrada: '{col_radicado_usada}'")
         
