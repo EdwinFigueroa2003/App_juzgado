@@ -539,6 +539,33 @@ def buscar_expedientes(radicado):
                 logger.error(f"ERROR obteniendo estados para expediente {exp_id}: {e}")
                 expediente['estados'] = []
             
+            # Calcular fecha de ingreso más antigua sin salida (para mostrar en la interfaz)
+            try:
+                # Obtener ingresos sin salida (que no tienen estado posterior)
+                ingresos_sin_salida = []
+                for ingreso in expediente['ingresos']:
+                    fecha_ing = ingreso['fecha_ingreso']
+                    if fecha_ing:
+                        # Verificar si existe un estado posterior a este ingreso
+                        tiene_salida = any(
+                            estado['fecha_estado'] > fecha_ing 
+                            for estado in expediente['estados'] 
+                            if estado['fecha_estado']
+                        )
+                        if not tiene_salida:
+                            ingresos_sin_salida.append(fecha_ing)
+                
+                # Seleccionar la fecha más antigua sin salida
+                if ingresos_sin_salida:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(ingresos_sin_salida)
+                    logger.info(f"Fecha ingreso sin salida para exp {exp_id}: {expediente['fecha_ingreso_mas_antigua_sin_salida']}")
+                else:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
+                    logger.info(f"No hay ingresos sin salida para exp {exp_id}")
+            except Exception as e:
+                logger.error(f"ERROR calculando fecha sin salida para expediente {exp_id}: {e}")
+                expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
+            
             # Obtener actuaciones con manejo de errores y logging detallado
             try:
                 logger.info(f"Buscando actuaciones para expediente {exp_id}...")
@@ -799,6 +826,32 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 for row in cursor.fetchall()
             ]
             
+            
+            # Calcular fecha de ingreso más antigua sin salida (para mostrar en la interfaz)
+            try:
+                # Obtener ingresos sin salida (que no tienen estado posterior)
+                ingresos_sin_salida_list = []
+                for ingreso in expediente['ingresos']:
+                    fecha_ing = ingreso['fecha_ingreso']
+                    if fecha_ing:
+                        # Verificar si existe un estado posterior a este ingreso
+                        tiene_salida = any(
+                            estado['fecha_estado'] > fecha_ing 
+                            for estado in expediente['estados'] 
+                            if estado['fecha_estado']
+                        )
+                        if not tiene_salida:
+                            ingresos_sin_salida_list.append(fecha_ing)
+                
+                # Seleccionar la fecha más antigua sin salida
+                if ingresos_sin_salida_list:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(ingresos_sin_salida_list)
+                else:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
+            except Exception as e:
+                logger.error(f"ERROR calculando fecha sin salida para expediente {exp_id}: {e}")
+                expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
+
             # Obtener actuaciones
             cursor.execute("""
                 SELECT numero_actuacion, descripcion_actuacion, tipo_origen, 
@@ -941,13 +994,14 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
                 parametros.append(estado_filtro)
         
         # Ordenamiento especial para 'Activo Pendiente': por turno (más antiguo primero)
+        # IMPORTANTE: El turno se asigna por fecha_ingreso_sin_salida, no por fecha_ingreso del expediente
         if estado_filtro == "ACTIVO PENDIENTE":
             if orden_fecha == 'ASC':
                 # ASC = más antiguo primero = turno más bajo primero
-                order_clause = "ORDER BY e.turno ASC NULLS LAST, e.fecha_ingreso ASC"
+                order_clause = "ORDER BY CAST(e.turno AS INTEGER) ASC NULLS LAST"
             else:
                 # DESC = más reciente primero = turno más alto primero  
-                order_clause = "ORDER BY e.turno DESC NULLS LAST, e.fecha_ingreso DESC"
+                order_clause = "ORDER BY CAST(e.turno AS INTEGER) DESC NULLS LAST"
         else:
             # Para otros estados, usar ordenamiento por fecha normal
             order_clause = f"ORDER BY fecha_orden {orden_sql}"
@@ -1027,6 +1081,32 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
                 for row in cursor.fetchall()
             ]
             
+            
+            # Calcular fecha de ingreso más antigua sin salida (para mostrar en la interfaz)
+            try:
+                # Obtener ingresos sin salida (que no tienen estado posterior)
+                ingresos_sin_salida_list = []
+                for ingreso in expediente['ingresos']:
+                    fecha_ing = ingreso['fecha_ingreso']
+                    if fecha_ing:
+                        # Verificar si existe un estado posterior a este ingreso
+                        tiene_salida = any(
+                            estado['fecha_estado'] > fecha_ing 
+                            for estado in expediente['estados'] 
+                            if estado['fecha_estado']
+                        )
+                        if not tiene_salida:
+                            ingresos_sin_salida_list.append(fecha_ing)
+                
+                # Seleccionar la fecha más antigua sin salida
+                if ingresos_sin_salida_list:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(ingresos_sin_salida_list)
+                else:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
+            except Exception as e:
+                logger.error(f"ERROR calculando fecha sin salida para expediente {exp_id}: {e}")
+                expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
+
             # Obtener actuaciones
             cursor.execute("""
                 SELECT numero_actuacion, descripcion_actuacion, tipo_origen, 
