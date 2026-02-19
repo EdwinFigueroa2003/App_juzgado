@@ -128,9 +128,10 @@
                                     <canvas id="estadosChart"></canvas>
                                 </div>
                                 <div class="mt-4 text-center small">
-                                    {% for estado, cantidad in metricas.expediente_por_estado[:5] %}
+                                    {% set colors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e'] %}
+                                    {% for estado, cantidad in metricas.expediente_por_estado[:4] %}
                                         <span class="mr-2 mb-1 d-inline-block">
-                                            <i class="fas fa-circle text-primary"></i> {{ estado }}: {{ cantidad }}
+                                            <i class="fas fa-circle" style="color: {{ colors[loop.index0] }};"></i> {{ estado }}: {{ cantidad }}
                                         </span>
                                     {% endfor %}
                                 </div>
@@ -300,8 +301,8 @@
 <script>
 {% if metricas.expediente_por_estado %}
 window.estadosChartData = {
-    labels: [{% for estado, cantidad in metricas.expediente_por_estado[:5] %}'{{ estado }}'{% if not loop.last %},{% endif %}{% endfor %}],
-    data: [{% for estado, cantidad in metricas.expediente_por_estado[:5] %}{{ cantidad }}{% if not loop.last %},{% endif %}{% endfor %}]
+    labels: [{% for estado, cantidad in metricas.expediente_por_estado[:4] %}'{{ estado }}'{% if not loop.last %},{% endif %}{% endfor %}],
+    data: [{% for estado, cantidad in metricas.expediente_por_estado[:4] %}{{ cantidad }}{% if not loop.last %},{% endif %}{% endfor %}]
 };
 {% else %}
 window.estadosChartData = null;
@@ -310,7 +311,7 @@ window.estadosChartData = null;
 </script> 
 
 <!-- JavaScript personalizado del dashboard -->
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}?v=2"></script>
 
 
 {% endblock %}

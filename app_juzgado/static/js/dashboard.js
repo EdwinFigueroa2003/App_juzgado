@@ -35,20 +35,16 @@ function initEstadosChart() {
             datasets: [{
                 data: estadosData.data,
                 backgroundColor: [
-                    '#4e73df',
-                    '#1cc88a', 
-                    '#36b9cc',
-                    '#f6c23e',
-                    '#e74a3b',
-                    '#858796'
+                    '#4e73df', /* Pendiente */
+                    '#1cc88a', /* Activo Pendiente */
+                    '#36b9cc', /* Inactivo Resuelto */
+                    '#f6c23e'  /* Activo Resuelto */
                 ],
                 hoverBackgroundColor: [
                     '#2e59d9',
                     '#17a673',
                     '#2c9faf',
-                    '#f4b619',
-                    '#e02424',
-                    '#6c757d'
+                    '#f4b619'
                 ],
                 hoverBorderColor: "rgba(234, 236, 244, 1)",
                 borderWidth: 2

@@ -41,13 +41,25 @@ def obtener_metricas_dashboard():
         metricas['total_expediente'] = cursor.fetchone()[0]
         
         # 2. Expedientes por estado - DIRECTO desde campo estado (ULTRA RÁPIDO)
+        # Orden específico para coincidir con los colores del gráfico:
+        # 1. Pendiente (#4e73df - azul)
+        # 2. Activo Pendiente (#1cc88a - verde)
+        # 3. Inactivo Resuelto (#36b9cc - cyan)
+        # 4. Activo Resuelto (#f6c23e - amarillo)
         cursor.execute("""
             SELECT 
                 COALESCE(estado, 'Sin Estado') as estado_exp,
                 COUNT(*) as cantidad
             FROM expediente 
             GROUP BY estado
-            ORDER BY cantidad DESC
+            ORDER BY 
+                CASE estado
+                    WHEN 'Pendiente' THEN 1
+                    WHEN 'Activo Pendiente' THEN 2
+                    WHEN 'Inactivo Resuelto' THEN 3
+                    WHEN 'Activo Resuelto' THEN 4
+                    ELSE 5
+                END
         """)
         metricas['expediente_por_estado'] = cursor.fetchall()
         
