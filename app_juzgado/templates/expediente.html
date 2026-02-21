@@ -1120,6 +1120,61 @@
     function scrollToDetails() {
         document.getElementById('resultados-expedientes').scrollIntoView({ behavior: 'smooth' });
     }
+
+    // 🔍 DEPURACIÓN: Verificar que Bootstrap está cargado
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('=== DEPURACIÓN DE TABS ===');
+        console.log('Bootstrap cargado:', typeof bootstrap !== 'undefined');
+        console.log('jQuery cargado:', typeof $ !== 'undefined');
+        
+        // Verificar todos los tabs de ingresos y estados
+        const tabs = document.querySelectorAll('[data-bs-toggle="tab"]');
+        console.log('Total de tabs encontrados:', tabs.length);
+        
+        tabs.forEach((tab, index) => {
+            console.log(`Tab ${index + 1}:`, {
+                id: tab.id,
+                href: tab.getAttribute('href'),
+                text: tab.textContent.trim()
+            });
+            
+            // Agregar event listener para depuración
+            tab.addEventListener('click', function(e) {
+                console.log('🖱️ Click en tab:', {
+                    id: this.id,
+                    href: this.getAttribute('href'),
+                    target: document.querySelector(this.getAttribute('href'))
+                });
+                
+                // Verificar si el target existe
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                
+                if (!targetElement) {
+                    console.error('❌ ERROR: Target no encontrado:', targetId);
+                } else {
+                    console.log('✅ Target encontrado:', targetId);
+                }
+            });
+        });
+        
+        // Verificar si Bootstrap Tab está disponible
+        if (typeof bootstrap !== 'undefined' && bootstrap.Tab) {
+            console.log('✅ Bootstrap Tab disponible');
+            
+            // Inicializar manualmente los tabs si es necesario
+            tabs.forEach(tab => {
+                try {
+                    new bootstrap.Tab(tab);
+                    console.log('✅ Tab inicializado:', tab.id);
+                } catch (error) {
+                    console.error('❌ Error inicializando tab:', tab.id, error);
+                }
+            });
+        } else {
+            console.error('❌ Bootstrap Tab NO disponible');
+        }
+    });
 </script>
 
 {% endblock %}

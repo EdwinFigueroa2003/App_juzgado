@@ -3,6 +3,13 @@
 {% block title %}Actualizar Expedientes{% endblock %}
 
 {% block content %}
+<style>
+    /* Ocultar elementos adicionales por defecto */
+    .hidden-default {
+        display: none;
+    }
+</style>
+
 <div class="container mt-4">
     <div class="row">
         <div class="col-12">
@@ -666,7 +673,6 @@
                             <th>Fecha</th>
                             <th>Solicitud</th>
                             <th>Observaciones</th>
-                            <!-- <th>Ubicación</th> -->
                             <th width="60">Acciones</th>
                         </tr>
                     </thead>
@@ -694,7 +700,6 @@
                                 <small>{{ ingreso[2] or 'Sin observaciones' }}</small>
                                 {% endif %}
                             </td>
-                            <!-- <td><small>{{ ingreso[5] or 'N/A' }}</small></td> -->
                             <td>
                                 <form method="POST"
                                     action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
@@ -739,7 +744,6 @@
                                 <small>{{ ingreso[2] or 'Sin observaciones' }}</small>
                                 {% endif %}
                             </td>
-                            <td><small>{{ ingreso[5] or 'N/A' }}</small></td>
                             <td>
                                 <form method="POST"
                                     action="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}"
@@ -766,7 +770,7 @@
             <!-- Botón para mostrar/ocultar ingresos adicionales -->
             {% if expediente.ingresos|length > 2 %}
             <div class="text-center mt-2">
-                <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleIngresosAdicionales()">
+                <button type="button" class="btn btn-sm btn-outline-info btn-toggle-ingresos">
                     <i class="fas fa-eye"></i> Ver todos ({{ expediente.ingresos|length }})
                 </button>
             </div>
@@ -834,7 +838,7 @@
                         {% for estado in expediente.estados[:2] %}
                         <tr>
                             <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
-                            <td><span class="badge badge-info badge-sm">{{ estado[2][:20] + '...' if estado[2] and
+                            <td><span class="badge badge-secondary badge-sm">{{ estado[2][:20] + '...' if estado[2] and
                                     estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
                             <td>
                                 {% if estado[3] and estado[3]|length > 50 %}
@@ -896,7 +900,7 @@
                         {% for estado in expediente.estados[2:] %}
                         <tr>
                             <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
-                            <td><span class="badge badge-info badge-sm">{{ estado[2][:20] + '...' if estado[2] and
+                            <td><span class="badge badge-secondary badge-sm">{{ estado[2][:20] + '...' if estado[2] and
                                     estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
                             <td>
                                 {% if estado[3] and estado[3]|length > 50 %}
@@ -960,7 +964,7 @@
             <!-- Botón para mostrar/ocultar estados adicionales -->
             {% if expediente.estados|length > 2 %}
             <div class="text-center mt-2">
-                <button type="button" class="btn btn-sm btn-outline-warning" onclick="toggleEstadosAdicionales()">
+                <button type="button" class="btn btn-sm btn-outline-warning btn-toggle-estados">
                     <i class="fas fa-eye"></i> Ver todos ({{ expediente.estados|length }})
                 </button>
             </div>
@@ -1036,8 +1040,6 @@
 </div>
 </div>
 
-
-<script src="{{ url_for('static', filename='js/base.js') }}"></script>
 
 <script>
     // Función para confirmar eliminación de expediente
@@ -1134,8 +1136,6 @@
         const selectEstado = document.getElementById('valor_estado');
         const ayuda = document.getElementById('ayuda_criterio');
         
-        console.log('mostrarCampoValor - Criterio seleccionado:', criterio);
-        
         // Ocultar todos los campos primero
         inputTexto.style.display = 'none';
         selectEstado.style.display = 'none';
@@ -1154,23 +1154,18 @@
             selectEstado.disabled = false;
             ayuda.style.display = 'block';
             ayuda.textContent = 'Selecciona el estado específico para filtrar expedientes';
-            console.log('Mostrando select de estado');
         } else if (criterio === 'tipo_solicitud') {
             inputTexto.style.display = 'block';
             inputTexto.disabled = false;
             inputTexto.placeholder = 'Ej: TUTELA, AMPARO, etc.';
             ayuda.style.display = 'block';
             ayuda.textContent = 'Ingresa el tipo de solicitud (búsqueda parcial)';
-            console.log('Mostrando input de solicitud');
         } else if (criterio === 'juzgado_origen') {
             inputTexto.style.display = 'block';
             inputTexto.disabled = false;
             inputTexto.placeholder = 'Ej: JUZGADO CIVIL, PENAL, etc.';
             ayuda.style.display = 'block';
             ayuda.textContent = 'Ingresa el nombre del juzgado (búsqueda parcial)';
-            console.log('Mostrando input de juzgado');
-        } else {
-            console.log('Criterio no requiere valor adicional o no reconocido');
         }
     }
 
@@ -1185,7 +1180,6 @@
         if (criterio === 'estado') {
             const selectEstado = document.getElementById('valor_estado');
             valorCriterio = selectEstado.value;
-            console.log('Valor estado seleccionado:', valorCriterio);
             
             if (!valorCriterio) {
                 alert('Debe seleccionar un estado específico');
@@ -1194,7 +1188,6 @@
         } else if (criterio === 'tipo_solicitud' || criterio === 'juzgado_origen') {
             const inputTexto = document.getElementById('valor_criterio');
             valorCriterio = inputTexto.value.trim();
-            console.log('Valor texto ingresado:', valorCriterio);
             
             if (!valorCriterio) {
                 alert('Debe ingresar un valor para el criterio seleccionado');
@@ -1220,6 +1213,8 @@
 
     // Inicializar el formulario cuando se carga la página
     document.addEventListener('DOMContentLoaded', function() {
+        console.log('=== DEPURACIÓN: Página cargada ===');
+        
         // Asegurar que los campos estén ocultos al cargar
         mostrarCampoValor();
         
@@ -1228,7 +1223,66 @@
         if (criterioSelect) {
             criterioSelect.addEventListener('change', mostrarCampoValor);
         }
+        
+        // 🔍 DEPURACIÓN: Verificar botones de "Ver todos"
+        const botonesIngresos = document.querySelectorAll('button.btn-toggle-ingresos');
+        const botonesEstados = document.querySelectorAll('button.btn-toggle-estados');
+        
+        console.log('Botones "Ver todos" de INGRESOS encontrados:', botonesIngresos.length);
+        console.log('Botones "Ver todos" de ESTADOS encontrados:', botonesEstados.length);
+        
+        botonesIngresos.forEach((btn, index) => {
+            console.log(`Botón Ingresos ${index + 1}:`, btn);
+        });
+        
+        botonesEstados.forEach((btn, index) => {
+            console.log(`Botón Estados ${index + 1}:`, btn);
+        });
+        
+        // Verificar elementos de destino
+        const ingresosAdicionales = document.getElementById('ingresos-adicionales');
+        const estadosAdicionales = document.getElementById('estados-adicionales');
+        
+        console.log('Elemento #ingresos-adicionales:', ingresosAdicionales);
+        console.log('Elemento #estados-adicionales:', estadosAdicionales);
+        
+        if (ingresosAdicionales) {
+            console.log('  - Display inicial:', window.getComputedStyle(ingresosAdicionales).display);
+            console.log('  - Clases:', ingresosAdicionales.className);
+        }
+        
+        if (estadosAdicionales) {
+            console.log('  - Display inicial:', window.getComputedStyle(estadosAdicionales).display);
+            console.log('  - Clases:', estadosAdicionales.className);
+        }
+        
+        // 🔧 SOLUCIÓN ALTERNATIVA: Agregar event listeners directamente
+        console.log('=== Agregando event listeners directamente ===');
+        
+        botonesIngresos.forEach((btn, index) => {
+            console.log(`Agregando listener a botón Ingresos ${index + 1}`);
+            btn.addEventListener('click', function(e) {
+                console.log('🖱️ CLICK DETECTADO en botón de ingresos (via addEventListener)');
+                e.preventDefault();
+                e.stopPropagation();
+                toggleIngresosAdicionales(this);
+            });
+        });
+        
+        botonesEstados.forEach((btn, index) => {
+            console.log(`Agregando listener a botón Estados ${index + 1}`);
+            btn.addEventListener('click', function(e) {
+                console.log('🖱️ CLICK DETECTADO en botón de estados (via addEventListener)');
+                e.preventDefault();
+                e.stopPropagation();
+                toggleEstadosAdicionales(this);
+            });
+        });
+        
+        console.log('=== Event listeners agregados ===');
     });
+
+    // Las funciones toggle se definen en `static/js/base.js` para evitar duplicados.
 </script>
 
 {% endblock %}

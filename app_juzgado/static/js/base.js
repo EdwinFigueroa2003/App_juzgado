@@ -326,22 +326,33 @@ function cambiarResponsable() {
 }
 
 // Función para alternar ingresos adicionales en actualizar expediente
-function toggleIngresosAdicionales() {
+function toggleIngresosAdicionales(botonElement) {
     const ingresosAdicionales = document.getElementById('ingresos-adicionales');
-    const button = event.target.closest('button');
-    
+    let button = null;
+    if (botonElement instanceof HTMLElement) {
+        button = botonElement;
+    } else if (typeof event !== 'undefined' && event && event.target) {
+        button = event.target.closest('button');
+    } else {
+        button = document.querySelector('button[onclick*="toggleIngresosAdicionales"]');
+    }
+
     if (!ingresosAdicionales || !button) return;
-    
-    if (ingresosAdicionales.style.display === 'none') {
-        // Mostrar ingresos adicionales
-        ingresosAdicionales.style.display = '';
-        button.innerHTML = '<i class="fas fa-eye-slash"></i> Ver menos';
+
+    const isHidden = window.getComputedStyle(ingresosAdicionales).display === 'none';
+
+    if (isHidden) {
+        ingresosAdicionales.classList.remove('hidden-default');
+        ingresosAdicionales.style.display = 'table-row-group';
+        ingresosAdicionales.style.visibility = 'visible';
+        ingresosAdicionales.style.opacity = '1';
+        button.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar';
         button.classList.remove('btn-outline-info');
         button.classList.add('btn-outline-secondary');
     } else {
-        // Ocultar ingresos adicionales
+        ingresosAdicionales.classList.add('hidden-default');
         ingresosAdicionales.style.display = 'none';
-        const totalIngresos = document.querySelectorAll('#ingresos-adicionales tr').length + 2;
+        const totalIngresos = ingresosAdicionales.querySelectorAll('tr').length + 2;
         button.innerHTML = '<i class="fas fa-eye"></i> Ver todos (' + totalIngresos + ')';
         button.classList.remove('btn-outline-secondary');
         button.classList.add('btn-outline-info');
@@ -349,22 +360,33 @@ function toggleIngresosAdicionales() {
 }
 
 // Función para alternar estados adicionales en actualizar expediente
-function toggleEstadosAdicionales() {
+function toggleEstadosAdicionales(botonElement) {
     const estadosAdicionales = document.getElementById('estados-adicionales');
-    const button = event.target.closest('button');
-    
+    let button = null;
+    if (botonElement instanceof HTMLElement) {
+        button = botonElement;
+    } else if (typeof event !== 'undefined' && event && event.target) {
+        button = event.target.closest('button');
+    } else {
+        button = document.querySelector('button[onclick*="toggleEstadosAdicionales"]');
+    }
+
     if (!estadosAdicionales || !button) return;
-    
-    if (estadosAdicionales.style.display === 'none') {
-        // Mostrar estados adicionales
-        estadosAdicionales.style.display = '';
-        button.innerHTML = '<i class="fas fa-eye-slash"></i> Ver menos';
+
+    const isHidden = window.getComputedStyle(estadosAdicionales).display === 'none';
+
+    if (isHidden) {
+        estadosAdicionales.classList.remove('hidden-default');
+        estadosAdicionales.style.display = 'table-row-group';
+        estadosAdicionales.style.visibility = 'visible';
+        estadosAdicionales.style.opacity = '1';
+        button.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar';
         button.classList.remove('btn-outline-warning');
         button.classList.add('btn-outline-secondary');
     } else {
-        // Ocultar estados adicionales
+        estadosAdicionales.classList.add('hidden-default');
         estadosAdicionales.style.display = 'none';
-        const totalEstados = document.querySelectorAll('#estados-adicionales tr').length + 2;
+        const totalEstados = estadosAdicionales.querySelectorAll('tr').length + 2;
         button.innerHTML = '<i class="fas fa-eye"></i> Ver todos (' + totalEstados + ')';
         button.classList.remove('btn-outline-secondary');
         button.classList.add('btn-outline-warning');
