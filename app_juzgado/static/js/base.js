@@ -168,29 +168,62 @@ function imprimirExpediente(expedienteId) {
 
 // Función para alternar entre vista previa y texto completo del auto/resolución
 function toggleAutoText(button) {
-    const container = button.closest('.auto-text-container');
-    if (!container) return;
-    
-    const preview = container.querySelector('.auto-preview');
-    const full = container.querySelector('.auto-full');
-    
-    if (!preview || !full) return;
-    
-    if (full.style.display === 'none') {
-        // Mostrar texto completo
+    // Soporte para diferentes clases usadas en plantillas (compatibilidad)
+    const containerSelectors = ['.auto-text-container', '.auto-anotacion-container', '.auto-anotacion-container'];
+    const previewSelectors = ['.auto-preview', '.auto-anotacion-preview'];
+    const fullSelectors = ['.auto-full', '.auto-anotacion-full'];
+
+    let container = null;
+    for (const sel of containerSelectors) {
+        container = button.closest(sel);
+        if (container) break;
+    }
+
+    if (!container) {
+        // Último recurso: buscar un ancestro que contenga 'auto' en su clase
+        container = button.closest('[class*="auto"]');
+    }
+
+    if (!container) {
+        console.warn('toggleAutoText: no se encontró el contenedor para', button);
+        return;
+    }
+
+    let preview = null, full = null;
+    for (const sel of previewSelectors) {
+        preview = container.querySelector(sel);
+        if (preview) break;
+    }
+    for (const sel of fullSelectors) {
+        full = container.querySelector(sel);
+        if (full) break;
+    }
+
+    if (!preview || !full) {
+        console.warn('toggleAutoText: elementos preview/full no encontrados', container);
+        return;
+    }
+
+    const fullIsHidden = window.getComputedStyle(full).display === 'none';
+    if (fullIsHidden) {
         preview.style.display = 'none';
         full.style.display = 'block';
         button.innerHTML = '<i class="fas fa-compress"></i> Ver menos';
         button.classList.remove('btn-outline-primary');
         button.classList.add('btn-outline-secondary');
     } else {
-        // Mostrar vista previa
         preview.style.display = 'inline';
         full.style.display = 'none';
         button.innerHTML = '<i class="fas fa-expand"></i> Ver completo';
         button.classList.remove('btn-outline-secondary');
         button.classList.add('btn-outline-primary');
     }
+}
+
+// Alias para compatibilidad con plantillas que usan el nombre "toggleAutoAnotacionText"
+function toggleAutoAnotacionText(button) {
+    // Solo delega a la implementación principal
+    return toggleAutoText(button);
 }
 
 // Función para alternar entre vista previa y texto completo de observaciones
@@ -273,6 +306,56 @@ function toggleObservacionesEstadoText(button) {
         button.classList.add('btn-outline-primary');
     }
 }
+
+// Inicializar listeners para botones expandibles (observaciones / auto)
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        const btnsIngreso = document.querySelectorAll('.btn-toggle-observaciones-ingreso');
+        const btnsEstado = document.querySelectorAll('.btn-toggle-observaciones-estado');
+        const btnsAuto = document.querySelectorAll('.btn-toggle-auto-anotacion');
+
+        btnsIngreso.forEach(btn => {
+            // Evitar añadir múltiples listeners
+            if (!btn._observacionListener) {
+                btn.addEventListener('click', function(e) {
+                    console.log('DEBUG: click observaciones ingreso (listener)');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try { toggleObservacionesIngresoText(this); } catch (err) { console.error(err); }
+                });
+                btn._observacionListener = true;
+            }
+        });
+
+        btnsEstado.forEach(btn => {
+            if (!btn._observacionEstadoListener) {
+                btn.addEventListener('click', function(e) {
+                    console.log('DEBUG: click observaciones estado (listener)');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try { toggleObservacionesEstadoText(this); } catch (err) { console.error(err); }
+                });
+                btn._observacionEstadoListener = true;
+            }
+        });
+
+        btnsAuto.forEach(btn => {
+            if (!btn._autoListener) {
+                btn.addEventListener('click', function(e) {
+                    console.log('DEBUG: click auto/anotacion (listener)');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try { toggleAutoText(this); } catch (err) { console.error(err); }
+                });
+                btn._autoListener = true;
+            }
+        });
+
+        console.log('DEBUG: expandable listeners initialized', btnsIngreso.length, btnsEstado.length, btnsAuto.length);
+    } catch (err) {
+        console.error('Error inicializando expandable listeners', err);
+    }
+});
 
 /* =======================================
    FUNCIONES DE PAGINACIÓN
