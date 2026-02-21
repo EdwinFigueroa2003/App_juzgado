@@ -889,7 +889,8 @@ def procesar_excel_actualizacion(filepath):
                 valores_actualizar = []
                 
                 # Mapear columnas del Excel a campos de la BD
-                # NOTA: 'observaciones' NO existe en tabla expediente, solo en ingresos/estados
+                # NOTA: Solo columnas que existen en la tabla expediente
+                # Columnas NO disponibles: tipo_solicitud, ubicacion, observaciones
                 mapeo_columnas = {
                     'demandante': ['DEMANDANTE_HOMOLOGADO', 'DEMANDANTE', 'demandante', 'Demandante'],
                     'demandado': ['DEMANDADO_HOMOLOGADO', 'DEMANDADO', 'demandado', 'Demandado'],
@@ -898,7 +899,8 @@ def procesar_excel_actualizacion(filepath):
                         'ESTADO_TRAMITE', 'Estado_Tramite', 'ESTADO TRAMITE'  # Común en Estados
                     ],
                     'responsable': ['RESPONSABLE', 'responsable', 'Responsable'],
-                    'ubicacion': ['UBICACION', 'ubicacion', 'Ubicación', 'UBICACIÓN']
+                    'radicado_corto': ['RADICADO CORTO', 'radicado_corto', 'Radicado Corto', 'RADICADO_CORTO'],
+                    'juzgado_origen': ['JUZGADO ORIGEN', 'juzgado_origen', 'Juzgado Origen', 'JUZGADO_ORIGEN', 'J. ORIGEN', 'J ORIGEN']
                 }
                 
                 # Procesar cada campo actualizable
@@ -927,9 +929,9 @@ def procesar_excel_actualizacion(filepath):
                 # Procesar FECHA INGRESO si existe
                 if 'fecha_ingreso' in available_columns:
                     for col_name in [
-                        'FECHA INGRESO', 'FECHA_INGRESO', 'fecha_ingreso', 'Fecha Ingreso',
-                        'FECHA ESTADO', 'Fecha Estado', 'FECHA_ESTADO',  # Común en Estados
-                        'FECHA ACTUACION', 'Fecha Actuacion', 'FECHA_ACTUACION'
+                        'FECHA ESTADO', 'Fecha Estado', 'FECHA_ESTADO',  # PRIORIDAD 1 - Común en Estados
+                        'FECHA INGRESO', 'FECHA_INGRESO', 'fecha_ingreso', 'Fecha Ingreso',  # PRIORIDAD 2
+                        'FECHA ACTUACION', 'Fecha Actuacion', 'FECHA_ACTUACION'  # PRIORIDAD 3
                     ]:
                         if col_name in df.columns and pd.notna(row.get(col_name)):
                             fecha_valor = row.get(col_name)
@@ -987,6 +989,64 @@ def procesar_excel_actualizacion(filepath):
                         
                         actualizados += 1
                         logger.debug(f"  ✅ Expediente {radicado_completo} actualizado exitosamente")
+                        
+                        # 🎫 AJUSTE AUTOMÁTICO DE TURNOS según cambio de estado
+                        # Verificar si se actualizó el campo 'estado'
+                        if 'estado = %s' in ', '.join(campos_actualizar):
+                            # Obtener el índice del estado en valores_actualizar
+                            idx_estado = None
+                            for i, campo in enumerate(campos_actualizar):
+                                if campo == 'estado = %s':
+                                    idx_estado = i
+                                    break
+                            
+                            if idx_estado is not None:
+                                estado_nuevo = valores_actualizar[idx_estado]
+                                estado_anterior = valores_actuales_dict.get('estado')
+                                
+                                logger.debug(f"    🔄 Cambio de estado detectado: '{estado_anterior}' → '{estado_nuevo}'")
+                                
+                                # CASO 1: Cambió A "Activo Pendiente" → Reasignar TODOS los turnos
+                                if estado_nuevo == 'Activo Pendiente' and estado_anterior != 'Activo Pendiente':
+                                    logger.debug(f"    🎫 Expediente cambió a 'Activo Pendiente' - se requiere reasignación de turnos")
+                                    
+                                    # Marcar que se necesita reasignar turnos al final del proceso
+                                    # Por ahora, asignar turno temporal basado en fecha
+                                    # La reasignación completa se hará después del commit
+                                    
+                                    # Obtener fecha de ingreso del expediente para ordenamiento
+                                    cursor.execute("""
+                                        SELECT fecha_ingreso 
+                                        FROM expediente 
+                                        WHERE id = %s
+                                    """, (expediente_id,))
+                                    
+                                    fecha_ing_result = cursor.fetchone()
+                                    fecha_ingreso_exp = fecha_ing_result[0] if fecha_ing_result else None
+                                    
+                                    # Asignar turno temporal (se reasignará al final)
+                                    # Por ahora, usar un número alto para que quede al final
+                                    cursor.execute("""
+                                        UPDATE expediente 
+                                        SET turno = '999999' 
+                                        WHERE id = %s
+                                    """, (expediente_id,))
+                                    
+                                    logger.debug(f"    ✅ Turno temporal asignado (se reasignará al final del proceso)")
+                                
+                                # CASO 2: Cambió DESDE "Activo Pendiente" a otro estado → Quitar turno y reasignar
+                                elif estado_anterior == 'Activo Pendiente' and estado_nuevo != 'Activo Pendiente':
+                                    logger.debug(f"    🗑️ Quitando turno (cambió desde 'Activo Pendiente')")
+                                    
+                                    # Quitar turno
+                                    cursor.execute("""
+                                        UPDATE expediente 
+                                        SET turno = NULL 
+                                        WHERE id = %s
+                                    """, (expediente_id,))
+                                    
+                                    logger.debug(f"    ✅ Turno removido - se reasignarán turnos al final")
+                        
                     except Exception as e_update:
                         logger.error(f"  ❌ Error en UPDATE para expediente {radicado_completo}: {e_update}")
                         conn.rollback()  # Rollback para poder continuar con la siguiente fila
@@ -1019,8 +1079,89 @@ def procesar_excel_actualizacion(filepath):
         conn.commit()
         logger.info(f"✅ Transacción confirmada - {actualizados} expedientes actualizados")
         
-        cursor.close()
-        conn.close()
+        # 🎫 REASIGNACIÓN AUTOMÁTICA DE TURNOS
+        # Si hubo cambios de estado, reasignar todos los turnos de "Activo Pendiente"
+        # basándose en la fecha de ingreso más antigua sin salida
+        if actualizados > 0:
+            logger.info("🎫 Reasignando turnos para expedientes 'Activo Pendiente'...")
+            try:
+                cursor = conn.cursor()
+                
+                # Obtener todos los expedientes "Activo Pendiente" ordenados por fecha
+                # Usar la misma lógica que actualizar_turnos.py
+                cursor.execute("""
+                    WITH expedientes_activos AS (
+                        SELECT 
+                            e.id,
+                            e.radicado_completo,
+                            e.fecha_ingreso as fecha_ingreso_expediente
+                        FROM expediente e
+                        WHERE e.estado = 'Activo Pendiente'
+                    ),
+                    ingresos_sin_salida AS (
+                        SELECT 
+                            i.expediente_id,
+                            i.fecha_ingreso
+                        FROM ingresos i
+                        WHERE i.fecha_ingreso IS NOT NULL
+                          AND NOT EXISTS (
+                              SELECT 1 FROM estados est 
+                              WHERE est.expediente_id = i.expediente_id 
+                                AND est.fecha_estado > i.fecha_ingreso
+                          )
+                    ),
+                    fecha_ingreso_mas_antigua_sin_salida AS (
+                        SELECT 
+                            expediente_id,
+                            MIN(fecha_ingreso) as fecha_ingreso_sin_salida
+                        FROM ingresos_sin_salida
+                        GROUP BY expediente_id
+                    )
+                    SELECT 
+                        ea.id,
+                        ea.radicado_completo,
+                        COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) as fecha_para_turno
+                    FROM expedientes_activos ea
+                    LEFT JOIN fecha_ingreso_mas_antigua_sin_salida fimass ON ea.id = fimass.expediente_id
+                    WHERE COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) IS NOT NULL
+                    ORDER BY 
+                        COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) ASC,
+                        ea.fecha_ingreso_expediente ASC,
+                        ea.id ASC
+                """)
+                
+                expedientes_para_turno = cursor.fetchall()
+                
+                if expedientes_para_turno:
+                    logger.info(f"  Reasignando turnos a {len(expedientes_para_turno)} expedientes...")
+                    
+                    # Primero, limpiar todos los turnos de "Activo Pendiente"
+                    cursor.execute("""
+                        UPDATE expediente 
+                        SET turno = NULL 
+                        WHERE estado = 'Activo Pendiente'
+                    """)
+                    
+                    # Asignar turnos secuenciales basados en el orden de fechas
+                    for idx, (exp_id, radicado, fecha_turno) in enumerate(expedientes_para_turno, start=1):
+                        cursor.execute("""
+                            UPDATE expediente 
+                            SET turno = %s 
+                            WHERE id = %s
+                        """, (str(idx), exp_id))
+                    
+                    conn.commit()
+                    logger.info(f"  ✅ {len(expedientes_para_turno)} turnos reasignados correctamente")
+                else:
+                    logger.info("  ℹ️ No hay expedientes 'Activo Pendiente' para asignar turnos")
+                
+                cursor.close()
+                
+            except Exception as e_turnos:
+                logger.warning(f"  ⚠️ Error reasignando turnos (no crítico): {e_turnos}")
+                # No es crítico, continuar con el proceso
+        
+        cursor = conn.cursor()  # Reabrir cursor para el resto del código
         
         # Guardar reporte de errores en archivo
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1092,6 +1233,10 @@ def procesar_excel_actualizacion(filepath):
             'reporte_path': reporte_path,
             'tiene_errores': len(errores_detallados) > 0
         }
+        
+        # Cerrar cursor y conexión
+        cursor.close()
+        conn.close()
         
         logger.info(f"=== FIN procesar_excel_actualizacion ===")
         logger.info(f"Resultados: {actualizados} actualizados, {sin_cambios} sin cambios, {no_encontrados} no encontrados, {errores} errores")
