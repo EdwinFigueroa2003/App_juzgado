@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, send_file, send_from_directory
 import pandas as pd
 import os, re
 from werkzeug.utils import secure_filename
@@ -111,6 +111,71 @@ def vista_subirexpediente():
         flash(f'Error cargando la página: {str(e)}', 'error')
         return redirect(url_for('idvistahome.home'))
 
+@vistasubirexpediente.route('/descargar_reporte/<filename>')
+@login_required
+def descargar_reporte(filename):
+    """
+    Descarga un reporte de actualización
+    
+    Args:
+        filename: Nombre del archivo de reporte
+    """
+    try:
+        # Validar que el archivo sea un reporte válido
+        if not filename.startswith('reporte_actualizacion_') or not filename.endswith('.txt'):
+            logger.error(f"Intento de descarga de archivo inválido: {filename}")
+            flash('Archivo de reporte inválido', 'error')
+            return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
+        
+        # Construir ruta absoluta al directorio de reportes
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        reportes_dir = os.path.join(base_dir, 'logs', 'reportes_actualizacion')
+        
+        logger.info(f"Directorio de reportes: {reportes_dir}")
+        logger.info(f"Archivo solicitado: {filename}")
+        
+        # Verificar que el directorio existe
+        if not os.path.exists(reportes_dir):
+            logger.error(f"Directorio de reportes no existe: {reportes_dir}")
+            flash('Directorio de reportes no encontrado', 'error')
+            return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
+        
+        # Verificar que el archivo existe
+        filepath = os.path.join(reportes_dir, filename)
+        if not os.path.exists(filepath):
+            logger.error(f"Reporte no encontrado en: {filepath}")
+            flash('Reporte no encontrado', 'error')
+            return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
+        
+        logger.info(f"✅ Archivo encontrado, enviando para descarga: {filepath}")
+        
+        # Usar send_from_directory con parámetros compatibles
+        try:
+            # Intentar con download_name (Flask 2.0+)
+            return send_from_directory(
+                directory=reportes_dir,
+                path=filename,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='text/plain; charset=utf-8'
+            )
+        except TypeError:
+            # Fallback para versiones antiguas de Flask (attachment_filename)
+            return send_from_directory(
+                directory=reportes_dir,
+                filename=filename,
+                as_attachment=True,
+                mimetype='text/plain; charset=utf-8'
+            )
+        
+    except Exception as e:
+        logger.error(f"❌ Error descargando reporte: {e}")
+        logger.error(f"Tipo de error: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        flash(f'Error descargando reporte: {str(e)}', 'error')
+        return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
+
 def procesar_archivo_excel():
     """Procesa la subida de archivo Excel"""
     logger.info("=== INICIO procesar_archivo_excel ===")
@@ -196,6 +261,9 @@ def procesar_archivo_excel():
                 mensaje_resultado = f'Archivo procesado en MODO ACTUALIZACIÓN. '
                 mensaje_resultado += f'{resultados["actualizados"]} expedientes actualizados exitosamente'
                 
+                if resultados.get("sin_cambios", 0) > 0:
+                    mensaje_resultado += f', {resultados["sin_cambios"]} sin cambios (valores idénticos)'
+                
                 if resultados.get("no_encontrados", 0) > 0:
                     mensaje_resultado += f', {resultados["no_encontrados"]} radicados no encontrados'
                 
@@ -204,12 +272,32 @@ def procesar_archivo_excel():
                 
                 mensaje_resultado += f' de {resultados["total_filas"]} filas procesadas.'
                 
-                # Mostrar radicados no encontrados si existen
-                if resultados.get("radicados_no_encontrados") and len(resultados["radicados_no_encontrados"]) > 0:
-                    radicados_lista = ', '.join(resultados["radicados_no_encontrados"])
-                    mensaje_resultado += f' Radicados NO encontrados: {radicados_lista}'
-                    if resultados.get("no_encontrados", 0) > len(resultados["radicados_no_encontrados"]):
-                        mensaje_resultado += f' (y {resultados["no_encontrados"] - len(resultados["radicados_no_encontrados"])} más)'
+                # Información sobre reporte de errores
+                if resultados.get("tiene_errores") and resultados.get("reporte_path"):
+                    reporte_filename = os.path.basename(resultados["reporte_path"])
+                    mensaje_resultado += f' Se generó un reporte detallado de errores.'
+                
+                # Mostrar primeros errores detallados
+                if resultados.get("errores_detallados") and len(resultados["errores_detallados"]) > 0:
+                    flash(mensaje_resultado, 'warning' if resultados["errores"] > 0 else 'success')
+                    
+                    # Crear mensaje adicional con detalle de errores
+                    errores_msg = "DETALLE DE ERRORES:\n"
+                    for i, error in enumerate(resultados["errores_detallados"][:5], 1):  # Solo primeros 5
+                        errores_msg += f"\n{i}. Fila {error['fila']}: {error['radicado']} - {error['motivo']}"
+                    
+                    if len(resultados["errores_detallados"]) > 5:
+                        errores_msg += f"\n... y {len(resultados['errores_detallados']) - 5} errores más"
+                    
+                    flash(errores_msg, 'info')
+                    
+                    # Agregar mensaje con enlace de descarga
+                    if resultados.get("reporte_path"):
+                        reporte_filename = os.path.basename(resultados["reporte_path"])
+                        descarga_url = url_for('idvistasubirexpediente.descargar_reporte', filename=reporte_filename)
+                        flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar {reporte_filename}</a></div>', 'info')
+                else:
+                    flash(mensaje_resultado, 'warning' if resultados["errores"] > 0 else 'success')
                 
             elif 'hoja_usada' in resultados:
                 # Formato tradicional
@@ -589,17 +677,35 @@ def procesar_excel_actualizacion(filepath):
             raise Exception(f"Error leyendo archivo Excel: {str(e)}")
         
         # Definir columnas posibles para radicado
-        columnas_radicado = ['radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO COMPLETO', 'RADICADO_COMPLETO', 'Radicado Completo']
+        columnas_radicado = [
+            "RADICADO MODIFICADO",
+            'radicado_completo', 
+            'RadicadoUnicoLimpio', 
+            'RADICADO COMPLETO', 
+            'RADICADO_COMPLETO', 
+            'Radicado Completo',
+            'RADICADO_MODIFICADO_OFI',
+            'radicado',
+            'Radicado'
+        ]
         
         # Intentar diferentes nombres de hojas en orden de prioridad
         nombres_hojas_posibles = [
-            "Resumen por Expediente",
-            "Resumen",
-            "Expedientes",
-            "Actualizacion",
-            "Actualización",
-            "Hoja1",
-            "Sheet1",
+            "estados",
+            "Estados",                  # Prioridad 6 - Común en actualizaciones
+            "Estado",
+            "Resumen por Expediente",  # Prioridad 1
+            "Resumen",                  # Prioridad 2
+            "Expedientes",              # Prioridad 3
+            "Actualizacion",            # Prioridad 4
+            "Actualización",            # Prioridad 5
+            "Hoja1",                    # Prioridad 8
+            "Sheet1",                   # Prioridad 9
+            "dato",                     # Prioridad 10
+            "HOJA1",                    # Prioridad 11
+            "DATOS",                    # Prioridad 12
+            "ESTADOS",                  # Prioridad 13
+            "ESTADO"                    # Prioridad 14
         ]
         
         df = None
@@ -679,7 +785,9 @@ def procesar_excel_actualizacion(filepath):
         actualizados = 0
         no_encontrados = 0
         errores = 0
+        sin_cambios = 0  # Nuevo contador para registros sin cambios
         radicados_no_encontrados = []
+        errores_detallados = []  # Lista para guardar errores detallados
         
         logger.info("Iniciando procesamiento de actualizaciones fila por fila...")
         
@@ -687,19 +795,28 @@ def procesar_excel_actualizacion(filepath):
             try:
                 logger.debug(f"Procesando fila {index + 1}")
                 
-                # Obtener radicado completo
+                # Obtener radicado completo y normalizarlo
                 radicado_completo = None
                 if pd.notna(row.get(col_radicado_usada)):
-                    radicado_completo = str(row.get(col_radicado_usada)).strip()
+                    radicado_original = str(row.get(col_radicado_usada)).strip()
+                    # Normalizar: quitar espacios, guiones, puntos
+                    radicado_completo = re.sub(r'[^0-9]', '', radicado_original)
                 
                 if not radicado_completo:
                     logger.debug(f"  Saltando fila {index + 1} - sin radicado")
                     errores += 1
+                    errores_detallados.append({
+                        'fila': index + 2,  # +2 porque Excel empieza en 1 y hay header
+                        'radicado': 'N/A',
+                        'motivo': 'Radicado vacío o inválido',
+                        'datos': {}
+                    })
                     continue
                 
                 logger.debug(f"  Buscando expediente con radicado: '{radicado_completo}'")
                 
-                # Buscar si el expediente existe
+                # Buscar si el expediente existe (búsqueda flexible)
+                # 1. Búsqueda exacta por radicado_completo
                 cursor.execute("""
                     SELECT id 
                     FROM expediente 
@@ -708,26 +825,79 @@ def procesar_excel_actualizacion(filepath):
                 
                 resultado = cursor.fetchone()
                 
+                # 2. Si no encuentra y el radicado tiene >= 13 dígitos, buscar por últimos 13
+                if not resultado and len(radicado_completo) >= 13:
+                    ultimos_13 = radicado_completo[-13:]
+                    logger.debug(f"  No encontrado exacto, buscando por últimos 13 dígitos: '{ultimos_13}'")
+                    
+                    cursor.execute("""
+                        SELECT id, radicado_completo
+                        FROM expediente 
+                        WHERE radicado_completo IS NOT NULL 
+                        AND LENGTH(radicado_completo) >= 13
+                        AND RIGHT(radicado_completo, 13) = %s
+                        LIMIT 1
+                    """, (ultimos_13,))
+                    
+                    resultado_flexible = cursor.fetchone()
+                    if resultado_flexible:
+                        resultado = (resultado_flexible[0],)
+                        logger.debug(f"  ✓ Encontrado por últimos 13 dígitos: {resultado_flexible[1]}")
+                
                 if not resultado:
                     logger.debug(f"  ⚠️ Expediente NO encontrado: {radicado_completo}")
                     no_encontrados += 1
                     radicados_no_encontrados.append(radicado_completo)
+                    errores_detallados.append({
+                        'fila': index + 2,
+                        'radicado': radicado_completo,
+                        'motivo': 'Expediente no encontrado en la base de datos',
+                        'datos': {
+                            'demandante': row.get('DEMANDANTE', row.get('demandante', 'N/A')),
+                            'demandado': row.get('DEMANDADO', row.get('demandado', 'N/A'))
+                        }
+                    })
                     continue
                 
                 expediente_id = resultado[0]
                 logger.debug(f"  ✓ Expediente encontrado (ID: {expediente_id})")
+                
+                # Obtener valores actuales del expediente (solo columnas que existen)
+                # Construir SELECT dinámicamente basado en columnas disponibles
+                columnas_select = []
+                for col in ['demandante', 'demandado', 'estado', 'responsable', 'ubicacion', 'fecha_ingreso']:
+                    if col in available_columns:
+                        columnas_select.append(col)
+                
+                if not columnas_select:
+                    logger.warning(f"  ⚠️ No hay columnas disponibles para consultar en expediente {expediente_id}")
+                    valores_actuales_dict = {}
+                else:
+                    query_select = f"SELECT {', '.join(columnas_select)} FROM expediente WHERE id = %s"
+                    cursor.execute(query_select, (expediente_id,))
+                    
+                    valores_actuales = cursor.fetchone()
+                    if valores_actuales:
+                        valores_actuales_dict = {}
+                        for i, col in enumerate(columnas_select):
+                            valores_actuales_dict[col] = valores_actuales[i]
+                    else:
+                        valores_actuales_dict = {}
                 
                 # Construir UPDATE dinámicamente con los campos disponibles
                 campos_actualizar = []
                 valores_actualizar = []
                 
                 # Mapear columnas del Excel a campos de la BD
+                # NOTA: 'observaciones' NO existe en tabla expediente, solo en ingresos/estados
                 mapeo_columnas = {
                     'demandante': ['DEMANDANTE_HOMOLOGADO', 'DEMANDANTE', 'demandante', 'Demandante'],
                     'demandado': ['DEMANDADO_HOMOLOGADO', 'DEMANDADO', 'demandado', 'Demandado'],
-                    'estado': ['ESTADO', 'estado', 'Estado', 'ESTADO_ACTUAL', 'estado_actual'],
+                    'estado': [
+                        'ESTADO', 'estado', 'Estado', 'ESTADO_ACTUAL', 'estado_actual',
+                        'ESTADO_TRAMITE', 'Estado_Tramite', 'ESTADO TRAMITE'  # Común en Estados
+                    ],
                     'responsable': ['RESPONSABLE', 'responsable', 'Responsable'],
-                    'observaciones': ['OBSERVACIONES', 'observaciones', 'Observaciones'],
                     'ubicacion': ['UBICACION', 'ubicacion', 'Ubicación', 'UBICACIÓN']
                 }
                 
@@ -736,59 +906,113 @@ def procesar_excel_actualizacion(filepath):
                     if campo_bd in available_columns:
                         for col_excel in posibles_columnas:
                             if col_excel in df.columns and pd.notna(row.get(col_excel)):
-                                valor = str(row.get(col_excel)).strip()
-                                if valor:  # Solo actualizar si no está vacío
+                                valor_nuevo = str(row.get(col_excel)).strip()
+                                valor_actual = valores_actuales_dict.get(campo_bd)
+                                
+                                # Normalizar valor actual para comparación
+                                if valor_actual is not None:
+                                    valor_actual_str = str(valor_actual).strip()
+                                else:
+                                    valor_actual_str = ""
+                                
+                                # Solo actualizar si el valor es diferente y no está vacío
+                                if valor_nuevo and valor_nuevo != valor_actual_str:
                                     campos_actualizar.append(f"{campo_bd} = %s")
-                                    valores_actualizar.append(valor)
-                                    logger.debug(f"    Actualizando {campo_bd}: '{valor}'")
+                                    valores_actualizar.append(valor_nuevo)
+                                    logger.debug(f"    Actualizando {campo_bd}: '{valor_actual_str}' → '{valor_nuevo}'")
+                                elif valor_nuevo == valor_actual_str:
+                                    logger.debug(f"    {campo_bd} sin cambios: '{valor_nuevo}'")
                                 break
                 
                 # Procesar FECHA INGRESO si existe
                 if 'fecha_ingreso' in available_columns:
-                    for col_name in ['FECHA INGRESO', 'FECHA_INGRESO', 'fecha_ingreso', 'Fecha Ingreso']:
+                    for col_name in [
+                        'FECHA INGRESO', 'FECHA_INGRESO', 'fecha_ingreso', 'Fecha Ingreso',
+                        'FECHA ESTADO', 'Fecha Estado', 'FECHA_ESTADO',  # Común en Estados
+                        'FECHA ACTUACION', 'Fecha Actuacion', 'FECHA_ACTUACION'
+                    ]:
                         if col_name in df.columns and pd.notna(row.get(col_name)):
                             fecha_valor = row.get(col_name)
+                            fecha_nueva = None
+                            
                             try:
-                                from datetime import datetime
-                                if isinstance(fecha_valor, str):
+                                from datetime import datetime, timedelta
+                                
+                                # Caso 1: Ya es un objeto date/datetime
+                                if isinstance(fecha_valor, (datetime, pd.Timestamp)):
+                                    fecha_nueva = fecha_valor.date() if hasattr(fecha_valor, 'date') else fecha_valor
+                                
+                                # Caso 2: Es un número (serial de Excel)
+                                elif isinstance(fecha_valor, (int, float)):
+                                    # Excel cuenta días desde 1900-01-01 (con bug del año 1900)
+                                    excel_epoch = datetime(1899, 12, 30)
+                                    fecha_nueva = (excel_epoch + timedelta(days=int(fecha_valor))).date()
+                                    logger.debug(f"    Convertido serial Excel {fecha_valor} a fecha {fecha_nueva}")
+                                
+                                # Caso 3: Es un string
+                                elif isinstance(fecha_valor, str):
                                     for formato in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
                                         try:
-                                            fecha_ingreso = datetime.strptime(fecha_valor.strip(), formato).date()
-                                            campos_actualizar.append("fecha_ingreso = %s")
-                                            valores_actualizar.append(fecha_ingreso)
-                                            logger.debug(f"    Actualizando fecha_ingreso: '{fecha_ingreso}'")
+                                            fecha_nueva = datetime.strptime(fecha_valor.strip(), formato).date()
                                             break
                                         except ValueError:
                                             continue
-                                else:
+                                
+                                # Comparar con fecha actual
+                                fecha_actual = valores_actuales_dict.get('fecha_ingreso')
+                                
+                                if fecha_nueva and fecha_nueva != fecha_actual:
                                     campos_actualizar.append("fecha_ingreso = %s")
-                                    valores_actualizar.append(fecha_valor)
-                                    logger.debug(f"    Actualizando fecha_ingreso: '{fecha_valor}'")
+                                    valores_actualizar.append(fecha_nueva)
+                                    logger.debug(f"    Actualizando fecha_ingreso: '{fecha_actual}' → '{fecha_nueva}' (desde columna '{col_name}')")
+                                elif fecha_nueva == fecha_actual:
+                                    logger.debug(f"    fecha_ingreso sin cambios: '{fecha_nueva}'")
+                                    
                             except Exception as e:
-                                logger.warning(f"Error procesando fecha en fila {index + 1}: {e}")
+                                logger.warning(f"Error procesando fecha en fila {index + 1}, columna '{col_name}', valor '{fecha_valor}': {e}")
                             break
                 
                 # Si hay campos para actualizar, ejecutar UPDATE
                 if campos_actualizar:
-                    query = f"""
-                        UPDATE expediente 
-                        SET {', '.join(campos_actualizar)}
-                        WHERE id = %s
-                    """
-                    valores_actualizar.append(expediente_id)
-                    
-                    logger.debug(f"  Ejecutando UPDATE con {len(campos_actualizar)} campo(s)")
-                    cursor.execute(query, valores_actualizar)
-                    
-                    actualizados += 1
-                    logger.debug(f"  ✅ Expediente {radicado_completo} actualizado exitosamente")
+                    try:
+                        query = f"""
+                            UPDATE expediente 
+                            SET {', '.join(campos_actualizar)}
+                            WHERE id = %s
+                        """
+                        valores_actualizar.append(expediente_id)
+                        
+                        logger.debug(f"  Ejecutando UPDATE con {len(campos_actualizar)} campo(s)")
+                        cursor.execute(query, valores_actualizar)
+                        
+                        actualizados += 1
+                        logger.debug(f"  ✅ Expediente {radicado_completo} actualizado exitosamente")
+                    except Exception as e_update:
+                        logger.error(f"  ❌ Error en UPDATE para expediente {radicado_completo}: {e_update}")
+                        conn.rollback()  # Rollback para poder continuar con la siguiente fila
+                        errores += 1
+                        errores_detallados.append({
+                            'fila': index + 2,
+                            'radicado': radicado_completo,
+                            'motivo': f'Error técnico en UPDATE: {str(e_update)}',
+                            'datos': {}
+                        })
                 else:
-                    logger.debug(f"  ℹ️ No hay campos para actualizar en fila {index + 1}")
-                    errores += 1
+                    # No hay cambios - el expediente ya tiene los mismos valores
+                    logger.debug(f"  ℹ️ Expediente {radicado_completo} sin cambios (valores idénticos)")
+                    sin_cambios += 1
                 
             except Exception as e:
                 logger.error(f"Error procesando fila {index + 1}: {str(e)}")
+                if conn:
+                    conn.rollback()  # Rollback para poder continuar
                 errores += 1
+                errores_detallados.append({
+                    'fila': index + 2,
+                    'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
+                    'motivo': f'Error técnico: {str(e)}',
+                    'datos': {}
+                })
                 continue
         
         # Commit de todas las actualizaciones
@@ -798,18 +1022,79 @@ def procesar_excel_actualizacion(filepath):
         cursor.close()
         conn.close()
         
+        # Guardar reporte de errores en archivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        reporte_path = None
+        
+        if errores_detallados:
+            try:
+                # Crear directorio de reportes si no existe
+                reportes_dir = os.path.join('app_juzgado', 'logs', 'reportes_actualizacion')
+                os.makedirs(reportes_dir, exist_ok=True)
+                
+                reporte_filename = f"reporte_actualizacion_{timestamp}.txt"
+                reporte_path = os.path.join(reportes_dir, reporte_filename)
+                
+                with open(reporte_path, 'w', encoding='utf-8') as f:
+                    f.write("=" * 80 + "\n")
+                    f.write("REPORTE DE ACTUALIZACIÓN DE EXPEDIENTES\n")
+                    f.write("=" * 80 + "\n")
+                    f.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    f.write(f"Archivo procesado: {os.path.basename(filepath)}\n")
+                    f.write(f"Hoja utilizada: {hoja_usada}\n")
+                    f.write(f"Columna de radicado: {col_radicado_usada}\n")
+                    f.write("\n")
+                    f.write("RESUMEN:\n")
+                    f.write("-" * 80 + "\n")
+                    f.write(f"Total de filas procesadas: {len(df)}\n")
+                    f.write(f"Expedientes actualizados: {actualizados}\n")
+                    f.write(f"Expedientes sin cambios: {sin_cambios}\n")
+                    f.write(f"Expedientes no encontrados: {no_encontrados}\n")
+                    f.write(f"Errores: {errores}\n")
+                    f.write("\n")
+                    
+                    if errores_detallados:
+                        f.write("DETALLE DE ERRORES:\n")
+                        f.write("=" * 80 + "\n")
+                        
+                        for i, error in enumerate(errores_detallados, 1):
+                            f.write(f"\nERROR #{i}\n")
+                            f.write("-" * 40 + "\n")
+                            f.write(f"Fila Excel: {error['fila']}\n")
+                            f.write(f"Radicado: {error['radicado']}\n")
+                            f.write(f"Motivo: {error['motivo']}\n")
+                            
+                            if error['datos']:
+                                f.write("Datos adicionales:\n")
+                                for key, value in error['datos'].items():
+                                    f.write(f"  - {key}: {value}\n")
+                            f.write("\n")
+                    
+                    f.write("\n" + "=" * 80 + "\n")
+                    f.write("FIN DEL REPORTE\n")
+                    f.write("=" * 80 + "\n")
+                
+                logger.info(f"📄 Reporte de errores guardado en: {reporte_path}")
+                
+            except Exception as e:
+                logger.error(f"Error guardando reporte de errores: {e}")
+        
         # Preparar resultados
         resultados = {
             'actualizados': actualizados,
+            'sin_cambios': sin_cambios,
             'no_encontrados': no_encontrados,
             'errores': errores,
             'total_filas': len(df),
             'hoja_usada': hoja_usada,
-            'radicados_no_encontrados': radicados_no_encontrados[:10]  # Solo primeros 10
+            'radicados_no_encontrados': radicados_no_encontrados[:10],  # Solo primeros 10
+            'errores_detallados': errores_detallados[:20],  # Solo primeros 20 para mostrar en HTML
+            'reporte_path': reporte_path,
+            'tiene_errores': len(errores_detallados) > 0
         }
         
         logger.info(f"=== FIN procesar_excel_actualizacion ===")
-        logger.info(f"Resultados: {actualizados} actualizados, {no_encontrados} no encontrados, {errores} errores")
+        logger.info(f"Resultados: {actualizados} actualizados, {sin_cambios} sin cambios, {no_encontrados} no encontrados, {errores} errores")
         
         return resultados
         

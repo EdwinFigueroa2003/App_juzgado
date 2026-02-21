@@ -51,17 +51,10 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
-# Logs
-*.log
-
 requirements.txt
 verificaciones/
 Archivos/
 archivos/
-
-link_temporal/
-
-logs/
 
 utils/
 __pycache__/
