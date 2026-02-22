@@ -55,6 +55,7 @@ requirements.txt
 verificaciones/
 Archivos/
 archivos/
+logs/
 
 utils/
 __pycache__/

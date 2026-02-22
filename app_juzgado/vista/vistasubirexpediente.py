@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, send_file, send_from_directory
+from flask import Blueprint, render_template, request, flash, redirect, url_for, send_file, send_from_directory, Response, jsonify
 import pandas as pd
 import os, re
 from werkzeug.utils import secure_filename
@@ -111,70 +111,161 @@ def vista_subirexpediente():
         flash(f'Error cargando la página: {str(e)}', 'error')
         return redirect(url_for('idvistahome.home'))
 
-@vistasubirexpediente.route('/descargar_reporte/<filename>')
+@vistasubirexpediente.route('/listar_reportes')
 @login_required
-def descargar_reporte(filename):
+def listar_reportes():
     """
-    Descarga un reporte de actualización
+    Lista todos los reportes disponibles en la base de datos
     
-    Args:
-        filename: Nombre del archivo de reporte
+    Returns:
+        JSON con lista de reportes
     """
     try:
-        # Validar que el archivo sea un reporte válido
-        if not filename.startswith('reporte_actualizacion_') or not filename.endswith('.txt'):
-            logger.error(f"Intento de descarga de archivo inválido: {filename}")
-            flash('Archivo de reporte inválido', 'error')
-            return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
+        conn = obtener_conexion()
+        cursor = conn.cursor()
         
-        # Construir ruta absoluta al directorio de reportes
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        reportes_dir = os.path.join(base_dir, 'logs', 'reportes_actualizacion')
+        # Obtener reportes ordenados por fecha (más recientes primero)
+        cursor.execute("""
+            SELECT 
+                id, 
+                nombre_archivo, 
+                tipo_reporte, 
+                total_filas, 
+                actualizados, 
+                sin_cambios,
+                no_encontrados,
+                errores_validacion, 
+                errores_tecnicos,
+                fecha_generacion,
+                usuario_id
+            FROM reportes_actualizacion
+            ORDER BY fecha_generacion DESC
+            LIMIT 50
+        """)
         
-        logger.info(f"Directorio de reportes: {reportes_dir}")
-        logger.info(f"Archivo solicitado: {filename}")
+        reportes = cursor.fetchall()
+        cursor.close()
+        conn.close()
         
-        # Verificar que el directorio existe
-        if not os.path.exists(reportes_dir):
-            logger.error(f"Directorio de reportes no existe: {reportes_dir}")
-            flash('Directorio de reportes no encontrado', 'error')
-            return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
+        # Formatear resultados
+        reportes_lista = []
+        for reporte in reportes:
+            reportes_lista.append({
+                'id': reporte[0],
+                'nombre_archivo': reporte[1],
+                'tipo_reporte': reporte[2],
+                'total_filas': reporte[3],
+                'actualizados': reporte[4],
+                'sin_cambios': reporte[5],
+                'no_encontrados': reporte[6],
+                'errores_validacion': reporte[7],
+                'errores_tecnicos': reporte[8],
+                'fecha_generacion': reporte[9].strftime('%Y-%m-%d %H:%M:%S') if reporte[9] else None,
+                'usuario_id': reporte[10]
+            })
         
-        # Verificar que el archivo existe
-        filepath = os.path.join(reportes_dir, filename)
-        if not os.path.exists(filepath):
-            logger.error(f"Reporte no encontrado en: {filepath}")
+        from flask import jsonify
+        return jsonify({'reportes': reportes_lista, 'total': len(reportes_lista)})
+        
+    except Exception as e:
+        logger.error(f"Error listando reportes: {e}")
+        from flask import jsonify
+        return jsonify({'error': str(e)}), 500
+
+@vistasubirexpediente.route('/descargar_reporte_bd/<int:reporte_id>')
+@login_required
+def descargar_reporte_bd(reporte_id):
+    """
+    Descarga un reporte desde la base de datos
+    
+    Args:
+        reporte_id: ID del reporte en la tabla reportes_actualizacion
+    """
+    try:
+        logger.info(f"Descargando reporte ID: {reporte_id}")
+        
+        # Obtener reporte de la base de datos
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT nombre_archivo, contenido, tipo_reporte, fecha_generacion
+            FROM reportes_actualizacion
+            WHERE id = %s
+        """, (reporte_id,))
+        
+        resultado = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if not resultado:
+            logger.error(f"Reporte ID {reporte_id} no encontrado en BD")
             flash('Reporte no encontrado', 'error')
             return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
         
-        logger.info(f"✅ Archivo encontrado, enviando para descarga: {filepath}")
+        nombre_archivo, contenido, tipo_reporte, fecha_generacion = resultado
         
-        # Usar send_from_directory con parámetros compatibles
-        try:
-            # Intentar con download_name (Flask 2.0+)
-            return send_from_directory(
-                directory=reportes_dir,
-                path=filename,
-                as_attachment=True,
-                download_name=filename,
-                mimetype='text/plain; charset=utf-8'
-            )
-        except TypeError:
-            # Fallback para versiones antiguas de Flask (attachment_filename)
-            return send_from_directory(
-                directory=reportes_dir,
-                filename=filename,
-                as_attachment=True,
-                mimetype='text/plain; charset=utf-8'
-            )
+        logger.info(f"✅ Reporte encontrado: {nombre_archivo} (tipo: {tipo_reporte})")
+        
+        # Crear respuesta con el contenido del reporte
+        response = Response(
+            contenido,
+            mimetype='text/plain; charset=utf-8',
+            headers={
+                'Content-Disposition': f'attachment; filename="{nombre_archivo}"'
+            }
+        )
+        
+        return response
         
     except Exception as e:
-        logger.error(f"❌ Error descargando reporte: {e}")
+        logger.error(f"❌ Error descargando reporte desde BD: {e}")
         logger.error(f"Tipo de error: {type(e).__name__}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         flash(f'Error descargando reporte: {str(e)}', 'error')
         return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
+
+def limpiar_reportes_antiguos(dias=30):
+    """
+    Limpia reportes antiguos de la base de datos
+    
+    Args:
+        dias: Número de días para considerar un reporte como antiguo (default: 30)
+    
+    Returns:
+        int: Número de reportes eliminados
+    """
+    try:
+        logger.info(f"🧹 Iniciando limpieza de reportes antiguos (>{dias} días)")
+        
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        # Eliminar reportes más antiguos que X días
+        cursor.execute("""
+            DELETE FROM reportes_actualizacion
+            WHERE fecha_generacion < NOW() - INTERVAL '%s days'
+            RETURNING id
+        """, (dias,))
+        
+        reportes_eliminados = cursor.fetchall()
+        cantidad_eliminados = len(reportes_eliminados)
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        logger.info(f"✅ Limpieza completada: {cantidad_eliminados} reportes eliminados")
+        
+        return cantidad_eliminados
+        
+    except Exception as e:
+        logger.error(f"❌ Error limpiando reportes antiguos: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()
+        return 0
 
 def procesar_archivo_excel():
     """Procesa la subida de archivo Excel"""
@@ -255,6 +346,14 @@ def procesar_archivo_excel():
             except Exception as e:
                 logger.warning(f"Error eliminando archivo temporal: {str(e)}")
             
+            # 🧹 LIMPIEZA AUTOMÁTICA: Eliminar reportes antiguos (>90 días)
+            try:
+                reportes_eliminados = limpiar_reportes_antiguos(dias=90)
+                if reportes_eliminados > 0:
+                    logger.info(f"🧹 Limpieza automática: {reportes_eliminados} reportes antiguos eliminados")
+            except Exception as e:
+                logger.warning(f"Error en limpieza automática de reportes: {e}")
+            
             # Crear mensaje de resultado más detallado
             if modo_actualizacion:
                 # Mensaje para modo actualización
@@ -292,15 +391,15 @@ def procesar_archivo_excel():
                     flash(errores_msg, 'info')
                     
                     # Agregar mensaje con enlace de descarga
-                    if resultados.get("reporte_path"):
-                        reporte_filename = os.path.basename(resultados["reporte_path"])
-                        descarga_url = url_for('idvistasubirexpediente.descargar_reporte', filename=reporte_filename)
-                        flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar {reporte_filename}</a></div>', 'info')
+                    if resultados.get("reporte_id"):
+                        reporte_id = resultados["reporte_id"]
+                        descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
+                        flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
                 else:
                     flash(mensaje_resultado, 'warning' if resultados["errores"] > 0 else 'success')
                 
             elif 'hoja_usada' in resultados:
-                # Formato tradicional
+                # Formato tradicional - Excel Nuevos
                 mensaje_resultado = f'Archivo procesado usando hoja "{resultados["hoja_usada"]}". '
                 mensaje_resultado += f'{resultados["procesados"]} expedientes agregados exitosamente'
                 
@@ -309,24 +408,37 @@ def procesar_archivo_excel():
                 
                 mensaje_resultado += f' de {resultados["total_filas"]} filas procesadas.'
                 
+                # Mostrar mensaje principal
+                flash(mensaje_resultado, 'success' if resultados["errores"] == 0 else 'warning')
+                
                 # Mostrar detalles de expedientes rechazados
                 if resultados.get("rechazados_detalle"):
                     detalles = resultados["rechazados_detalle"]
                     
+                    detalles_msg = "DETALLE DE RECHAZOS:\n"
+                    
                     if detalles.get("duplicados"):
-                        mensaje_resultado += f' DUPLICADOS ({len(detalles["duplicados"])}): {", ".join(detalles["duplicados"][:5])}'
+                        detalles_msg += f'\nDUPLICADOS ({len(detalles["duplicados"])}): {", ".join(detalles["duplicados"][:5])}'
                         if len(detalles["duplicados"]) > 5:
-                            mensaje_resultado += f' (y {len(detalles["duplicados"]) - 5} más)'
+                            detalles_msg += f' (y {len(detalles["duplicados"]) - 5} más)'
                     
                     if detalles.get("radicado_invalido"):
-                        mensaje_resultado += f' RADICADO INVÁLIDO ({len(detalles["radicado_invalido"])}): {", ".join(detalles["radicado_invalido"][:5])}'
+                        detalles_msg += f'\nRADICADO INVÁLIDO ({len(detalles["radicado_invalido"])}): {", ".join(detalles["radicado_invalido"][:5])}'
                         if len(detalles["radicado_invalido"]) > 5:
-                            mensaje_resultado += f' (y {len(detalles["radicado_invalido"]) - 5} más)'
+                            detalles_msg += f' (y {len(detalles["radicado_invalido"]) - 5} más)'
                     
                     if detalles.get("campos_faltantes"):
-                        mensaje_resultado += f' CAMPOS FALTANTES ({len(detalles["campos_faltantes"])}): {", ".join(detalles["campos_faltantes"][:5])}'
+                        detalles_msg += f'\nCAMPOS FALTANTES ({len(detalles["campos_faltantes"])}): {", ".join(detalles["campos_faltantes"][:5])}'
                         if len(detalles["campos_faltantes"]) > 5:
-                            mensaje_resultado += f' (y {len(detalles["campos_faltantes"]) - 5} más)'
+                            detalles_msg += f' (y {len(detalles["campos_faltantes"]) - 5} más)'
+                    
+                    flash(detalles_msg, 'info')
+                
+                # Agregar mensaje con enlace de descarga si hay reporte
+                if resultados.get("tiene_errores") and resultados.get("reporte_id"):
+                    reporte_id = resultados["reporte_id"]
+                    descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
+                    flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
             else:
                 # Formato múltiples pestañas
                 mensaje_resultado = f'Archivo procesado con múltiples pestañas. '
@@ -1163,62 +1275,85 @@ def procesar_excel_actualizacion(filepath):
         
         cursor = conn.cursor()  # Reabrir cursor para el resto del código
         
-        # Guardar reporte de errores en archivo
+        # 📊 GUARDAR REPORTE EN BASE DE DATOS
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        reporte_path = None
+        reporte_id = None
         
-        if errores_detallados:
+        if errores_detallados or actualizados > 0:
             try:
-                # Crear directorio de reportes si no existe
-                reportes_dir = os.path.join('app_juzgado', 'logs', 'reportes_actualizacion')
-                os.makedirs(reportes_dir, exist_ok=True)
+                # Construir contenido del reporte
+                contenido_reporte = "=" * 80 + "\n"
+                contenido_reporte += "REPORTE DE ACTUALIZACIÓN DE EXPEDIENTES\n"
+                contenido_reporte += "=" * 80 + "\n"
+                contenido_reporte += f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                contenido_reporte += f"Archivo procesado: {os.path.basename(filepath)}\n"
+                contenido_reporte += f"Hoja utilizada: {hoja_usada}\n"
+                contenido_reporte += f"Columna de radicado: {col_radicado_usada}\n"
+                contenido_reporte += "\n"
+                contenido_reporte += "RESUMEN:\n"
+                contenido_reporte += "-" * 80 + "\n"
+                contenido_reporte += f"Total de filas procesadas: {len(df)}\n"
+                contenido_reporte += f"Expedientes actualizados: {actualizados}\n"
+                contenido_reporte += f"Expedientes sin cambios: {sin_cambios}\n"
+                contenido_reporte += f"Expedientes no encontrados: {no_encontrados}\n"
+                contenido_reporte += f"Errores: {errores}\n"
+                contenido_reporte += "\n"
                 
-                reporte_filename = f"reporte_actualizacion_{timestamp}.txt"
-                reporte_path = os.path.join(reportes_dir, reporte_filename)
-                
-                with open(reporte_path, 'w', encoding='utf-8') as f:
-                    f.write("=" * 80 + "\n")
-                    f.write("REPORTE DE ACTUALIZACIÓN DE EXPEDIENTES\n")
-                    f.write("=" * 80 + "\n")
-                    f.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                    f.write(f"Archivo procesado: {os.path.basename(filepath)}\n")
-                    f.write(f"Hoja utilizada: {hoja_usada}\n")
-                    f.write(f"Columna de radicado: {col_radicado_usada}\n")
-                    f.write("\n")
-                    f.write("RESUMEN:\n")
-                    f.write("-" * 80 + "\n")
-                    f.write(f"Total de filas procesadas: {len(df)}\n")
-                    f.write(f"Expedientes actualizados: {actualizados}\n")
-                    f.write(f"Expedientes sin cambios: {sin_cambios}\n")
-                    f.write(f"Expedientes no encontrados: {no_encontrados}\n")
-                    f.write(f"Errores: {errores}\n")
-                    f.write("\n")
+                if errores_detallados:
+                    contenido_reporte += "DETALLE DE ERRORES:\n"
+                    contenido_reporte += "=" * 80 + "\n"
                     
-                    if errores_detallados:
-                        f.write("DETALLE DE ERRORES:\n")
-                        f.write("=" * 80 + "\n")
+                    for i, error in enumerate(errores_detallados, 1):
+                        contenido_reporte += f"\nERROR #{i}\n"
+                        contenido_reporte += "-" * 40 + "\n"
+                        contenido_reporte += f"Fila Excel: {error['fila']}\n"
+                        contenido_reporte += f"Radicado: {error['radicado']}\n"
+                        contenido_reporte += f"Motivo: {error['motivo']}\n"
                         
-                        for i, error in enumerate(errores_detallados, 1):
-                            f.write(f"\nERROR #{i}\n")
-                            f.write("-" * 40 + "\n")
-                            f.write(f"Fila Excel: {error['fila']}\n")
-                            f.write(f"Radicado: {error['radicado']}\n")
-                            f.write(f"Motivo: {error['motivo']}\n")
-                            
-                            if error['datos']:
-                                f.write("Datos adicionales:\n")
-                                for key, value in error['datos'].items():
-                                    f.write(f"  - {key}: {value}\n")
-                            f.write("\n")
-                    
-                    f.write("\n" + "=" * 80 + "\n")
-                    f.write("FIN DEL REPORTE\n")
-                    f.write("=" * 80 + "\n")
+                        if error['datos']:
+                            contenido_reporte += "Datos adicionales:\n"
+                            for key, value in error['datos'].items():
+                                contenido_reporte += f"  - {key}: {value}\n"
+                        contenido_reporte += "\n"
                 
-                logger.info(f"📄 Reporte de errores guardado en: {reporte_path}")
+                contenido_reporte += "\n" + "=" * 80 + "\n"
+                contenido_reporte += "FIN DEL REPORTE\n"
+                contenido_reporte += "=" * 80 + "\n"
+                
+                # Obtener usuario_id de la sesión si está disponible
+                from flask import session
+                usuario_id = session.get('usuario_id') if 'session' in dir() else None
+                
+                # Insertar reporte en la base de datos
+                reporte_filename = f"reporte_actualizacion_{timestamp}.txt"
+                
+                cursor.execute("""
+                    INSERT INTO reportes_actualizacion 
+                    (nombre_archivo, contenido, tipo_reporte, total_filas, actualizados, 
+                     sin_cambios, no_encontrados, errores_validacion, errores_tecnicos, usuario_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    reporte_filename,
+                    contenido_reporte,
+                    'actualizacion',
+                    len(df),
+                    actualizados,
+                    sin_cambios,
+                    no_encontrados,
+                    no_encontrados,  # errores_validacion (radicados no encontrados)
+                    errores - no_encontrados,  # errores_tecnicos
+                    usuario_id
+                ))
+                
+                reporte_id = cursor.fetchone()[0]
+                conn.commit()
+                
+                logger.info(f"📊 Reporte guardado en BD con ID: {reporte_id}")
                 
             except Exception as e:
-                logger.error(f"Error guardando reporte de errores: {e}")
+                logger.error(f"Error guardando reporte en BD: {e}")
+                conn.rollback()
         
         # Preparar resultados
         resultados = {
@@ -1230,7 +1365,7 @@ def procesar_excel_actualizacion(filepath):
             'hoja_usada': hoja_usada,
             'radicados_no_encontrados': radicados_no_encontrados[:10],  # Solo primeros 10
             'errores_detallados': errores_detallados[:20],  # Solo primeros 20 para mostrar en HTML
-            'reporte_path': reporte_path,
+            'reporte_id': reporte_id,
             'tiene_errores': len(errores_detallados) > 0
         }
         
@@ -1645,12 +1780,114 @@ def procesar_excel_expedientes(filepath):
         conn.close()
         logger.info("Conexión cerrada")
         
+        # 📊 GUARDAR REPORTE EN BASE DE DATOS si hay errores o expedientes procesados
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        reporte_id = None
+        
+        if errores > 0 or procesados > 0:
+            try:
+                # Reabrir conexión para guardar reporte
+                conn = obtener_conexion()
+                cursor = conn.cursor()
+                
+                # Construir contenido del reporte
+                contenido_reporte = "=" * 80 + "\n"
+                contenido_reporte += "REPORTE DE CARGA DE EXPEDIENTES NUEVOS\n"
+                contenido_reporte += "=" * 80 + "\n"
+                contenido_reporte += f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                contenido_reporte += f"Archivo procesado: {os.path.basename(filepath)}\n"
+                contenido_reporte += f"Hoja utilizada: {hoja_usada}\n"
+                contenido_reporte += "\n"
+                contenido_reporte += "RESUMEN:\n"
+                contenido_reporte += "-" * 80 + "\n"
+                contenido_reporte += f"Total de filas procesadas: {len(df)}\n"
+                contenido_reporte += f"Expedientes creados exitosamente: {procesados}\n"
+                contenido_reporte += f"Expedientes rechazados: {errores}\n"
+                contenido_reporte += "\n"
+                
+                # Detalle de rechazos
+                if rechazados_detalle:
+                    contenido_reporte += "DETALLE DE RECHAZOS:\n"
+                    contenido_reporte += "=" * 80 + "\n"
+                    
+                    # Duplicados
+                    if rechazados_detalle.get('duplicados'):
+                        contenido_reporte += f"\nDUPLICADOS ({len(rechazados_detalle['duplicados'])}):\n"
+                        contenido_reporte += "-" * 40 + "\n"
+                        for i, radicado in enumerate(rechazados_detalle['duplicados'], 1):
+                            contenido_reporte += f"{i}. {radicado}\n"
+                    
+                    # Radicados inválidos
+                    if rechazados_detalle.get('radicado_invalido'):
+                        contenido_reporte += f"\nRADICADO INVÁLIDO ({len(rechazados_detalle['radicado_invalido'])}):\n"
+                        contenido_reporte += "-" * 40 + "\n"
+                        for i, detalle in enumerate(rechazados_detalle['radicado_invalido'], 1):
+                            contenido_reporte += f"{i}. {detalle}\n"
+                    
+                    # Campos faltantes
+                    if rechazados_detalle.get('campos_faltantes'):
+                        contenido_reporte += f"\nCAMPOS FALTANTES ({len(rechazados_detalle['campos_faltantes'])}):\n"
+                        contenido_reporte += "-" * 40 + "\n"
+                        for i, detalle in enumerate(rechazados_detalle['campos_faltantes'], 1):
+                            contenido_reporte += f"{i}. {detalle}\n"
+                
+                contenido_reporte += "\n" + "=" * 80 + "\n"
+                contenido_reporte += "FIN DEL REPORTE\n"
+                contenido_reporte += "=" * 80 + "\n"
+                
+                # Obtener usuario_id de la sesión si está disponible
+                from flask import session
+                usuario_id = session.get('usuario_id') if 'session' in dir() else None
+                
+                # Calcular errores por tipo
+                errores_duplicados = len(rechazados_detalle.get('duplicados', []))
+                errores_radicado_invalido = len(rechazados_detalle.get('radicado_invalido', []))
+                errores_campos_faltantes = len(rechazados_detalle.get('campos_faltantes', []))
+                
+                # Insertar reporte en la base de datos
+                reporte_filename = f"reporte_carga_nuevos_{timestamp}.txt"
+                
+                cursor.execute("""
+                    INSERT INTO reportes_actualizacion 
+                    (nombre_archivo, contenido, tipo_reporte, total_filas, actualizados, 
+                     sin_cambios, no_encontrados, errores_validacion, errores_tecnicos, usuario_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    reporte_filename,
+                    contenido_reporte,
+                    'carga_nuevos',
+                    len(df),
+                    procesados,  # actualizados = expedientes creados
+                    0,  # sin_cambios (no aplica para carga nueva)
+                    0,  # no_encontrados (no aplica para carga nueva)
+                    errores_duplicados + errores_radicado_invalido + errores_campos_faltantes,  # errores_validacion
+                    errores - (errores_duplicados + errores_radicado_invalido + errores_campos_faltantes),  # errores_tecnicos
+                    usuario_id
+                ))
+                
+                reporte_id = cursor.fetchone()[0]
+                conn.commit()
+                
+                logger.info(f"📊 Reporte de carga guardado en BD con ID: {reporte_id}")
+                
+                cursor.close()
+                conn.close()
+                
+            except Exception as e:
+                logger.error(f"Error guardando reporte de carga en BD: {e}")
+                if conn:
+                    conn.rollback()
+                    conn.close()
+        
         result = {
             'procesados': procesados,
             'errores': errores,
             'hoja_usada': hoja_usada,
             'total_filas': len(df),
-            'rechazados_detalle': rechazados_detalle
+            'rechazados_detalle': rechazados_detalle,
+            'reporte_id': reporte_id,
+            'tiene_errores': errores > 0
         }
         
         logger.info(f"=== FIN procesar_excel_expedientes - Resultado: {result} ===")

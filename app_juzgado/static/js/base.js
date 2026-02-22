@@ -410,7 +410,7 @@ function cambiarResponsable() {
 
 // Función para alternar ingresos adicionales en actualizar expediente
 function toggleIngresosAdicionales(botonElement) {
-    const ingresosAdicionales = document.getElementById('ingresos-adicionales');
+    const ingresosAdicionales = document.querySelectorAll('.ingreso-adicional');
     let button = null;
     if (botonElement instanceof HTMLElement) {
         button = botonElement;
@@ -420,22 +420,27 @@ function toggleIngresosAdicionales(botonElement) {
         button = document.querySelector('button[onclick*="toggleIngresosAdicionales"]');
     }
 
-    if (!ingresosAdicionales || !button) return;
+    if (!ingresosAdicionales.length || !button) return;
 
-    const isHidden = window.getComputedStyle(ingresosAdicionales).display === 'none';
+    // Verificar si están ocultos (usando el primer elemento como referencia)
+    const isHidden = ingresosAdicionales[0].classList.contains('hidden-default');
 
     if (isHidden) {
-        ingresosAdicionales.classList.remove('hidden-default');
-        ingresosAdicionales.style.display = 'table-row-group';
-        ingresosAdicionales.style.visibility = 'visible';
-        ingresosAdicionales.style.opacity = '1';
+        // Mostrar todos los ingresos adicionales
+        ingresosAdicionales.forEach(tr => {
+            tr.classList.remove('hidden-default');
+            tr.style.display = 'table-row';
+        });
         button.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar';
         button.classList.remove('btn-outline-info');
         button.classList.add('btn-outline-secondary');
     } else {
-        ingresosAdicionales.classList.add('hidden-default');
-        ingresosAdicionales.style.display = 'none';
-        const totalIngresos = ingresosAdicionales.querySelectorAll('tr').length + 2;
+        // Ocultar todos los ingresos adicionales
+        ingresosAdicionales.forEach(tr => {
+            tr.classList.add('hidden-default');
+            tr.style.display = 'none';
+        });
+        const totalIngresos = ingresosAdicionales.length + 2;
         button.innerHTML = '<i class="fas fa-eye"></i> Ver todos (' + totalIngresos + ')';
         button.classList.remove('btn-outline-secondary');
         button.classList.add('btn-outline-info');
@@ -444,7 +449,7 @@ function toggleIngresosAdicionales(botonElement) {
 
 // Función para alternar estados adicionales en actualizar expediente
 function toggleEstadosAdicionales(botonElement) {
-    const estadosAdicionales = document.getElementById('estados-adicionales');
+    const estadosAdicionales = document.querySelectorAll('.estado-adicional');
     let button = null;
     if (botonElement instanceof HTMLElement) {
         button = botonElement;
@@ -454,22 +459,27 @@ function toggleEstadosAdicionales(botonElement) {
         button = document.querySelector('button[onclick*="toggleEstadosAdicionales"]');
     }
 
-    if (!estadosAdicionales || !button) return;
+    if (!estadosAdicionales.length || !button) return;
 
-    const isHidden = window.getComputedStyle(estadosAdicionales).display === 'none';
+    // Verificar si están ocultos (usando el primer elemento como referencia)
+    const isHidden = estadosAdicionales[0].classList.contains('hidden-default');
 
     if (isHidden) {
-        estadosAdicionales.classList.remove('hidden-default');
-        estadosAdicionales.style.display = 'table-row-group';
-        estadosAdicionales.style.visibility = 'visible';
-        estadosAdicionales.style.opacity = '1';
+        // Mostrar todos los estados adicionales
+        estadosAdicionales.forEach(tr => {
+            tr.classList.remove('hidden-default');
+            tr.style.display = 'table-row';
+        });
         button.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar';
         button.classList.remove('btn-outline-warning');
         button.classList.add('btn-outline-secondary');
     } else {
-        estadosAdicionales.classList.add('hidden-default');
-        estadosAdicionales.style.display = 'none';
-        const totalEstados = estadosAdicionales.querySelectorAll('tr').length + 2;
+        // Ocultar todos los estados adicionales
+        estadosAdicionales.forEach(tr => {
+            tr.classList.add('hidden-default');
+            tr.style.display = 'none';
+        });
+        const totalEstados = estadosAdicionales.length + 2;
         button.innerHTML = '<i class="fas fa-eye"></i> Ver todos (' + totalEstados + ')';
         button.classList.remove('btn-outline-secondary');
         button.classList.add('btn-outline-warning');

@@ -719,9 +719,8 @@
 
                         <!-- Ingresos adicionales (ocultos inicialmente) -->
                         {% if expediente.ingresos|length > 2 %}
-                    <tbody id="ingresos-adicionales" class="hidden-default">
                         {% for ingreso in expediente.ingresos[2:] %}
-                        <tr>
+                        <tr class="ingreso-adicional hidden-default">
                             <td><small>{{ ingreso[1].strftime('%d/%m/%Y') if ingreso[1] else 'N/A' }}</small></td>
                             <td><small>{{ ingreso[3][:30] + '...' if ingreso[3] and ingreso[3]|length > 30 else
                                     (ingreso[3] or 'Sin solicitud') }}</small></td>
@@ -759,8 +758,7 @@
                             </td>
                         </tr>
                         {% endfor %}
-                    </tbody>
-                    {% endif %}
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
@@ -892,9 +890,8 @@
 
                         <!-- Estados adicionales (ocultos inicialmente) -->
                         {% if expediente.estados|length > 2 %}
-                    <tbody id="estados-adicionales" class="hidden-default">
                         {% for estado in expediente.estados[2:] %}
-                        <tr>
+                        <tr class="estado-adicional hidden-default">
                             <td><small>{{ estado[1].strftime('%d/%m/%Y') if estado[1] else 'N/A' }}</small></td>
                             <td><span class="badge badge-secondary badge-sm">{{ estado[2][:20] + '...' if estado[2] and
                                     estado[2]|length > 20 else (estado[2] or 'Sin clase') }}</span></td>
@@ -949,8 +946,7 @@
                             </td>
                         </tr>
                         {% endfor %}
-                    </tbody>
-                    {% endif %}
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
