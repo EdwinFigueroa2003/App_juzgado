@@ -402,10 +402,9 @@ def procesar_archivo_excel():
                     flash(errores_msg, 'info')
                     
                     # Agregar mensaje con enlace de descarga
+                    # Reporte guardado en BD - disponible en botón "Descargar Reportes de Errores"
                     if resultados.get("reporte_id"):
-                        reporte_id = resultados["reporte_id"]
-                        descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
-                        flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
+                        logger.info(f"Reporte guardado con ID: {resultados['reporte_id']}")
                 else:
                     flash(mensaje_resultado, 'warning' if resultados["errores"] > 0 else 'success')
                 
@@ -439,11 +438,9 @@ def procesar_archivo_excel():
                     
                     flash(errores_msg, 'info')
                 
-                # Agregar enlace de descarga si hay reporte
+                # Reporte guardado en BD - disponible en botón "Descargar Reportes de Errores"
                 if resultados.get("reporte_id"):
-                    reporte_id = resultados["reporte_id"]
-                    descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
-                    flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
+                    logger.info(f"Reporte guardado con ID: {resultados['reporte_id']}")
                 
             elif 'hoja_usada' in resultados:
                 # Formato tradicional - Excel Nuevos
@@ -481,11 +478,9 @@ def procesar_archivo_excel():
                     
                     flash(detalles_msg, 'info')
                 
-                # Agregar mensaje con enlace de descarga si hay reporte
-                if resultados.get("tiene_errores") and resultados.get("reporte_id"):
-                    reporte_id = resultados["reporte_id"]
-                    descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
-                    flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
+                # Reporte guardado en BD - disponible en botón "Descargar Reportes de Errores"
+                if resultados.get("reporte_id"):
+                    logger.info(f"Reporte guardado con ID: {resultados['reporte_id']}")
             else:
                 # Formato múltiples pestañas (creación)
                 mensaje_resultado = f'Archivo procesado con múltiples pestañas. '
@@ -509,11 +504,9 @@ def procesar_archivo_excel():
                     
                     flash(errores_msg, 'info')
                 
-                # Agregar enlace de descarga si hay reporte
+                # Reporte guardado en BD - disponible en botón "Descargar Reportes de Errores"
                 if resultados.get("reporte_id"):
-                    reporte_id = resultados["reporte_id"]
-                    descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
-                    flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
+                    logger.info(f"Reporte guardado con ID: {resultados['reporte_id']}")
             
             logger.info("=== FIN procesar_archivo_excel - ÉXITO ===")
             return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
@@ -612,7 +605,7 @@ def procesar_formulario_manual():
                 if expediente_existente:
                     exp_id, rad, dem_ante, dem_ado = expediente_existente
                     logger.warning(f"DUPLICADO DETECTADO: Radicado {radicado_completo} ya existe (ID: {exp_id})")
-                    flash(f'⚠️ El radicado {radicado_completo} ya existe en la base de datos. Demandante: {dem_ante}, Demandado: {dem_ado}', 'error.' 'Para realizar cambios al expediente escrito ir a "Actualizar expedientes".' )
+                    flash(f'⚠️ El radicado {radicado_completo} ya existe en la base de datos. Demandante: {dem_ante}, Demandado: {dem_ado}. Para realizar cambios al expediente ir a "Actualizar expedientes".', 'error')
                     cursor.close()
                     conn.close()
                     return redirect(request.url)
@@ -1177,99 +1170,119 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria")
                 logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
                 
-                # Procesar cada fila de ingresos con búsqueda en memoria (RÁPIDO)
-                for index, row in df_ingresos.iterrows():
-                    conn = None
-                    try:
-                        conn = obtener_conexion()
-                        cursor = conn.cursor()
-                        
-                        # Extraer radicado
-                        radicado_completo = extraer_valor_flexible(row, df_ingresos.columns, 
-                            ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
-                        
-                        if not radicado_completo:
-                            logger.debug(f"Fila {index + 2} sin radicado - saltando")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_ingreso,
-                                'radicado': 'N/A',
-                                'motivo': 'Radicado vacío'
-                            })
-                            continue
-                        
-                        # Normalizar radicado
-                        radicado_completo = re.sub(r'[^0-9]', '', str(radicado_completo).strip())
-                        
-                        # 🚀 BÚSQUEDA EN MEMORIA (instantánea, sin query a BD)
-                        expediente_id = expedientes_cache.get(radicado_completo)
-                        
-                        if not expediente_id:
-                            logger.debug(f"Expediente {radicado_completo} no encontrado")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_ingreso,
-                                'radicado': radicado_completo,
-                                'motivo': 'Expediente no encontrado en BD'
-                            })
-                            cursor.close()
-                            conn.close()
-                            continue
-                        
-                        # Extraer datos del ingreso
-                        fecha_ingreso = extraer_fecha_flexible(row, df_ingresos.columns, 
-                            ['FECHA INGRESO', 'fecha_ingreso', 'FECHA_INGRESO', 'Fecha Ingreso'])
-                        solicitud = extraer_valor_flexible(row, df_ingresos.columns, 
-                            ['SOLICITUD', 'solicitud', 'Solicitud', 'TIPO_SOLICITUD'])
-                        observaciones = extraer_valor_flexible(row, df_ingresos.columns, 
-                            ['OBSERVACIONES', 'observaciones', 'Observaciones'])
-                        
-                        if not fecha_ingreso:
-                            logger.debug(f"Fila {index + 2}: Fecha de ingreso inválida")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_ingreso,
-                                'radicado': radicado_completo,
-                                'motivo': 'Fecha de ingreso inválida o vacía'
-                            })
-                            cursor.close()
-                            conn.close()
-                            continue
-                        
-                        if not solicitud:
-                            logger.debug(f"Fila {index + 2}: Solicitud vacía")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_ingreso,
-                                'radicado': radicado_completo,
-                                'motivo': 'Solicitud vacía'
-                            })
-                            cursor.close()
-                            conn.close()
-                            continue
-                        
-                        # Verificar si existe tabla ingresos
-                        cursor.execute("""
-                            SELECT table_name FROM information_schema.tables 
-                            WHERE table_name = 'ingresos'
-                        """)
-                        
-                        if cursor.fetchone():
-                            # Verificar si ya existe un ingreso IDÉNTICO (todos los campos)
-                            cursor.execute("""
+                # Usar UNA SOLA conexión para todas las filas
+                conn_ingresos = obtener_conexion()
+                cursor_ingresos = conn_ingresos.cursor()
+                
+                # Verificar si existe tabla ingresos (UNA SOLA VEZ)
+                cursor_ingresos.execute("""
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_name = 'ingresos'
+                """)
+                
+                if not cursor_ingresos.fetchone():
+                    logger.warning("Tabla 'ingresos' no existe en la BD")
+                    resultados['errores'] += len(df_ingresos)
+                    cursor_ingresos.close()
+                    conn_ingresos.close()
+                else:
+                    # Caché en memoria para duplicados DENTRO DEL MISMO ARCHIVO
+                    ingresos_insertados_cache = set()
+                    
+                    # Procesar cada fila de ingresos con búsqueda en memoria (RÁPIDO)
+                    for index, row in df_ingresos.iterrows():
+                        try:
+                            
+                            # Extraer radicado
+                            radicado_completo = extraer_valor_flexible(row, df_ingresos.columns, 
+                                ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+                            
+                            if not radicado_completo:
+                                logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_ingreso,
+                                    'radicado': 'N/A',
+                                    'motivo': 'Radicado vacío'
+                                })
+                                continue
+                            
+                            # Normalizar radicado
+                            radicado_completo = re.sub(r'[^0-9]', '', str(radicado_completo).strip())
+                            
+                            # 🚀 BÚSQUEDA EN MEMORIA (instantánea, sin query a BD)
+                            expediente_id = expedientes_cache.get(radicado_completo)
+                            
+                            if not expediente_id:
+                                logger.debug(f"Expediente {radicado_completo} no encontrado")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_ingreso,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Expediente no encontrado en BD'
+                                })
+                                continue
+                            
+                            # Extraer datos del ingreso
+                            fecha_ingreso = extraer_fecha_flexible(row, df_ingresos.columns, 
+                                ['FECHA INGRESO', 'fecha_ingreso', 'FECHA_INGRESO', 'Fecha Ingreso'])
+                            solicitud = extraer_valor_flexible(row, df_ingresos.columns, 
+                                ['SOLICITUD', 'solicitud', 'Solicitud', 'TIPO_SOLICITUD'])
+                            observaciones = extraer_valor_flexible(row, df_ingresos.columns, 
+                                ['OBSERVACIONES', 'observaciones', 'Observaciones'])
+                            
+                            if not fecha_ingreso:
+                                logger.debug(f"Fila {index + 2}: Fecha de ingreso inválida")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_ingreso,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Fecha de ingreso inválida o vacía'
+                                })
+                                continue
+                            
+                            if not solicitud:
+                                logger.debug(f"Fila {index + 2}: Solicitud vacía")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_ingreso,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Solicitud vacía'
+                                })
+                                continue
+                            
+                            # Estandarizar observaciones (usar NULL si está vacía)
+                            obs_normalized = observaciones if observaciones and str(observaciones).strip() else None
+                            
+                            # Verificar duplicado en MEMORIA PRIMERO (dentro del mismo archivo)
+                            cache_key = (expediente_id, fecha_ingreso, solicitud, obs_normalized)
+                            if cache_key in ingresos_insertados_cache:
+                                logger.debug(f"⚠️ Ingreso duplicado EN EL ARCHIVO para {radicado_completo} - saltando FILA (no se insertará)")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_ingreso,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Ingreso duplicado dentro del archivo (ya fue procesado)'
+                                })
+                                continue
+                            
+                            # Verificar si ya existe un ingreso IDÉNTICO en BD (uploads previos)
+                            # IMPORTANTE: Validar con los MISMOS valores que se van a insertar
+                            cursor_ingresos.execute("""
                                 SELECT id FROM ingresos 
                                 WHERE expediente_id = %s 
                                 AND fecha_ingreso = %s 
                                 AND solicitud = %s
-                                AND COALESCE(observaciones, '') = COALESCE(%s, '')
-                            """, (expediente_id, fecha_ingreso, solicitud, observaciones or ''))
+                                AND (observaciones IS NULL AND %s IS NULL OR observaciones = %s)
+                            """, (expediente_id, fecha_ingreso, solicitud, obs_normalized, obs_normalized))
                             
-                            if cursor.fetchone():
-                                logger.debug(f"⚠️ Ingreso duplicado para expediente {radicado_completo} - saltando")
+                            if cursor_ingresos.fetchone():
+                                logger.debug(f"⚠️ Ingreso duplicado en BD para expediente {radicado_completo} - saltando FILA (no se insertará)")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1277,45 +1290,35 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                     'radicado': radicado_completo,
                                     'motivo': 'Ingreso duplicado (información idéntica ya existe en BD)'
                                 })
-                                cursor.close()
-                                conn.close()
                                 continue
                             
                             # Insertar nuevo ingreso
-                            cursor.execute("""
+                            cursor_ingresos.execute("""
                                 INSERT INTO ingresos (expediente_id, fecha_ingreso, solicitud, observaciones)
                                 VALUES (%s, %s, %s, %s)
-                            """, (expediente_id, fecha_ingreso, solicitud, observaciones or 'Ingreso desde Excel'))
+                            """, (expediente_id, fecha_ingreso, solicitud, obs_normalized))
                             
-                            conn.commit()
+                            conn_ingresos.commit()
+                            ingresos_insertados_cache.add(cache_key)  # Agregar al caché
                             resultados['ingresos_agregados'] += 1
                             logger.debug(f"✅ Ingreso agregado para expediente {radicado_completo}")
-                        else:
-                            logger.warning("Tabla 'ingresos' no existe")
+                            
+                        except Exception as e:
+                            logger.error(f"❌ Error procesando fila {index + 2} de ingresos: {e}")
                             resultados['errores'] += 1
                             resultados['errores_detallados'].append({
                                 'fila': index + 2,
                                 'hoja': pestaña_ingreso,
-                                'radicado': radicado_completo,
-                                'motivo': 'Tabla ingresos no existe en BD'
+                                'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
+                                'motivo': f'Error técnico: {str(e)}'
                             })
-                        
-                        cursor.close()
-                        conn.close()
-                        
-                    except Exception as e:
-                        logger.error(f"❌ Error procesando fila {index + 2} de ingresos: {e}")
-                        resultados['errores'] += 1
-                        resultados['errores_detallados'].append({
-                            'fila': index + 2,
-                            'hoja': pestaña_ingreso,
-                            'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
-                            'motivo': f'Error técnico: {str(e)}'
-                        })
-                        if conn:
-                            conn.rollback()
-                            conn.close()
-                        continue
+                            conn_ingresos.rollback()  # Revierte solo esta fila
+                            continue
+                    
+                    # Cerrar conexión de ingresos al final (después de procesar TODAS las filas)
+                    cursor_ingresos.close()
+                    conn_ingresos.close()
+                    logger.info(f"✅ Conexión de ingresos cerrada correctamente")
                 
             except Exception as e:
                 logger.error(f"Error procesando pestaña de ingresos: {e}")
@@ -1373,168 +1376,168 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 logger.info(f"✅ {len(expedientes_cache_estados)} expedientes cargados en memoria")
                 logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
                 
-                # 🔥 IMPORTANTE: Usar UNA SOLA conexión para todas las filas
-                # Esto asegura que las validaciones de duplicados funcionen correctamente
+                # Usar UNA SOLA conexión para todas las filas DE ESTADOS
                 conn_estados = obtener_conexion()
                 cursor_estados = conn_estados.cursor()
                 
-                # Caché de estados insertados en esta sesión (para evitar duplicados dentro del mismo archivo)
-                estados_insertados_cache = set()
+                # Verificar si existe tabla estados (UNA SOLA VEZ)
+                cursor_estados.execute("""
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_name = 'estados'
+                """)
                 
-                # Procesar cada fila de estados con búsqueda en memoria (RÁPIDO)
-                for index, row in df_estados.iterrows():
-                    try:
-                        cursor = conn.cursor()
+                if not cursor_estados.fetchone():
+                    logger.warning("Tabla 'estados' no existe en la BD")
+                    resultados['errores'] += len(df_estados)
+                    cursor_estados.close()
+                    conn_estados.close()
+                else:
+                    # Caché en memoria para duplicados DENTRO DEL MISMO ARCHIVO
+                    estados_insertados_cache = set()
+                    
+                    # Procesar cada fila de estados con búsqueda en memoria (RÁPIDO)
+                    for index, row in df_estados.iterrows():
+                        try:
+                            radicado_completo = extraer_valor_flexible(row, df_estados.columns, 
+                                ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
                         
-                        # Verificar si existe tabla estados
-                        cursor.execute("""
-                            SELECT table_name FROM information_schema.tables 
-                            WHERE table_name = 'estados'
-                        """)
-                        
-                        if not cursor.fetchone():
-                            logger.warning("Tabla 'estados' no existe en la BD")
-                            resultados['errores'] += len(df_estados)
-                            cursor.close()
-                            conn.close()
-                            break
-                        
-                        # Extraer radicado
-                        radicado_completo = extraer_valor_flexible(row, df_estados.columns, 
-                            ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
-                        
-                        if not radicado_completo:
-                            logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                            if not radicado_completo:
+                                logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_estados,
+                                    'radicado': 'N/A',
+                                    'motivo': 'Radicado vacío'
+                                })
+                                continue
+                            
+                            # Normalizar radicado
+                            radicado_completo = re.sub(r'[^0-9]', '', str(radicado_completo).strip())
+                            
+                            # 🚀 BÚSQUEDA EN MEMORIA (instantánea, sin query a BD)
+                            expediente_id = expedientes_cache_estados.get(radicado_completo)
+                            
+                            if not expediente_id:
+                                logger.debug(f"Expediente {radicado_completo} no encontrado")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_estados,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Expediente no encontrado en BD'
+                                })
+                                continue
+                            
+                            # Extraer datos del estado
+                            clase = extraer_valor_flexible(row, df_estados.columns, 
+                                ['CLASE', 'clase', 'Clase', 'ESTADO_TRAMITE', 'Estado_Tramite'])
+                            fecha_estado = extraer_fecha_flexible(row, df_estados.columns, 
+                                ['FECHA ESTADO', 'fecha_estado', 'FECHA_ESTADO', 'Fecha Estado'])
+                            auto_anotacion = extraer_valor_flexible(row, df_estados.columns, 
+                                ['AUTO / ANOTACION', 'auto_anotacion', 'AUTO_ANOTACION', 'AUTO', 'ANOTACION'])
+                            observaciones = extraer_valor_flexible(row, df_estados.columns, 
+                                ['OBSERVACIONES', 'observaciones', 'Observaciones'])
+                            
+                            # Validar campos requeridos
+                            if not clase:
+                                logger.debug(f"Fila {index + 2}: Clase vacía")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_estados,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Clase vacía'
+                                })
+                                continue
+                            
+                            if not fecha_estado:
+                                logger.debug(f"Fila {index + 2}: Fecha de estado inválida")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_estados,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Fecha de estado inválida o vacía'
+                                })
+                                continue
+                            
+                            if not auto_anotacion:
+                                logger.debug(f"Fila {index + 2}: Auto/Anotación vacía")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_estados,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Auto/Anotación vacía'
+                                })
+                                continue
+                            
+                            # Verificar duplicado en MEMORIA PRIMERO (dentro del mismo archivo)
+                            cache_key = (expediente_id, fecha_estado, clase, auto_anotacion)
+                            if cache_key in estados_insertados_cache:
+                                logger.debug(f"⚠️ Estado duplicado EN EL ARCHIVO para {radicado_completo} - saltando")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_estados,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Estado duplicado dentro del archivo (ya fue procesado)'
+                                })
+                                continue
+                            
+                            # Estandarizar observaciones para estados (usar NULL si está vacía)
+                            obs_estado_normalized = observaciones if observaciones and str(observaciones).strip() else None
+                            
+                            # Verificar si ya existe un estado IDÉNTICO en BD (uploads previos)
+                            # Esto evita duplicados exactos de información
+                            cursor_estados.execute("""
+                                SELECT id FROM estados 
+                                WHERE expediente_id = %s 
+                                AND fecha_estado = %s 
+                                AND clase = %s
+                                AND auto_anotacion = %s
+                                AND (observaciones IS NULL AND %s IS NULL OR observaciones = %s)
+                            """, (expediente_id, fecha_estado, clase, auto_anotacion, obs_estado_normalized, obs_estado_normalized))
+                            
+                            if cursor_estados.fetchone():
+                                logger.debug(f"⚠️ Estado duplicado en BD para expediente {radicado_completo} - saltando FILA (no se insertará)")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_estados,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Estado duplicado (información idéntica ya existe en BD)'
+                                })
+                                continue
+                            
+                            # Insertar nuevo estado
+                            cursor_estados.execute("""
+                                INSERT INTO estados (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
+                                VALUES (%s, %s, %s, %s, %s)
+                            """, (expediente_id, clase, fecha_estado, auto_anotacion, obs_estado_normalized))
+                            
+                            conn_estados.commit()
+                            estados_insertados_cache.add(cache_key)  # Agregar al caché
+                            resultados['estados_agregados'] += 1
+                            logger.debug(f"✅ Estado agregado para expediente {radicado_completo}")
+                            
+                        except Exception as e:
+                            logger.error(f"❌ Error procesando fila {index + 2} de estados: {e}")
                             resultados['errores'] += 1
                             resultados['errores_detallados'].append({
                                 'fila': index + 2,
                                 'hoja': pestaña_estados,
-                                'radicado': 'N/A',
-                                'motivo': 'Radicado vacío'
+                                'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
+                                'motivo': f'Error técnico: {str(e)}'
                             })
-                            cursor.close()
-                            conn.close()
+                            conn_estados.rollback()  # Revierte solo esta fila
                             continue
-                        
-                        # Normalizar radicado
-                        radicado_completo = re.sub(r'[^0-9]', '', str(radicado_completo).strip())
-                        
-                        # 🚀 BÚSQUEDA EN MEMORIA (instantánea, sin query a BD)
-                        expediente_id = expedientes_cache_estados.get(radicado_completo)
-                        
-                        if not expediente_id:
-                            logger.debug(f"Expediente {radicado_completo} no encontrado")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_estados,
-                                'radicado': radicado_completo,
-                                'motivo': 'Expediente no encontrado en BD'
-                            })
-                            cursor.close()
-                            conn.close()
-                            continue
-                        
-                        # Extraer datos del estado
-                        clase = extraer_valor_flexible(row, df_estados.columns, 
-                            ['CLASE', 'clase', 'Clase', 'ESTADO_TRAMITE', 'Estado_Tramite'])
-                        fecha_estado = extraer_fecha_flexible(row, df_estados.columns, 
-                            ['FECHA ESTADO', 'fecha_estado', 'FECHA_ESTADO', 'Fecha Estado'])
-                        auto_anotacion = extraer_valor_flexible(row, df_estados.columns, 
-                            ['AUTO / ANOTACION', 'auto_anotacion', 'AUTO_ANOTACION', 'AUTO', 'ANOTACION'])
-                        observaciones = extraer_valor_flexible(row, df_estados.columns, 
-                            ['OBSERVACIONES', 'observaciones', 'Observaciones'])
-                        
-                        # Validar campos requeridos
-                        if not clase:
-                            logger.debug(f"Fila {index + 2}: Clase vacía")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_estados,
-                                'radicado': radicado_completo,
-                                'motivo': 'Clase vacía'
-                            })
-                            cursor.close()
-                            conn.close()
-                            continue
-                        
-                        if not fecha_estado:
-                            logger.debug(f"Fila {index + 2}: Fecha de estado inválida")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_estados,
-                                'radicado': radicado_completo,
-                                'motivo': 'Fecha de estado inválida o vacía'
-                            })
-                            cursor.close()
-                            conn.close()
-                            continue
-                        
-                        if not auto_anotacion:
-                            logger.debug(f"Fila {index + 2}: Auto/Anotación vacía")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_estados,
-                                'radicado': radicado_completo,
-                                'motivo': 'Auto/Anotación vacía'
-                            })
-                            cursor.close()
-                            conn.close()
-                            continue
-                        
-                        # Verificar si ya existe un estado IDÉNTICO (todos los campos)
-                        # Esto evita duplicados exactos de información
-                        cursor.execute("""
-                            SELECT id FROM estados 
-                            WHERE expediente_id = %s 
-                            AND fecha_estado = %s 
-                            AND clase = %s
-                            AND auto_anotacion = %s
-                            AND COALESCE(observaciones, '') = COALESCE(%s, '')
-                        """, (expediente_id, fecha_estado, clase, auto_anotacion, observaciones or ''))
-                        
-                        if cursor.fetchone():
-                            logger.debug(f"⚠️ Estado duplicado para expediente {radicado_completo} - saltando")
-                            resultados['errores'] += 1
-                            resultados['errores_detallados'].append({
-                                'fila': index + 2,
-                                'hoja': pestaña_estados,
-                                'radicado': radicado_completo,
-                                'motivo': 'Estado duplicado (información idéntica ya existe en BD)'
-                            })
-                            cursor.close()
-                            conn.close()
-                            continue
-                        
-                        # Insertar nuevo estado
-                        cursor.execute("""
-                            INSERT INTO estados (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
-                            VALUES (%s, %s, %s, %s, %s)
-                        """, (expediente_id, clase, fecha_estado, auto_anotacion, observaciones or 'Estado desde Excel'))
-                        
-                        conn.commit()
-                        resultados['estados_agregados'] += 1
-                        logger.debug(f"✅ Estado agregado para expediente {radicado_completo}")
-                        
-                        cursor.close()
-                        conn.close()
-                        
-                    except Exception as e:
-                        logger.error(f"❌ Error procesando fila {index + 2} de estados: {e}")
-                        resultados['errores'] += 1
-                        resultados['errores_detallados'].append({
-                            'fila': index + 2,
-                            'hoja': pestaña_estados,
-                            'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
-                            'motivo': f'Error técnico: {str(e)}'
-                        })
-                        if conn:
-                            conn.rollback()
-                            conn.close()
-                        continue
+                    
+                    # Cerrar conexión de estados al final (después de procesar TODAS las filas)
+                    cursor_estados.close()
+                    conn_estados.close()
+                    logger.info(f"✅ Conexión de estados cerrada correctamente")
                 
             except Exception as e:
                 logger.error(f"Error procesando pestaña de estados: {e}")
