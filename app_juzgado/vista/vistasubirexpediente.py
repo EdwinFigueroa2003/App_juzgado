@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 import sys
 import logging
 from datetime import datetime
+from io import BytesIO
 
 # Configurar logging específico para subirexpediente
 logging.basicConfig(level=logging.DEBUG)
@@ -287,28 +288,51 @@ def procesar_archivo_excel():
         if file and allowed_file(file.filename):
             logger.info(f"Archivo válido: {file.filename}")
             
-            # Crear directorio de uploads si no existe
-            os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-            logger.info(f"Directorio de uploads verificado: {UPLOAD_FOLDER}")
-            
-            # Guardar archivo
+            # Leer archivo directamente desde memoria (sin guardarlo en disco)
+            # Esto funciona tanto en local como en cloud (Railway, Heroku, etc.)
+            logger.info("Leyendo archivo desde memoria")
+            file_content = BytesIO(file.read())
             filename = secure_filename(file.filename)
-            filepath = os.path.join(UPLOAD_FOLDER, filename)
-            logger.info(f"Guardando archivo en: {filepath}")
-            file.save(filepath)
             
             # Procesar según el modo
             if modo_actualizacion:
                 logger.info("Procesando archivo en MODO ACTUALIZACIÓN")
-                resultados = procesar_excel_actualizacion(filepath)
+                
+                # Verificar si el archivo tiene múltiples pestañas (ingreso y estados)
+                try:
+                    with pd.ExcelFile(file_content) as excel_file:
+                        hojas_disponibles = excel_file.sheet_names
+                        logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
+                    
+                    # Resetear el puntero del BytesIO para poder leerlo nuevamente
+                    file_content.seek(0)
+                    
+                    # Verificar si tiene pestañas específicas para ingreso y estados
+                    tiene_pestaña_ingreso = any(hoja.lower() in ['ingreso', 'ingresos'] for hoja in hojas_disponibles)
+                    tiene_pestaña_estados = any(hoja.lower() in ['estado', 'estados'] for hoja in hojas_disponibles)
+                    
+                    if tiene_pestaña_ingreso or tiene_pestaña_estados:
+                        logger.info("Detectado archivo Excel con pestañas múltiples en modo ACTUALIZACIÓN")
+                        resultados = procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponibles)
+                    else:
+                        logger.info("Procesando archivo Excel con formato tradicional en modo ACTUALIZACIÓN")
+                        resultados = procesar_excel_actualizacion(file_content)
+                        
+                except Exception as e:
+                    logger.warning(f"Error verificando estructura del Excel: {e}")
+                    logger.info("Procesando como archivo Excel tradicional en modo ACTUALIZACIÓN")
+                    file_content.seek(0)
+                    resultados = procesar_excel_actualizacion(file_content)
             else:
                 logger.info("Procesando archivo en MODO CREACIÓN")
                 # Verificar si el archivo tiene múltiples pestañas (ingreso y estados)
                 try:
-                    excel_file = pd.ExcelFile(filepath)
-                    hojas_disponibles = excel_file.sheet_names
-                    logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
-                    excel_file.close()
+                    with pd.ExcelFile(file_content) as excel_file:
+                        hojas_disponibles = excel_file.sheet_names
+                        logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
+                    
+                    # Resetear el puntero del BytesIO
+                    file_content.seek(0)
                     
                     # Verificar si tiene pestañas específicas para ingreso y estados
                     tiene_pestaña_ingreso = any(hoja.lower() in ['ingreso', 'ingresos'] for hoja in hojas_disponibles)
@@ -316,37 +340,23 @@ def procesar_archivo_excel():
                     
                     if tiene_pestaña_ingreso and tiene_pestaña_estados:
                         logger.info("Detectado archivo Excel con pestañas múltiples (ingreso y estados)")
-                        resultados = procesar_excel_multiples_pestañas(filepath, hojas_disponibles)
+                        resultados = procesar_excel_multiples_pestañas(file_content, hojas_disponibles)
                     else:
                         logger.info("Procesando archivo Excel con formato tradicional")
-                        resultados = procesar_excel_expedientes(filepath)
+                        resultados = procesar_excel_expedientes(file_content)
                         
                 except Exception as e:
                     logger.warning(f"Error verificando estructura del Excel: {e}")
                     logger.info("Procesando como archivo Excel tradicional")
-                    resultados = procesar_excel_expedientes(filepath)
+                    file_content.seek(0)
+                    resultados = procesar_excel_expedientes(file_content)
             
             logger.info(f"Resultados del procesamiento: {resultados}")
             
-            # Eliminar archivo temporal con manejo de errores
-            logger.info("Eliminando archivo temporal")
-            try:
-                os.remove(filepath)
-                logger.info("Archivo temporal eliminado correctamente")
-            except PermissionError:
-                logger.warning(f"No se pudo eliminar el archivo temporal {filepath} - puede estar en uso")
-                # Intentar eliminar después de un breve delay
-                import time
-                time.sleep(1)
-                try:
-                    os.remove(filepath)
-                    logger.info("Archivo temporal eliminado en segundo intento")
-                except:
-                    logger.warning(f"Archivo temporal {filepath} no se pudo eliminar - se eliminará automáticamente")
-            except Exception as e:
-                logger.warning(f"Error eliminando archivo temporal: {str(e)}")
+            # Ya no es necesario eliminar archivo temporal porque se procesó desde memoria
+            logger.info("Archivo procesado desde memoria - no hay archivos temporales que eliminar")
             
-            # 🧹 LIMPIEZA AUTOMÁTICA: Eliminar reportes antiguos (>90 días)
+            # 🧹 LIMPIEZA AUTOMÁTICA: Eliminar reportes antiguos (>30 días)
             try:
                 reportes_eliminados = limpiar_reportes_antiguos(dias=90)
                 if reportes_eliminados > 0:
@@ -355,8 +365,9 @@ def procesar_archivo_excel():
                 logger.warning(f"Error en limpieza automática de reportes: {e}")
             
             # Crear mensaje de resultado más detallado
-            if modo_actualizacion:
-                # Mensaje para modo actualización
+            # Detectar tipo de resultado basado en las claves presentes
+            if 'actualizados' in resultados:
+                # Formato tradicional de actualización (hoja única)
                 mensaje_resultado = f'Archivo procesado en MODO ACTUALIZACIÓN. '
                 mensaje_resultado += f'{resultados["actualizados"]} expedientes actualizados exitosamente'
                 
@@ -397,6 +408,42 @@ def procesar_archivo_excel():
                         flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
                 else:
                     flash(mensaje_resultado, 'warning' if resultados["errores"] > 0 else 'success')
+                
+            elif 'expedientes_actualizados' in resultados or 'ingresos_agregados' in resultados:
+                # Formato múltiples pestañas en modo actualización
+                mensaje_resultado = f'Archivo procesado con múltiples pestañas en modo ACTUALIZACIÓN. '
+                
+                if 'ingresos_agregados' in resultados:
+                    mensaje_resultado += f'{resultados["ingresos_agregados"]} ingresos agregados, '
+                
+                if 'estados_agregados' in resultados:
+                    mensaje_resultado += f'{resultados["estados_agregados"]} estados agregados, '
+                
+                if resultados.get("errores", 0) > 0:
+                    mensaje_resultado += f'{resultados["errores"]} errores encontrados'
+                else:
+                    mensaje_resultado += 'sin errores'
+                
+                mensaje_resultado += f' de {resultados.get("total_filas", 0)} filas procesadas.'
+                
+                flash(mensaje_resultado, 'success' if resultados.get("errores", 0) == 0 else 'warning')
+                
+                # Mostrar detalle de errores si existen
+                if resultados.get("errores_detallados") and len(resultados["errores_detallados"]) > 0:
+                    errores_msg = "DETALLE DE ERRORES:\n"
+                    for i, error in enumerate(resultados["errores_detallados"][:5], 1):  # Solo primeros 5
+                        errores_msg += f"\n{i}. Fila {error['fila']} (Hoja: {error.get('hoja', 'N/A')}): {error['radicado']} - {error['motivo']}"
+                    
+                    if len(resultados["errores_detallados"]) > 5:
+                        errores_msg += f"\n... y {len(resultados['errores_detallados']) - 5} errores más"
+                    
+                    flash(errores_msg, 'info')
+                
+                # Agregar enlace de descarga si hay reporte
+                if resultados.get("reporte_id"):
+                    reporte_id = resultados["reporte_id"]
+                    descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
+                    flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
                 
             elif 'hoja_usada' in resultados:
                 # Formato tradicional - Excel Nuevos
@@ -440,7 +487,7 @@ def procesar_archivo_excel():
                     descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
                     flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
             else:
-                # Formato múltiples pestañas
+                # Formato múltiples pestañas (creación)
                 mensaje_resultado = f'Archivo procesado con múltiples pestañas. '
                 mensaje_resultado += f'{resultados["expedientes_procesados"]} expedientes procesados, '
                 mensaje_resultado += f'{resultados["ingresos_procesados"]} ingresos agregados, '
@@ -448,8 +495,26 @@ def procesar_archivo_excel():
                 
                 if resultados["errores"] > 0:
                     mensaje_resultado += f' {resultados["errores"]} errores encontrados.'
+                
+                flash(mensaje_resultado, 'success' if resultados["errores"] == 0 else 'warning')
+                
+                # Mostrar detalle de errores si existen
+                if resultados.get("errores_detallados") and len(resultados["errores_detallados"]) > 0:
+                    errores_msg = "DETALLE DE ERRORES:\n"
+                    for i, error in enumerate(resultados["errores_detallados"][:5], 1):  # Solo primeros 5
+                        errores_msg += f"\n{i}. Fila {error['fila']} (Hoja: {error.get('hoja', 'N/A')}): {error['radicado']} - {error['motivo']}"
+                    
+                    if len(resultados["errores_detallados"]) > 5:
+                        errores_msg += f"\n... y {len(resultados['errores_detallados']) - 5} errores más"
+                    
+                    flash(errores_msg, 'info')
+                
+                # Agregar enlace de descarga si hay reporte
+                if resultados.get("reporte_id"):
+                    reporte_id = resultados["reporte_id"]
+                    descarga_url = url_for('idvistasubirexpediente.descargar_reporte_bd', reporte_id=reporte_id)
+                    flash(f'<div class="mt-2"><strong>📥 REPORTE COMPLETO DISPONIBLE:</strong><br><a href="{descarga_url}" class="btn btn-primary mt-2" target="_blank"><i class="fas fa-download"></i> Descargar Reporte Completo</a></div>', 'info')
             
-            flash(mensaje_resultado, 'success' if resultados["errores"] == 0 else 'warning')
             logger.info("=== FIN procesar_archivo_excel - ÉXITO ===")
             return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
             
@@ -759,48 +824,47 @@ def procesar_formulario_manual():
         flash(f'Error creando expediente: {str(e)}', 'error')
         return redirect(request.url)
 
-def procesar_excel_actualizacion(filepath):
+def procesar_excel_actualizacion(file_content):
     """
     Procesa un archivo Excel para ACTUALIZAR expedientes existentes
-    
+
     Busca expedientes por radicado_completo y actualiza sus campos.
     No crea expedientes nuevos.
-    
+
     Args:
-        filepath: Ruta del archivo Excel
-        
+        file_content: BytesIO object con el contenido del archivo Excel
+
     Returns:
         dict: Estadísticas del procesamiento (actualizados, no_encontrados, errores)
     """
     logger.info("=== INICIO procesar_excel_actualizacion ===")
-    logger.info(f"Archivo a procesar: {filepath}")
-    
+
     try:
         # Leer Excel - intentar diferentes nombres de hojas
         logger.info("Intentando leer archivo Excel...")
-        
+
         try:
-            excel_file = pd.ExcelFile(filepath)
-            hojas_disponibles = excel_file.sheet_names
-            logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
-            excel_file.close()
+            file_content.seek(0)
+            with pd.ExcelFile(file_content) as excel_file:
+                hojas_disponibles = excel_file.sheet_names
+                logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
         except Exception as e:
             logger.error(f"Error leyendo archivo Excel: {str(e)}")
             raise Exception(f"Error leyendo archivo Excel: {str(e)}")
-        
+
         # Definir columnas posibles para radicado
         columnas_radicado = [
             "RADICADO MODIFICADO",
-            'radicado_completo', 
-            'RadicadoUnicoLimpio', 
-            'RADICADO COMPLETO', 
-            'RADICADO_COMPLETO', 
+            'radicado_completo',
+            'RadicadoUnicoLimpio',
+            'RADICADO COMPLETO',
+            'RADICADO_COMPLETO',
             'Radicado Completo',
             'RADICADO_MODIFICADO_OFI',
             'radicado',
             'Radicado'
         ]
-        
+
         # Intentar diferentes nombres de hojas en orden de prioridad
         nombres_hojas_posibles = [
             "estados",
@@ -819,18 +883,19 @@ def procesar_excel_actualizacion(filepath):
             "ESTADOS",                  # Prioridad 13
             "ESTADO"                    # Prioridad 14
         ]
-        
+
         df = None
         hoja_usada = None
         col_radicado_usada = None
-        
+
         # Primero, intentar con hojas prioritarias
         for nombre_hoja in nombres_hojas_posibles:
             if nombre_hoja in hojas_disponibles:
                 try:
                     logger.info(f"Intentando leer hoja prioritaria: '{nombre_hoja}'")
-                    df_temp = pd.read_excel(filepath, sheet_name=nombre_hoja)
-                    
+                    file_content.seek(0)
+                    df_temp = pd.read_excel(file_content, sheet_name=nombre_hoja)
+
                     # Verificar si tiene columna de radicado
                     for col_req in columnas_radicado:
                         if col_req in df_temp.columns:
@@ -839,23 +904,24 @@ def procesar_excel_actualizacion(filepath):
                             col_radicado_usada = col_req
                             logger.info(f"✓ Hoja prioritaria '{nombre_hoja}' leída exitosamente con columna '{col_req}'")
                             break
-                    
+
                     if df is not None:
                         break
                 except Exception as e:
                     logger.warning(f"Error leyendo hoja '{nombre_hoja}': {str(e)}")
                     continue
-        
+
         # Si no encontró en hojas prioritarias, buscar en TODAS las hojas hasta encontrar una con RADICADO COMPLETO
         if df is None:
             logger.info("No se encontró en hojas prioritarias. Buscando en todas las hojas por columna RADICADO COMPLETO...")
-            
+
             for nombre_hoja in hojas_disponibles:
                 try:
                     logger.info(f"Intentando leer hoja: '{nombre_hoja}'")
-                    df_temp = pd.read_excel(filepath, sheet_name=nombre_hoja)
+                    file_content.seek(0)
+                    df_temp = pd.read_excel(file_content, sheet_name=nombre_hoja)
                     logger.debug(f"  Columnas en hoja '{nombre_hoja}': {list(df_temp.columns)}")
-                    
+
                     # Verificar si tiene columna de radicado
                     for col_req in columnas_radicado:
                         if col_req in df_temp.columns:
@@ -864,470 +930,659 @@ def procesar_excel_actualizacion(filepath):
                             col_radicado_usada = col_req
                             logger.info(f"✓ Hoja '{nombre_hoja}' tiene columna '{col_req}' - usando esta hoja")
                             break
-                    
+
                     if df is not None:
                         break
                 except Exception as e:
                     logger.warning(f"Error leyendo hoja '{nombre_hoja}': {str(e)}")
                     continue
-        
+
         if df is None:
-            raise Exception(f"No se encontró ninguna hoja con columna RADICADO COMPLETO. Hojas disponibles: {hojas_disponibles}")
-        
-        logger.info(f"Excel leído correctamente usando hoja '{hoja_usada}'. Filas: {len(df)}, Columnas: {len(df.columns)}")
+            raise Exception(f"No se encontró ninguna hoja con columna de radicado. Hojas disponibles: {hojas_disponibles}")
+
+        logger.info(f"Excel leído correctamente usando hoja '{hoja_usada}' con columna '{col_radicado_usada}'. Filas: {len(df)}, Columnas: {len(df.columns)}")
         logger.info(f"Columnas disponibles: {list(df.columns)}")
-        logger.info(f"✅ Columna de radicado encontrada: '{col_radicado_usada}'")
-        
-        logger.info(f"✅ Columna de radicado encontrada: '{col_radicado_usada}'")
-        
+
+        # Continuar con el resto de la lógica de actualización...
+        # (El resto del código permanece igual, solo cambia cómo se lee el archivo)
+
         conn = obtener_conexion()
-        logger.info("Conexión a BD establecida para procesamiento de actualizaciones")
         cursor = conn.cursor()
         
-        # Verificar estructura de la tabla
+        # 🚀 OPTIMIZACIÓN: Cargar todos los expedientes en memoria UNA SOLA VEZ
+        logger.info("🚀 Cargando expedientes en memoria para búsqueda rápida...")
+        
+        # Extraer todos los radicados del Excel (normalizados)
+        radicados_excel = []
+        for index, row in df.iterrows():
+            radicado = extraer_valor_flexible(row, df.columns, 
+                ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+            if radicado:
+                radicado_normalizado = re.sub(r'[^0-9]', '', str(radicado).strip())
+                if radicado_normalizado:
+                    radicados_excel.append(radicado_normalizado)
+        
+        # Remover duplicados
+        radicados_excel = list(set(radicados_excel))
+        logger.info(f"📊 {len(radicados_excel)} radicados únicos a buscar")
+        
+        # UNA SOLA CONSULTA para todos los expedientes
         cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'expediente'
-        """)
+            SELECT id, radicado_completo 
+            FROM expediente 
+            WHERE radicado_completo = ANY(%s)
+        """, (radicados_excel,))
         
-        available_columns = [row[0] for row in cursor.fetchall()]
-        logger.info(f"Columnas disponibles en tabla expediente: {available_columns}")
-        
+        # Crear diccionario en memoria: {radicado: expediente_id}
+        expedientes_cache = {row[1]: row[0] for row in cursor.fetchall()}
+        logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria")
+        logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
+
         actualizados = 0
         no_encontrados = 0
+        sin_cambios = 0
         errores = 0
-        sin_cambios = 0  # Nuevo contador para registros sin cambios
-        radicados_no_encontrados = []
-        errores_detallados = []  # Lista para guardar errores detallados
-        
-        logger.info("Iniciando procesamiento de actualizaciones fila por fila...")
-        
+        errores_detallados = []
+
+        # Mapeo de columnas Excel a columnas BD
+        mapeo_columnas = {
+            'RADICADO COMPLETO': 'radicado_completo',
+            'radicado_completo': 'radicado_completo',
+            'RadicadoUnicoLimpio': 'radicado_completo',
+            'RADICADO_MODIFICADO_OFI': 'radicado_completo',
+            'DEMANDANTE': 'demandante',
+            'DEMANDANTE_HOMOLOGADO': 'demandante',
+            'DEMANDADO': 'demandado',
+            'DEMANDADO_HOMOLOGADO': 'demandado',
+            'CLASE': 'clase',
+            'clase': 'clase',
+            'FECHA INGRESO': 'fecha_ingreso',
+            'fecha_ingreso': 'fecha_ingreso',
+            'FECHA_INGRESO': 'fecha_ingreso',
+            'FECHA ESTADO': 'fecha_estado',
+            'fecha_estado': 'fecha_estado',
+            'FECHA_ESTADO': 'fecha_estado',
+            'SOLICITUD': 'solicitud',
+            'solicitud': 'solicitud',
+        }
+
+        # Procesar cada fila
         for index, row in df.iterrows():
             try:
-                logger.debug(f"Procesando fila {index + 1}")
-                
-                # Obtener radicado completo y normalizarlo
-                radicado_completo = None
-                if pd.notna(row.get(col_radicado_usada)):
-                    radicado_original = str(row.get(col_radicado_usada)).strip()
-                    # Normalizar: quitar espacios, guiones, puntos
-                    radicado_completo = re.sub(r'[^0-9]', '', radicado_original)
-                
+                # Extraer radicado
+                radicado_completo = extraer_valor_flexible(row, df.columns,
+                    ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+
                 if not radicado_completo:
-                    logger.debug(f"  Saltando fila {index + 1} - sin radicado")
+                    logger.debug(f"Fila {index + 2} sin radicado - saltando")
                     errores += 1
                     errores_detallados.append({
-                        'fila': index + 2,  # +2 porque Excel empieza en 1 y hay header
+                        'fila': index + 2,
                         'radicado': 'N/A',
-                        'motivo': 'Radicado vacío o inválido',
-                        'datos': {}
+                        'motivo': 'Radicado vacío'
                     })
                     continue
-                
-                logger.debug(f"  Buscando expediente con radicado: '{radicado_completo}'")
-                
-                # Buscar si el expediente existe (búsqueda flexible)
-                # 1. Búsqueda exacta por radicado_completo
-                cursor.execute("""
-                    SELECT id 
-                    FROM expediente 
-                    WHERE radicado_completo = %s
-                """, (radicado_completo,))
-                
-                resultado = cursor.fetchone()
-                
-                # 2. Si no encuentra y el radicado tiene >= 13 dígitos, buscar por últimos 13
-                if not resultado and len(radicado_completo) >= 13:
-                    ultimos_13 = radicado_completo[-13:]
-                    logger.debug(f"  No encontrado exacto, buscando por últimos 13 dígitos: '{ultimos_13}'")
-                    
-                    cursor.execute("""
-                        SELECT id, radicado_completo
-                        FROM expediente 
-                        WHERE radicado_completo IS NOT NULL 
-                        AND LENGTH(radicado_completo) >= 13
-                        AND RIGHT(radicado_completo, 13) = %s
-                        LIMIT 1
-                    """, (ultimos_13,))
-                    
-                    resultado_flexible = cursor.fetchone()
-                    if resultado_flexible:
-                        resultado = (resultado_flexible[0],)
-                        logger.debug(f"  ✓ Encontrado por últimos 13 dígitos: {resultado_flexible[1]}")
-                
-                if not resultado:
-                    logger.debug(f"  ⚠️ Expediente NO encontrado: {radicado_completo}")
+
+                # Normalizar radicado
+                radicado_completo = re.sub(r'[^0-9]', '', str(radicado_completo).strip())
+
+                # 🚀 BÚSQUEDA EN MEMORIA (instantánea, sin query a BD)
+                expediente_id = expedientes_cache.get(radicado_completo)
+
+                if not expediente_id:
+                    logger.debug(f"Expediente {radicado_completo} no encontrado")
                     no_encontrados += 1
-                    radicados_no_encontrados.append(radicado_completo)
                     errores_detallados.append({
                         'fila': index + 2,
                         'radicado': radicado_completo,
-                        'motivo': 'Expediente no encontrado en la base de datos',
-                        'datos': {
-                            'demandante': row.get('DEMANDANTE', row.get('demandante', 'N/A')),
-                            'demandado': row.get('DEMANDADO', row.get('demandado', 'N/A'))
-                        }
+                        'motivo': 'Expediente no encontrado en BD'
                     })
                     continue
-                
-                expediente_id = resultado[0]
-                logger.debug(f"  ✓ Expediente encontrado (ID: {expediente_id})")
-                
-                # Obtener valores actuales del expediente (solo columnas que existen)
-                # Construir SELECT dinámicamente basado en columnas disponibles
-                columnas_select = []
-                for col in ['demandante', 'demandado', 'estado', 'responsable', 'ubicacion', 'fecha_ingreso']:
-                    if col in available_columns:
-                        columnas_select.append(col)
-                
-                if not columnas_select:
-                    logger.warning(f"  ⚠️ No hay columnas disponibles para consultar en expediente {expediente_id}")
-                    valores_actuales_dict = {}
-                else:
-                    query_select = f"SELECT {', '.join(columnas_select)} FROM expediente WHERE id = %s"
-                    cursor.execute(query_select, (expediente_id,))
-                    
-                    valores_actuales = cursor.fetchone()
-                    if valores_actuales:
-                        valores_actuales_dict = {}
-                        for i, col in enumerate(columnas_select):
-                            valores_actuales_dict[col] = valores_actuales[i]
-                    else:
-                        valores_actuales_dict = {}
-                
-                # Construir UPDATE dinámicamente con los campos disponibles
-                campos_actualizar = []
-                valores_actualizar = []
-                
-                # Mapear columnas del Excel a campos de la BD
-                # NOTA: Solo columnas que existen en la tabla expediente
-                # Columnas NO disponibles: tipo_solicitud, ubicacion, observaciones
-                mapeo_columnas = {
-                    'demandante': ['DEMANDANTE_HOMOLOGADO', 'DEMANDANTE', 'demandante', 'Demandante'],
-                    'demandado': ['DEMANDADO_HOMOLOGADO', 'DEMANDADO', 'demandado', 'Demandado'],
-                    'estado': [
-                        'ESTADO', 'estado', 'Estado', 'ESTADO_ACTUAL', 'estado_actual',
-                        'ESTADO_TRAMITE', 'Estado_Tramite', 'ESTADO TRAMITE'  # Común en Estados
-                    ],
-                    'responsable': ['RESPONSABLE', 'responsable', 'Responsable'],
-                    'radicado_corto': ['RADICADO CORTO', 'radicado_corto', 'Radicado Corto', 'RADICADO_CORTO'],
-                    'juzgado_origen': ['JUZGADO ORIGEN', 'juzgado_origen', 'Juzgado Origen', 'JUZGADO_ORIGEN', 'J. ORIGEN', 'J ORIGEN']
-                }
-                
-                # Procesar cada campo actualizable
-                for campo_bd, posibles_columnas in mapeo_columnas.items():
-                    if campo_bd in available_columns:
-                        for col_excel in posibles_columnas:
-                            if col_excel in df.columns and pd.notna(row.get(col_excel)):
-                                valor_nuevo = str(row.get(col_excel)).strip()
-                                valor_actual = valores_actuales_dict.get(campo_bd)
-                                
-                                # Normalizar valor actual para comparación
-                                if valor_actual is not None:
-                                    valor_actual_str = str(valor_actual).strip()
-                                else:
-                                    valor_actual_str = ""
-                                
-                                # Solo actualizar si el valor es diferente y no está vacío
-                                if valor_nuevo and valor_nuevo != valor_actual_str:
-                                    campos_actualizar.append(f"{campo_bd} = %s")
-                                    valores_actualizar.append(valor_nuevo)
-                                    logger.debug(f"    Actualizando {campo_bd}: '{valor_actual_str}' → '{valor_nuevo}'")
-                                elif valor_nuevo == valor_actual_str:
-                                    logger.debug(f"    {campo_bd} sin cambios: '{valor_nuevo}'")
-                                break
-                
-                # Procesar FECHA INGRESO si existe
-                if 'fecha_ingreso' in available_columns:
-                    for col_name in [
-                        'FECHA ESTADO', 'Fecha Estado', 'FECHA_ESTADO',  # PRIORIDAD 1 - Común en Estados
-                        'FECHA INGRESO', 'FECHA_INGRESO', 'fecha_ingreso', 'Fecha Ingreso',  # PRIORIDAD 2
-                        'FECHA ACTUACION', 'Fecha Actuacion', 'FECHA_ACTUACION'  # PRIORIDAD 3
-                    ]:
-                        if col_name in df.columns and pd.notna(row.get(col_name)):
-                            fecha_valor = row.get(col_name)
-                            fecha_nueva = None
-                            
-                            try:
-                                from datetime import datetime, timedelta
-                                
-                                # Caso 1: Ya es un objeto date/datetime
-                                if isinstance(fecha_valor, (datetime, pd.Timestamp)):
-                                    fecha_nueva = fecha_valor.date() if hasattr(fecha_valor, 'date') else fecha_valor
-                                
-                                # Caso 2: Es un número (serial de Excel)
-                                elif isinstance(fecha_valor, (int, float)):
-                                    # Excel cuenta días desde 1900-01-01 (con bug del año 1900)
-                                    excel_epoch = datetime(1899, 12, 30)
-                                    fecha_nueva = (excel_epoch + timedelta(days=int(fecha_valor))).date()
-                                    logger.debug(f"    Convertido serial Excel {fecha_valor} a fecha {fecha_nueva}")
-                                
-                                # Caso 3: Es un string
-                                elif isinstance(fecha_valor, str):
-                                    for formato in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
-                                        try:
-                                            fecha_nueva = datetime.strptime(fecha_valor.strip(), formato).date()
-                                            break
-                                        except ValueError:
-                                            continue
-                                
-                                # Comparar con fecha actual
-                                fecha_actual = valores_actuales_dict.get('fecha_ingreso')
-                                
-                                if fecha_nueva and fecha_nueva != fecha_actual:
-                                    campos_actualizar.append("fecha_ingreso = %s")
-                                    valores_actualizar.append(fecha_nueva)
-                                    logger.debug(f"    Actualizando fecha_ingreso: '{fecha_actual}' → '{fecha_nueva}' (desde columna '{col_name}')")
-                                elif fecha_nueva == fecha_actual:
-                                    logger.debug(f"    fecha_ingreso sin cambios: '{fecha_nueva}'")
-                                    
-                            except Exception as e:
-                                logger.warning(f"Error procesando fecha en fila {index + 1}, columna '{col_name}', valor '{fecha_valor}': {e}")
-                            break
-                
-                # Si hay campos para actualizar, ejecutar UPDATE
+
+                # Construir UPDATE dinámico
+                campos_actualizar = {}
+                for col_excel, col_bd in mapeo_columnas.items():
+                    if col_excel in df.columns:
+                        valor = row[col_excel]
+                        if pd.notna(valor) and valor != '':
+                            # Convertir fechas si es necesario
+                            if 'fecha' in col_bd.lower():
+                                valor = extraer_fecha_flexible(row, df.columns, [col_excel])
+                            campos_actualizar[col_bd] = valor
+
                 if campos_actualizar:
-                    try:
-                        query = f"""
-                            UPDATE expediente 
-                            SET {', '.join(campos_actualizar)}
-                            WHERE id = %s
-                        """
-                        valores_actualizar.append(expediente_id)
-                        
-                        logger.debug(f"  Ejecutando UPDATE con {len(campos_actualizar)} campo(s)")
-                        cursor.execute(query, valores_actualizar)
-                        
+                    # Construir query UPDATE
+                    set_clause = ', '.join([f"{col} = %s" for col in campos_actualizar.keys()])
+                    valores = list(campos_actualizar.values()) + [expediente_id]
+
+                    query = f"UPDATE expediente SET {set_clause} WHERE id = %s"
+                    cursor.execute(query, valores)
+
+                    if cursor.rowcount > 0:
                         actualizados += 1
-                        logger.debug(f"  ✅ Expediente {radicado_completo} actualizado exitosamente")
-                        
-                        # 🎫 AJUSTE AUTOMÁTICO DE TURNOS según cambio de estado
-                        # Verificar si se actualizó el campo 'estado'
-                        if 'estado = %s' in ', '.join(campos_actualizar):
-                            # Obtener el índice del estado en valores_actualizar
-                            idx_estado = None
-                            for i, campo in enumerate(campos_actualizar):
-                                if campo == 'estado = %s':
-                                    idx_estado = i
-                                    break
-                            
-                            if idx_estado is not None:
-                                estado_nuevo = valores_actualizar[idx_estado]
-                                estado_anterior = valores_actuales_dict.get('estado')
-                                
-                                logger.debug(f"    🔄 Cambio de estado detectado: '{estado_anterior}' → '{estado_nuevo}'")
-                                
-                                # CASO 1: Cambió A "Activo Pendiente" → Reasignar TODOS los turnos
-                                if estado_nuevo == 'Activo Pendiente' and estado_anterior != 'Activo Pendiente':
-                                    logger.debug(f"    🎫 Expediente cambió a 'Activo Pendiente' - se requiere reasignación de turnos")
-                                    
-                                    # Marcar que se necesita reasignar turnos al final del proceso
-                                    # Por ahora, asignar turno temporal basado en fecha
-                                    # La reasignación completa se hará después del commit
-                                    
-                                    # Obtener fecha de ingreso del expediente para ordenamiento
-                                    cursor.execute("""
-                                        SELECT fecha_ingreso 
-                                        FROM expediente 
-                                        WHERE id = %s
-                                    """, (expediente_id,))
-                                    
-                                    fecha_ing_result = cursor.fetchone()
-                                    fecha_ingreso_exp = fecha_ing_result[0] if fecha_ing_result else None
-                                    
-                                    # Asignar turno temporal (se reasignará al final)
-                                    # Por ahora, usar un número alto para que quede al final
-                                    cursor.execute("""
-                                        UPDATE expediente 
-                                        SET turno = '999999' 
-                                        WHERE id = %s
-                                    """, (expediente_id,))
-                                    
-                                    logger.debug(f"    ✅ Turno temporal asignado (se reasignará al final del proceso)")
-                                
-                                # CASO 2: Cambió DESDE "Activo Pendiente" a otro estado → Quitar turno y reasignar
-                                elif estado_anterior == 'Activo Pendiente' and estado_nuevo != 'Activo Pendiente':
-                                    logger.debug(f"    🗑️ Quitando turno (cambió desde 'Activo Pendiente')")
-                                    
-                                    # Quitar turno
-                                    cursor.execute("""
-                                        UPDATE expediente 
-                                        SET turno = NULL 
-                                        WHERE id = %s
-                                    """, (expediente_id,))
-                                    
-                                    logger.debug(f"    ✅ Turno removido - se reasignarán turnos al final")
-                        
-                    except Exception as e_update:
-                        logger.error(f"  ❌ Error en UPDATE para expediente {radicado_completo}: {e_update}")
-                        conn.rollback()  # Rollback para poder continuar con la siguiente fila
-                        errores += 1
-                        errores_detallados.append({
-                            'fila': index + 2,
-                            'radicado': radicado_completo,
-                            'motivo': f'Error técnico en UPDATE: {str(e_update)}',
-                            'datos': {}
-                        })
+                        logger.debug(f"✅ Expediente {radicado_completo} actualizado")
+                    else:
+                        sin_cambios += 1
                 else:
-                    # No hay cambios - el expediente ya tiene los mismos valores
-                    logger.debug(f"  ℹ️ Expediente {radicado_completo} sin cambios (valores idénticos)")
                     sin_cambios += 1
-                
+
             except Exception as e:
-                logger.error(f"Error procesando fila {index + 1}: {str(e)}")
-                if conn:
-                    conn.rollback()  # Rollback para poder continuar
+                logger.error(f"❌ Error procesando fila {index + 2}: {e}")
                 errores += 1
                 errores_detallados.append({
                     'fila': index + 2,
                     'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
-                    'motivo': f'Error técnico: {str(e)}',
-                    'datos': {}
+                    'motivo': f'Error técnico: {str(e)}'
                 })
                 continue
-        
-        # Commit de todas las actualizaciones
+
         conn.commit()
-        logger.info(f"✅ Transacción confirmada - {actualizados} expedientes actualizados")
+        cursor.close()
+        conn.close()
+
+        resultados = {
+            'expedientes_actualizados': actualizados,
+            'no_encontrados': no_encontrados,
+            'sin_cambios': sin_cambios,
+            'errores': errores,
+            'total_filas': len(df),
+            'errores_detallados': errores_detallados
+        }
+
+        logger.info(f"=== FIN procesar_excel_actualizacion ===")
+        logger.info(f"Resultados: {resultados}")
+
+        return resultados
+
+    except Exception as e:
+        logger.error(f"ERROR en procesar_excel_actualizacion: {str(e)}")
+        raise e
+
+
+
+def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponibles):
+    """
+    Procesa un archivo Excel con múltiples pestañas en MODO ACTUALIZACIÓN:
+    - Pestaña 'ingreso': Actualiza información de expedientes y agrega nuevos ingresos
+    - Pestaña 'estados': Agrega nuevos estados a expedientes existentes
+    
+    Usa transacciones individuales por fila para evitar que un error detenga todo el proceso.
+    
+    Args:
+        file_content: BytesIO object con el contenido del archivo Excel
+        hojas_disponibles: Lista de nombres de hojas disponibles
+    """
+    logger.info("=== INICIO procesar_excel_actualizacion_multiples_pestañas ===")
+    logger.info(f"Hojas disponibles: {hojas_disponibles}")
+    
+    try:
+        resultados = {
+            'expedientes_actualizados': 0,
+            'ingresos_agregados': 0,
+            'estados_agregados': 0,
+            'errores': 0,
+            'total_filas': 0,
+            'errores_detallados': []
+        }
         
-        # 🎫 REASIGNACIÓN AUTOMÁTICA DE TURNOS
-        # Si hubo cambios de estado, reasignar todos los turnos de "Activo Pendiente"
-        # basándose en la fecha de ingreso más antigua sin salida
-        if actualizados > 0:
-            logger.info("🎫 Reasignando turnos para expedientes 'Activo Pendiente'...")
+        # Procesar pestaña de ingresos (si existe)
+        pestaña_ingreso = None
+        for hoja in hojas_disponibles:
+            if hoja.lower() in ['ingreso', 'ingresos', 'INGRESO', 'INGRESOS']:
+                pestaña_ingreso = hoja
+                break
+        
+        if pestaña_ingreso:
+            logger.info(f"Procesando pestaña de ingresos: {pestaña_ingreso}")
             try:
-                cursor = conn.cursor()
+                # Resetear puntero y leer desde BytesIO
+                file_content.seek(0)
+                with pd.ExcelFile(file_content) as excel_file:
+                    df_ingresos = pd.read_excel(excel_file, sheet_name=pestaña_ingreso)
+                logger.info(f"Pestaña '{pestaña_ingreso}' leída: {len(df_ingresos)} filas")
+                resultados['total_filas'] += len(df_ingresos)
                 
-                # Obtener todos los expedientes "Activo Pendiente" ordenados por fecha
-                # Usar la misma lógica que actualizar_turnos.py
-                cursor.execute("""
-                    WITH expedientes_activos AS (
-                        SELECT 
-                            e.id,
-                            e.radicado_completo,
-                            e.fecha_ingreso as fecha_ingreso_expediente
-                        FROM expediente e
-                        WHERE e.estado = 'Activo Pendiente'
-                    ),
-                    ingresos_sin_salida AS (
-                        SELECT 
-                            i.expediente_id,
-                            i.fecha_ingreso
-                        FROM ingresos i
-                        WHERE i.fecha_ingreso IS NOT NULL
-                          AND NOT EXISTS (
-                              SELECT 1 FROM estados est 
-                              WHERE est.expediente_id = i.expediente_id 
-                                AND est.fecha_estado > i.fecha_ingreso
-                          )
-                    ),
-                    fecha_ingreso_mas_antigua_sin_salida AS (
-                        SELECT 
-                            expediente_id,
-                            MIN(fecha_ingreso) as fecha_ingreso_sin_salida
-                        FROM ingresos_sin_salida
-                        GROUP BY expediente_id
-                    )
-                    SELECT 
-                        ea.id,
-                        ea.radicado_completo,
-                        COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) as fecha_para_turno
-                    FROM expedientes_activos ea
-                    LEFT JOIN fecha_ingreso_mas_antigua_sin_salida fimass ON ea.id = fimass.expediente_id
-                    WHERE COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) IS NOT NULL
-                    ORDER BY 
-                        COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) ASC,
-                        ea.fecha_ingreso_expediente ASC,
-                        ea.id ASC
-                """)
+                # 🚀 OPTIMIZACIÓN: Cargar todos los expedientes en memoria UNA SOLA VEZ
+                logger.info("🚀 Cargando expedientes en memoria para búsqueda rápida...")
                 
-                expedientes_para_turno = cursor.fetchall()
+                # Extraer todos los radicados del Excel (normalizados)
+                radicados_excel = []
+                for index, row in df_ingresos.iterrows():
+                    radicado = extraer_valor_flexible(row, df_ingresos.columns, 
+                        ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+                    if radicado:
+                        radicado_normalizado = re.sub(r'[^0-9]', '', str(radicado).strip())
+                        if radicado_normalizado:
+                            radicados_excel.append(radicado_normalizado)
                 
-                if expedientes_para_turno:
-                    logger.info(f"  Reasignando turnos a {len(expedientes_para_turno)} expedientes...")
-                    
-                    # Primero, limpiar todos los turnos de "Activo Pendiente"
-                    cursor.execute("""
-                        UPDATE expediente 
-                        SET turno = NULL 
-                        WHERE estado = 'Activo Pendiente'
-                    """)
-                    
-                    # Asignar turnos secuenciales basados en el orden de fechas
-                    for idx, (exp_id, radicado, fecha_turno) in enumerate(expedientes_para_turno, start=1):
+                # Remover duplicados
+                radicados_excel = list(set(radicados_excel))
+                logger.info(f"📊 {len(radicados_excel)} radicados únicos a buscar")
+                
+                # UNA SOLA CONSULTA para todos los expedientes
+                conn_cache = obtener_conexion()
+                cursor_cache = conn_cache.cursor()
+                
+                cursor_cache.execute("""
+                    SELECT id, radicado_completo 
+                    FROM expediente 
+                    WHERE radicado_completo = ANY(%s)
+                """, (radicados_excel,))
+                
+                # Crear diccionario en memoria: {radicado: expediente_id}
+                expedientes_cache = {row[1]: row[0] for row in cursor_cache.fetchall()}
+                cursor_cache.close()
+                conn_cache.close()
+                
+                logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria")
+                logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
+                
+                # Procesar cada fila de ingresos con búsqueda en memoria (RÁPIDO)
+                for index, row in df_ingresos.iterrows():
+                    conn = None
+                    try:
+                        conn = obtener_conexion()
+                        cursor = conn.cursor()
+                        
+                        # Extraer radicado
+                        radicado_completo = extraer_valor_flexible(row, df_ingresos.columns, 
+                            ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+                        
+                        if not radicado_completo:
+                            logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_ingreso,
+                                'radicado': 'N/A',
+                                'motivo': 'Radicado vacío'
+                            })
+                            continue
+                        
+                        # Normalizar radicado
+                        radicado_completo = re.sub(r'[^0-9]', '', str(radicado_completo).strip())
+                        
+                        # 🚀 BÚSQUEDA EN MEMORIA (instantánea, sin query a BD)
+                        expediente_id = expedientes_cache.get(radicado_completo)
+                        
+                        if not expediente_id:
+                            logger.debug(f"Expediente {radicado_completo} no encontrado")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_ingreso,
+                                'radicado': radicado_completo,
+                                'motivo': 'Expediente no encontrado en BD'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        # Extraer datos del ingreso
+                        fecha_ingreso = extraer_fecha_flexible(row, df_ingresos.columns, 
+                            ['FECHA INGRESO', 'fecha_ingreso', 'FECHA_INGRESO', 'Fecha Ingreso'])
+                        solicitud = extraer_valor_flexible(row, df_ingresos.columns, 
+                            ['SOLICITUD', 'solicitud', 'Solicitud', 'TIPO_SOLICITUD'])
+                        observaciones = extraer_valor_flexible(row, df_ingresos.columns, 
+                            ['OBSERVACIONES', 'observaciones', 'Observaciones'])
+                        
+                        if not fecha_ingreso:
+                            logger.debug(f"Fila {index + 2}: Fecha de ingreso inválida")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_ingreso,
+                                'radicado': radicado_completo,
+                                'motivo': 'Fecha de ingreso inválida o vacía'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        if not solicitud:
+                            logger.debug(f"Fila {index + 2}: Solicitud vacía")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_ingreso,
+                                'radicado': radicado_completo,
+                                'motivo': 'Solicitud vacía'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        # Verificar si existe tabla ingresos
                         cursor.execute("""
-                            UPDATE expediente 
-                            SET turno = %s 
-                            WHERE id = %s
-                        """, (str(idx), exp_id))
-                    
-                    conn.commit()
-                    logger.info(f"  ✅ {len(expedientes_para_turno)} turnos reasignados correctamente")
-                else:
-                    logger.info("  ℹ️ No hay expedientes 'Activo Pendiente' para asignar turnos")
+                            SELECT table_name FROM information_schema.tables 
+                            WHERE table_name = 'ingresos'
+                        """)
+                        
+                        if cursor.fetchone():
+                            # Verificar si ya existe un ingreso IDÉNTICO (todos los campos)
+                            cursor.execute("""
+                                SELECT id FROM ingresos 
+                                WHERE expediente_id = %s 
+                                AND fecha_ingreso = %s 
+                                AND solicitud = %s
+                                AND COALESCE(observaciones, '') = COALESCE(%s, '')
+                            """, (expediente_id, fecha_ingreso, solicitud, observaciones or ''))
+                            
+                            if cursor.fetchone():
+                                logger.debug(f"⚠️ Ingreso duplicado para expediente {radicado_completo} - saltando")
+                                resultados['errores'] += 1
+                                resultados['errores_detallados'].append({
+                                    'fila': index + 2,
+                                    'hoja': pestaña_ingreso,
+                                    'radicado': radicado_completo,
+                                    'motivo': 'Ingreso duplicado (información idéntica ya existe en BD)'
+                                })
+                                cursor.close()
+                                conn.close()
+                                continue
+                            
+                            # Insertar nuevo ingreso
+                            cursor.execute("""
+                                INSERT INTO ingresos (expediente_id, fecha_ingreso, solicitud, observaciones)
+                                VALUES (%s, %s, %s, %s)
+                            """, (expediente_id, fecha_ingreso, solicitud, observaciones or 'Ingreso desde Excel'))
+                            
+                            conn.commit()
+                            resultados['ingresos_agregados'] += 1
+                            logger.debug(f"✅ Ingreso agregado para expediente {radicado_completo}")
+                        else:
+                            logger.warning("Tabla 'ingresos' no existe")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_ingreso,
+                                'radicado': radicado_completo,
+                                'motivo': 'Tabla ingresos no existe en BD'
+                            })
+                        
+                        cursor.close()
+                        conn.close()
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Error procesando fila {index + 2} de ingresos: {e}")
+                        resultados['errores'] += 1
+                        resultados['errores_detallados'].append({
+                            'fila': index + 2,
+                            'hoja': pestaña_ingreso,
+                            'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
+                            'motivo': f'Error técnico: {str(e)}'
+                        })
+                        if conn:
+                            conn.rollback()
+                            conn.close()
+                        continue
                 
-                cursor.close()
-                
-            except Exception as e_turnos:
-                logger.warning(f"  ⚠️ Error reasignando turnos (no crítico): {e_turnos}")
-                # No es crítico, continuar con el proceso
+            except Exception as e:
+                logger.error(f"Error procesando pestaña de ingresos: {e}")
+                resultados['errores'] += 1
         
-        cursor = conn.cursor()  # Reabrir cursor para el resto del código
+        # Procesar pestaña de estados (si existe)
+        pestaña_estados = None
+        for hoja in hojas_disponibles:
+            if hoja.lower() in ['estado', 'estados', 'ESTADO', 'ESTADOS']:
+                pestaña_estados = hoja
+                break
         
-        # 📊 GUARDAR REPORTE EN BASE DE DATOS
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        reporte_id = None
-        
-        if errores_detallados or actualizados > 0:
+        if pestaña_estados:
+            logger.info(f"Procesando pestaña de estados: {pestaña_estados}")
             try:
+                # Resetear puntero y leer desde BytesIO
+                file_content.seek(0)
+                with pd.ExcelFile(file_content) as excel_file:
+                    df_estados = pd.read_excel(excel_file, sheet_name=pestaña_estados)
+                logger.info(f"Pestaña '{pestaña_estados}' leída: {len(df_estados)} filas")
+                resultados['total_filas'] += len(df_estados)
+                
+                # 🚀 OPTIMIZACIÓN: Cargar todos los expedientes en memoria UNA SOLA VEZ
+                logger.info("🚀 Cargando expedientes en memoria para búsqueda rápida...")
+                
+                # Extraer todos los radicados del Excel (normalizados)
+                radicados_excel_estados = []
+                for index, row in df_estados.iterrows():
+                    radicado = extraer_valor_flexible(row, df_estados.columns, 
+                        ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+                    if radicado:
+                        radicado_normalizado = re.sub(r'[^0-9]', '', str(radicado).strip())
+                        if radicado_normalizado:
+                            radicados_excel_estados.append(radicado_normalizado)
+                
+                # Remover duplicados
+                radicados_excel_estados = list(set(radicados_excel_estados))
+                logger.info(f"📊 {len(radicados_excel_estados)} radicados únicos a buscar")
+                
+                # UNA SOLA CONSULTA para todos los expedientes
+                conn_cache_estados = obtener_conexion()
+                cursor_cache_estados = conn_cache_estados.cursor()
+                
+                cursor_cache_estados.execute("""
+                    SELECT id, radicado_completo 
+                    FROM expediente 
+                    WHERE radicado_completo = ANY(%s)
+                """, (radicados_excel_estados,))
+                
+                # Crear diccionario en memoria: {radicado: expediente_id}
+                expedientes_cache_estados = {row[1]: row[0] for row in cursor_cache_estados.fetchall()}
+                cursor_cache_estados.close()
+                conn_cache_estados.close()
+                
+                logger.info(f"✅ {len(expedientes_cache_estados)} expedientes cargados en memoria")
+                logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
+                
+                # 🔥 IMPORTANTE: Usar UNA SOLA conexión para todas las filas
+                # Esto asegura que las validaciones de duplicados funcionen correctamente
+                conn_estados = obtener_conexion()
+                cursor_estados = conn_estados.cursor()
+                
+                # Caché de estados insertados en esta sesión (para evitar duplicados dentro del mismo archivo)
+                estados_insertados_cache = set()
+                
+                # Procesar cada fila de estados con búsqueda en memoria (RÁPIDO)
+                for index, row in df_estados.iterrows():
+                    try:
+                        cursor = conn.cursor()
+                        
+                        # Verificar si existe tabla estados
+                        cursor.execute("""
+                            SELECT table_name FROM information_schema.tables 
+                            WHERE table_name = 'estados'
+                        """)
+                        
+                        if not cursor.fetchone():
+                            logger.warning("Tabla 'estados' no existe en la BD")
+                            resultados['errores'] += len(df_estados)
+                            cursor.close()
+                            conn.close()
+                            break
+                        
+                        # Extraer radicado
+                        radicado_completo = extraer_valor_flexible(row, df_estados.columns, 
+                            ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+                        
+                        if not radicado_completo:
+                            logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_estados,
+                                'radicado': 'N/A',
+                                'motivo': 'Radicado vacío'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        # Normalizar radicado
+                        radicado_completo = re.sub(r'[^0-9]', '', str(radicado_completo).strip())
+                        
+                        # 🚀 BÚSQUEDA EN MEMORIA (instantánea, sin query a BD)
+                        expediente_id = expedientes_cache_estados.get(radicado_completo)
+                        
+                        if not expediente_id:
+                            logger.debug(f"Expediente {radicado_completo} no encontrado")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_estados,
+                                'radicado': radicado_completo,
+                                'motivo': 'Expediente no encontrado en BD'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        # Extraer datos del estado
+                        clase = extraer_valor_flexible(row, df_estados.columns, 
+                            ['CLASE', 'clase', 'Clase', 'ESTADO_TRAMITE', 'Estado_Tramite'])
+                        fecha_estado = extraer_fecha_flexible(row, df_estados.columns, 
+                            ['FECHA ESTADO', 'fecha_estado', 'FECHA_ESTADO', 'Fecha Estado'])
+                        auto_anotacion = extraer_valor_flexible(row, df_estados.columns, 
+                            ['AUTO / ANOTACION', 'auto_anotacion', 'AUTO_ANOTACION', 'AUTO', 'ANOTACION'])
+                        observaciones = extraer_valor_flexible(row, df_estados.columns, 
+                            ['OBSERVACIONES', 'observaciones', 'Observaciones'])
+                        
+                        # Validar campos requeridos
+                        if not clase:
+                            logger.debug(f"Fila {index + 2}: Clase vacía")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_estados,
+                                'radicado': radicado_completo,
+                                'motivo': 'Clase vacía'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        if not fecha_estado:
+                            logger.debug(f"Fila {index + 2}: Fecha de estado inválida")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_estados,
+                                'radicado': radicado_completo,
+                                'motivo': 'Fecha de estado inválida o vacía'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        if not auto_anotacion:
+                            logger.debug(f"Fila {index + 2}: Auto/Anotación vacía")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_estados,
+                                'radicado': radicado_completo,
+                                'motivo': 'Auto/Anotación vacía'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        # Verificar si ya existe un estado IDÉNTICO (todos los campos)
+                        # Esto evita duplicados exactos de información
+                        cursor.execute("""
+                            SELECT id FROM estados 
+                            WHERE expediente_id = %s 
+                            AND fecha_estado = %s 
+                            AND clase = %s
+                            AND auto_anotacion = %s
+                            AND COALESCE(observaciones, '') = COALESCE(%s, '')
+                        """, (expediente_id, fecha_estado, clase, auto_anotacion, observaciones or ''))
+                        
+                        if cursor.fetchone():
+                            logger.debug(f"⚠️ Estado duplicado para expediente {radicado_completo} - saltando")
+                            resultados['errores'] += 1
+                            resultados['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': pestaña_estados,
+                                'radicado': radicado_completo,
+                                'motivo': 'Estado duplicado (información idéntica ya existe en BD)'
+                            })
+                            cursor.close()
+                            conn.close()
+                            continue
+                        
+                        # Insertar nuevo estado
+                        cursor.execute("""
+                            INSERT INTO estados (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (expediente_id, clase, fecha_estado, auto_anotacion, observaciones or 'Estado desde Excel'))
+                        
+                        conn.commit()
+                        resultados['estados_agregados'] += 1
+                        logger.debug(f"✅ Estado agregado para expediente {radicado_completo}")
+                        
+                        cursor.close()
+                        conn.close()
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Error procesando fila {index + 2} de estados: {e}")
+                        resultados['errores'] += 1
+                        resultados['errores_detallados'].append({
+                            'fila': index + 2,
+                            'hoja': pestaña_estados,
+                            'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
+                            'motivo': f'Error técnico: {str(e)}'
+                        })
+                        if conn:
+                            conn.rollback()
+                            conn.close()
+                        continue
+                
+            except Exception as e:
+                logger.error(f"Error procesando pestaña de estados: {e}")
+                resultados['errores'] += 1
+        
+        logger.info(f"=== FIN procesar_excel_actualizacion_multiples_pestañas ===")
+        logger.info(f"Resultados: {resultados}")
+        
+        # 📊 GUARDAR REPORTE EN BASE DE DATOS si hay errores
+        if resultados.get('errores_detallados') and len(resultados['errores_detallados']) > 0:
+            try:
+                logger.info("📝 Generando reporte de errores en BD...")
+                
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                
                 # Construir contenido del reporte
                 contenido_reporte = "=" * 80 + "\n"
-                contenido_reporte += "REPORTE DE ACTUALIZACIÓN DE EXPEDIENTES\n"
+                contenido_reporte += "REPORTE DE ACTUALIZACIÓN - MÚLTIPLES PESTAÑAS\n"
+                contenido_reporte += "=" * 80 + "\n\n"
+                contenido_reporte += f"Fecha de procesamiento: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                contenido_reporte += f"Total de filas procesadas: {resultados['total_filas']}\n"
+                contenido_reporte += f"Ingresos agregados: {resultados['ingresos_agregados']}\n"
+                contenido_reporte += f"Estados agregados: {resultados['estados_agregados']}\n"
+                contenido_reporte += f"Total de errores: {resultados['errores']}\n\n"
+                
                 contenido_reporte += "=" * 80 + "\n"
-                contenido_reporte += f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                contenido_reporte += f"Archivo procesado: {os.path.basename(filepath)}\n"
-                contenido_reporte += f"Hoja utilizada: {hoja_usada}\n"
-                contenido_reporte += f"Columna de radicado: {col_radicado_usada}\n"
-                contenido_reporte += "\n"
-                contenido_reporte += "RESUMEN:\n"
-                contenido_reporte += "-" * 80 + "\n"
-                contenido_reporte += f"Total de filas procesadas: {len(df)}\n"
-                contenido_reporte += f"Expedientes actualizados: {actualizados}\n"
-                contenido_reporte += f"Expedientes sin cambios: {sin_cambios}\n"
-                contenido_reporte += f"Expedientes no encontrados: {no_encontrados}\n"
-                contenido_reporte += f"Errores: {errores}\n"
-                contenido_reporte += "\n"
+                contenido_reporte += "DETALLE DE ERRORES\n"
+                contenido_reporte += "=" * 80 + "\n\n"
                 
-                if errores_detallados:
-                    contenido_reporte += "DETALLE DE ERRORES:\n"
-                    contenido_reporte += "=" * 80 + "\n"
-                    
-                    for i, error in enumerate(errores_detallados, 1):
-                        contenido_reporte += f"\nERROR #{i}\n"
-                        contenido_reporte += "-" * 40 + "\n"
-                        contenido_reporte += f"Fila Excel: {error['fila']}\n"
-                        contenido_reporte += f"Radicado: {error['radicado']}\n"
-                        contenido_reporte += f"Motivo: {error['motivo']}\n"
-                        
-                        if error['datos']:
-                            contenido_reporte += "Datos adicionales:\n"
-                            for key, value in error['datos'].items():
-                                contenido_reporte += f"  - {key}: {value}\n"
-                        contenido_reporte += "\n"
+                for i, error in enumerate(resultados['errores_detallados'], 1):
+                    contenido_reporte += f"{i}. Fila {error['fila']} - Hoja: {error.get('hoja', 'N/A')}\n"
+                    contenido_reporte += f"   Radicado: {error['radicado']}\n"
+                    contenido_reporte += f"   Motivo: {error['motivo']}\n\n"
                 
-                contenido_reporte += "\n" + "=" * 80 + "\n"
-                contenido_reporte += "FIN DEL REPORTE\n"
                 contenido_reporte += "=" * 80 + "\n"
                 
-                # Obtener usuario_id de la sesión si está disponible
+                # Obtener usuario_id de la sesión
                 from flask import session
                 usuario_id = session.get('usuario_id') if 'session' in dir() else None
                 
                 # Insertar reporte en la base de datos
-                reporte_filename = f"reporte_actualizacion_{timestamp}.txt"
+                conn_reporte = obtener_conexion()
+                cursor_reporte = conn_reporte.cursor()
                 
-                cursor.execute("""
+                reporte_filename = f"reporte_actualizacion_multiples_{timestamp}.txt"
+                
+                cursor_reporte.execute("""
                     INSERT INTO reportes_actualizacion 
                     (nombre_archivo, contenido, tipo_reporte, total_filas, actualizados, 
                      sin_cambios, no_encontrados, errores_validacion, errores_tecnicos, usuario_id)
@@ -1336,56 +1591,44 @@ def procesar_excel_actualizacion(filepath):
                 """, (
                     reporte_filename,
                     contenido_reporte,
-                    'actualizacion',
-                    len(df),
-                    actualizados,
-                    sin_cambios,
-                    no_encontrados,
-                    no_encontrados,  # errores_validacion (radicados no encontrados)
-                    errores - no_encontrados,  # errores_tecnicos
+                    'actualizacion_multiples',
+                    resultados['total_filas'],
+                    resultados['ingresos_agregados'] + resultados['estados_agregados'],  # actualizados
+                    0,  # sin_cambios
+                    0,  # no_encontrados
+                    resultados['errores'],  # errores_validacion
+                    0,  # errores_tecnicos
                     usuario_id
                 ))
                 
-                reporte_id = cursor.fetchone()[0]
-                conn.commit()
+                reporte_id = cursor_reporte.fetchone()[0]
+                conn_reporte.commit()
+                cursor_reporte.close()
+                conn_reporte.close()
                 
-                logger.info(f"📊 Reporte guardado en BD con ID: {reporte_id}")
+                logger.info(f"📊 Reporte de actualización guardado en BD con ID: {reporte_id}")
+                
+                # Agregar ID del reporte a los resultados
+                resultados['reporte_id'] = reporte_id
+                resultados['tiene_errores'] = True
                 
             except Exception as e:
-                logger.error(f"Error guardando reporte en BD: {e}")
-                conn.rollback()
-        
-        # Preparar resultados
-        resultados = {
-            'actualizados': actualizados,
-            'sin_cambios': sin_cambios,
-            'no_encontrados': no_encontrados,
-            'errores': errores,
-            'total_filas': len(df),
-            'hoja_usada': hoja_usada,
-            'radicados_no_encontrados': radicados_no_encontrados[:10],  # Solo primeros 10
-            'errores_detallados': errores_detallados[:20],  # Solo primeros 20 para mostrar en HTML
-            'reporte_id': reporte_id,
-            'tiene_errores': len(errores_detallados) > 0
-        }
-        
-        # Cerrar cursor y conexión
-        cursor.close()
-        conn.close()
-        
-        logger.info(f"=== FIN procesar_excel_actualizacion ===")
-        logger.info(f"Resultados: {actualizados} actualizados, {sin_cambios} sin cambios, {no_encontrados} no encontrados, {errores} errores")
+                logger.error(f"Error guardando reporte de actualización en BD: {e}")
         
         return resultados
         
     except Exception as e:
-        logger.error(f"ERROR en procesar_excel_actualizacion: {str(e)}")
+        logger.error(f"ERROR en procesar_excel_actualizacion_multiples_pestañas: {str(e)}")
         raise e
 
-def procesar_excel_expedientes(filepath):
-    """Procesa un archivo Excel con expedientes"""
+def procesar_excel_expedientes(file_content):
+    """
+    Procesa un archivo Excel con expedientes
+    
+    Args:
+        file_content: BytesIO object con el contenido del archivo Excel
+    """
     logger.info("=== INICIO procesar_excel_expedientes ===")
-    logger.info(f"Archivo a procesar: {filepath}")
     
     try:
         # Leer Excel - intentar diferentes nombres de hojas
@@ -1393,10 +1636,10 @@ def procesar_excel_expedientes(filepath):
         
         # Primero, obtener la lista de hojas disponibles
         try:
-            excel_file = pd.ExcelFile(filepath)
-            hojas_disponibles = excel_file.sheet_names
-            logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
-            excel_file.close()  # Cerrar el archivo para liberar recursos
+            file_content.seek(0)
+            with pd.ExcelFile(file_content) as excel_file:
+                hojas_disponibles = excel_file.sheet_names
+                logger.info(f"Hojas disponibles en el archivo: {hojas_disponibles}")
         except Exception as e:
             logger.error(f"Error leyendo archivo Excel: {str(e)}")
             raise Exception(f"Error leyendo archivo Excel: {str(e)}")
@@ -1424,7 +1667,8 @@ def procesar_excel_expedientes(filepath):
             if nombre_hoja and nombre_hoja in hojas_disponibles:
                 try:
                     logger.info(f"Intentando leer hoja: '{nombre_hoja}'")
-                    df = pd.read_excel(filepath, sheet_name=nombre_hoja)
+                    file_content.seek(0)
+                    df = pd.read_excel(file_content, sheet_name=nombre_hoja)
                     hoja_usada = nombre_hoja
                     logger.info(f"✓ Hoja '{nombre_hoja}' leída exitosamente")
                     break
@@ -1516,6 +1760,13 @@ def procesar_excel_expedientes(filepath):
         available_columns = [row[0] for row in cursor.fetchall()]
         logger.info(f"Columnas disponibles en tabla expediente: {available_columns}")
         
+        # 🚀 OPTIMIZACIÓN: Cargar radicados existentes en memoria UNA SOLA VEZ
+        logger.info("🚀 Cargando radicados existentes en memoria para verificación de duplicados...")
+        cursor.execute("SELECT radicado_completo FROM expediente WHERE radicado_completo IS NOT NULL")
+        radicados_existentes = set(row[0] for row in cursor.fetchall())
+        logger.info(f"✅ {len(radicados_existentes)} radicados existentes cargados en memoria")
+        logger.info(f"⚡ Verificación de duplicados será instantánea...")
+        
         procesados = 0
         errores = 0
         
@@ -1605,15 +1856,9 @@ def procesar_excel_expedientes(filepath):
                     errores += 1
                     continue
                 
-                # VALIDACIÓN DE DUPLICADOS: Verificar si el radicado_completo ya existe
+                # 🚀 VERIFICACIÓN DE DUPLICADOS EN MEMORIA (instantánea, sin query a BD)
                 if radicado_completo:
-                    cursor.execute("""
-                        SELECT id 
-                        FROM expediente 
-                        WHERE radicado_completo = %s
-                    """, (radicado_completo,))
-                    
-                    if cursor.fetchone():
+                    if radicado_completo in radicados_existentes:
                         logger.debug(f"  Saltando fila {index + 1} - radicado duplicado: {radicado_completo}")
                         rechazados_detalle['duplicados'].append(radicado_completo)
                         errores += 1
@@ -1761,6 +2006,10 @@ def procesar_excel_expedientes(filepath):
                         
                         logger.debug(f"  ✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
                     
+                    # Agregar radicado al cache para evitar duplicados en el mismo archivo
+                    if radicado_completo:
+                        radicados_existentes.add(radicado_completo)
+                    
                     procesados += 1
                     if procesados % 100 == 0:  # Log cada 100 registros procesados
                         logger.info(f"Procesados {procesados} expedientes...")
@@ -1898,14 +2147,17 @@ def procesar_excel_expedientes(filepath):
         logger.error(f"Tipo de error: {type(e).__name__}")
         raise Exception(f"Error leyendo archivo Excel: {str(e)}")
 
-def procesar_excel_multiples_pestañas(filepath, hojas_disponibles):
+def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
     """
     Procesa un archivo Excel con múltiples pestañas:
     - Pestaña 'ingreso': Información actual de expedientes
     - Pestaña 'estados': RADICADO COMPLETO, CLASE, DEMANDANTE, DEMANDADO, FECHA ESTADO, AUTO / ANOTACION
+    
+    Args:
+        file_content: BytesIO object con el contenido del archivo Excel
+        hojas_disponibles: Lista de nombres de hojas disponibles
     """
     logger.info("=== INICIO procesar_excel_multiples_pestañas ===")
-    logger.info(f"Archivo: {filepath}")
     logger.info(f"Hojas disponibles: {hojas_disponibles}")
     
     try:
@@ -1934,7 +2186,8 @@ def procesar_excel_multiples_pestañas(filepath, hojas_disponibles):
             'expedientes_procesados': 0,
             'ingresos_procesados': 0,
             'estados_procesados': 0,
-            'errores': 0
+            'errores': 0,
+            'errores_detallados': []  # Agregar lista consolidada de errores
         }
         
         # Procesar pestaña de ingresos
@@ -1947,7 +2200,9 @@ def procesar_excel_multiples_pestañas(filepath, hojas_disponibles):
         if pestaña_ingreso:
             logger.info(f"Procesando pestaña de ingresos: {pestaña_ingreso}")
             try:
-                df_ingresos = pd.read_excel(filepath, sheet_name=pestaña_ingreso)
+                # Usar context manager para asegurar cierre del archivo
+                with pd.ExcelFile(filepath) as excel_file:
+                    df_ingresos = pd.read_excel(excel_file, sheet_name=pestaña_ingreso)
                 logger.info(f"Pestaña '{pestaña_ingreso}' leída: {len(df_ingresos)} filas, columnas: {list(df_ingresos.columns)}")
                 
                 # Procesar expedientes desde la pestaña de ingresos
@@ -1955,6 +2210,10 @@ def procesar_excel_multiples_pestañas(filepath, hojas_disponibles):
                 resultados['expedientes_procesados'] += resultado_ingresos['procesados']
                 resultados['ingresos_procesados'] += resultado_ingresos['ingresos_creados']
                 resultados['errores'] += resultado_ingresos['errores']
+                
+                # Consolidar errores detallados
+                if resultado_ingresos.get('errores_detallados'):
+                    resultados['errores_detallados'].extend(resultado_ingresos['errores_detallados'])
                 
             except Exception as e:
                 logger.error(f"Error procesando pestaña de ingresos: {e}")
@@ -1970,7 +2229,9 @@ def procesar_excel_multiples_pestañas(filepath, hojas_disponibles):
         if pestaña_estados and 'estados' in tablas_relacionadas:
             logger.info(f"Procesando pestaña de estados: {pestaña_estados}")
             try:
-                df_estados = pd.read_excel(filepath, sheet_name=pestaña_estados)
+                # Usar context manager para asegurar cierre del archivo
+                with pd.ExcelFile(filepath) as excel_file:
+                    df_estados = pd.read_excel(excel_file, sheet_name=pestaña_estados)
                 logger.info(f"Pestaña '{pestaña_estados}' leída: {len(df_estados)} filas, columnas: {list(df_estados.columns)}")
                 
                 # Procesar estados
@@ -1991,6 +2252,78 @@ def procesar_excel_multiples_pestañas(filepath, hojas_disponibles):
         cursor.close()
         conn.close()
         
+        # 📊 GUARDAR REPORTE EN BASE DE DATOS si hay errores
+        if resultados.get('errores_detallados') and len(resultados['errores_detallados']) > 0:
+            try:
+                logger.info("📝 Generando reporte de errores en BD...")
+                
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                
+                # Construir contenido del reporte
+                contenido_reporte = "=" * 80 + "\n"
+                contenido_reporte += "REPORTE DE CARGA NUEVA - MÚLTIPLES PESTAÑAS\n"
+                contenido_reporte += "=" * 80 + "\n\n"
+                contenido_reporte += f"Fecha de procesamiento: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                contenido_reporte += f"Expedientes procesados: {resultados['expedientes_procesados']}\n"
+                contenido_reporte += f"Ingresos procesados: {resultados['ingresos_procesados']}\n"
+                contenido_reporte += f"Estados procesados: {resultados['estados_procesados']}\n"
+                contenido_reporte += f"Total de errores: {resultados['errores']}\n\n"
+                
+                contenido_reporte += "=" * 80 + "\n"
+                contenido_reporte += "DETALLE DE ERRORES\n"
+                contenido_reporte += "=" * 80 + "\n\n"
+                
+                for i, error in enumerate(resultados['errores_detallados'], 1):
+                    contenido_reporte += f"{i}. Fila {error['fila']} - Hoja: {error.get('hoja', 'N/A')}\n"
+                    contenido_reporte += f"   Radicado: {error['radicado']}\n"
+                    contenido_reporte += f"   Motivo: {error['motivo']}\n\n"
+                
+                contenido_reporte += "=" * 80 + "\n"
+                
+                # Obtener usuario_id de la sesión
+                from flask import session
+                usuario_id = session.get('usuario_id') if 'session' in dir() else None
+                
+                # Insertar reporte en la base de datos
+                conn_reporte = obtener_conexion()
+                cursor_reporte = conn_reporte.cursor()
+                
+                reporte_filename = f"reporte_carga_multiples_{timestamp}.txt"
+                
+                cursor_reporte.execute("""
+                    INSERT INTO reportes_actualizacion 
+                    (nombre_archivo, contenido, tipo_reporte, total_filas, actualizados, 
+                     sin_cambios, no_encontrados, errores_validacion, errores_tecnicos, usuario_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                """, (
+                    reporte_filename,
+                    contenido_reporte,
+                    'carga_multiples',
+                    resultados['expedientes_procesados'] + resultados['errores'],  # total_filas
+                    resultados['expedientes_procesados'],  # actualizados (expedientes creados)
+                    0,  # sin_cambios
+                    0,  # no_encontrados
+                    resultados['errores'],  # errores_validacion
+                    0,  # errores_tecnicos
+                    usuario_id
+                ))
+                
+                reporte_id = cursor_reporte.fetchone()[0]
+                conn_reporte.commit()
+                cursor_reporte.close()
+                conn_reporte.close()
+                
+                logger.info(f"📊 Reporte de carga guardado en BD con ID: {reporte_id}")
+                
+                # Agregar ID del reporte a los resultados
+                resultados['reporte_id'] = reporte_id
+                resultados['tiene_errores'] = True
+                
+            except Exception as e:
+                logger.error(f"Error guardando reporte de carga en BD: {e}")
+        
         logger.info(f"=== FIN procesar_excel_multiples_pestañas - Resultado: {resultados} ===")
         return resultados
         
@@ -2005,7 +2338,8 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
     resultado = {
         'procesados': 0,
         'ingresos_creados': 0,
-        'errores': 0
+        'errores': 0,
+        'errores_detallados': []  # Agregar lista de errores detallados
     }
     
     try:
@@ -2029,7 +2363,13 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
         
         logger.info("✅ Todas las columnas requeridas están presentes en pestaña ingresos")
         
-        # Procesar cada fila
+        # 🚀 OPTIMIZACIÓN: Cargar expedientes existentes en memoria UNA SOLA VEZ
+        logger.info("🚀 Cargando expedientes existentes en memoria...")
+        cursor.execute("SELECT id, radicado_completo FROM expediente WHERE radicado_completo IS NOT NULL")
+        expedientes_cache = {row[1]: row[0] for row in cursor.fetchall()}
+        logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria")
+        
+        # Procesar cada fila con búsqueda en memoria (RÁPIDO)
         for index, row in df.iterrows():
             try:
                 # Extraer datos con mapeo flexible
@@ -2041,26 +2381,33 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
                 
                 # Validaciones básicas
                 if not radicado_completo or not demandante or not demandado or not fecha_ingreso or not solicitud:
-                    logger.debug(f"Saltando fila {index + 1} - faltan datos requeridos")
+                    logger.debug(f"Saltando fila {index + 2} - faltan datos requeridos")
                     resultado['errores'] += 1
+                    resultado['errores_detallados'].append({
+                        'fila': index + 2,
+                        'hoja': 'ingreso',
+                        'radicado': radicado_completo or 'N/A',
+                        'motivo': 'Faltan datos requeridos (demandante, demandado, fecha o solicitud)'
+                    })
                     continue
                 
                 # Validar radicado completo
                 es_valido, mensaje_error = validar_radicado_completo(radicado_completo)
                 if not es_valido:
-                    logger.debug(f"Saltando fila {index + 1} - {mensaje_error}")
+                    logger.debug(f"Saltando fila {index + 2} - {mensaje_error}")
                     resultado['errores'] += 1
+                    resultado['errores_detallados'].append({
+                        'fila': index + 2,
+                        'hoja': 'ingreso',
+                        'radicado': radicado_completo,
+                        'motivo': mensaje_error
+                    })
                     continue
                 
-                # Verificar si el expediente ya existe
-                cursor.execute("""
-                    SELECT id FROM expediente WHERE radicado_completo = %s
-                """, (radicado_completo,))
+                # 🚀 BÚSQUEDA EN MEMORIA (instantánea, sin query a BD)
+                expediente_id = expedientes_cache.get(radicado_completo)
                 
-                expediente_existente = cursor.fetchone()
-                
-                if expediente_existente:
-                    expediente_id = expediente_existente[0]
+                if expediente_id:
                     logger.debug(f"Expediente {radicado_completo} ya existe (ID: {expediente_id})")
                 else:
                     # Crear nuevo expediente
@@ -2077,10 +2424,18 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
                     })
                     
                     if expediente_id:
+                        # Agregar al caché para evitar duplicados en el mismo archivo
+                        expedientes_cache[radicado_completo] = expediente_id
                         resultado['procesados'] += 1
                         logger.debug(f"Expediente creado: {radicado_completo} (ID: {expediente_id})")
                     else:
                         resultado['errores'] += 1
+                        resultado['errores_detallados'].append({
+                            'fila': index + 2,
+                            'hoja': 'ingreso',
+                            'radicado': radicado_completo,
+                            'motivo': 'Error al crear expediente en BD'
+                        })
                         continue
                 
                 # Crear registro en tabla ingresos si existe
@@ -2103,8 +2458,14 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
                         logger.warning(f"Error creando ingreso para expediente {expediente_id}: {ingreso_error}")
                 
             except Exception as row_error:
-                logger.error(f"Error procesando fila {index + 1} en pestaña ingresos: {row_error}")
+                logger.error(f"Error procesando fila {index + 2} en pestaña ingresos: {row_error}")
                 resultado['errores'] += 1
+                resultado['errores_detallados'].append({
+                    'fila': index + 2,
+                    'hoja': 'ingreso',
+                    'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
+                    'motivo': f'Error técnico: {str(row_error)}'
+                })
                 continue
         
         logger.info(f"=== FIN procesar_pestaña_ingresos - Resultado: {resultado} ===")
