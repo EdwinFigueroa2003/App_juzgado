@@ -2267,6 +2267,46 @@ def eliminar_expediente():
                 logger.warning(f"Tabla {tabla} no existe")
                 registros_eliminados[tabla] = 0
         
+        # 🎫 RECALCULAR TURNOS: Si el expediente eliminado tenía turno, reajustar secuencia
+        try:
+            logger.info("🎫 Verificando si es necesario recalcular turnos...")
+            
+            # Obtener todos los expedientes con estado "Activo Pendiente" y turno asignado
+            cursor.execute("""
+                SELECT id, turno 
+                FROM expediente 
+                WHERE estado = 'Activo Pendiente' 
+                  AND turno IS NOT NULL 
+                ORDER BY turno
+            """)
+            
+            expedientes_con_turno = cursor.fetchall()
+            
+            if expedientes_con_turno:
+                logger.info(f"📊 Encontrados {len(expedientes_con_turno)} expedientes con turno")
+                
+                # Reasignar turnos secuencialmente (1, 2, 3, ...)
+                turnos_actualizados = 0
+                for nuevo_turno, (exp_id, turno_viejo) in enumerate(expedientes_con_turno, start=1):
+                    if turno_viejo != nuevo_turno:
+                        cursor.execute("""
+                            UPDATE expediente 
+                            SET turno = %s 
+                            WHERE id = %s
+                        """, (nuevo_turno, exp_id))
+                        turnos_actualizados += 1
+                
+                if turnos_actualizados > 0:
+                    logger.info(f"✅ Turnos recalculados: {turnos_actualizados} expedientes actualizados")
+                else:
+                    logger.info(f"ℹ️ Turnos ya estaban en secuencia correcta")
+            else:
+                logger.info(f"ℹ️ No hay expedientes con turno para recalcular")
+        
+        except Exception as turno_error:
+            logger.warning(f"⚠️ Error recalculando turnos: {turno_error}")
+            # No detener el proceso, el expediente ya fue eliminado
+        
         conn.commit()
         cursor.close()
         conn.close()
