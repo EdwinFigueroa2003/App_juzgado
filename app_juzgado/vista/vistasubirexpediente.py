@@ -1522,6 +1522,145 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             resultados['estados_agregados'] += 1
                             logger.debug(f"✅ Estado agregado para expediente {radicado_completo}")
                             
+                            # 🔄 ACTUALIZAR AUTOMÁTICAMENTE EL CAMPO 'estado' EN TABLA EXPEDIENTE
+                            # Basado en la lógica de actualizar_estados_expedientes.py
+                            try:
+                                # Obtener última fecha de ingreso
+                                cursor_estados.execute("""
+                                    SELECT MAX(fecha_ingreso) 
+                                    FROM ingresos 
+                                    WHERE expediente_id = %s
+                                """, (expediente_id,))
+                                
+                                result_ingreso = cursor_estados.fetchone()
+                                ultima_fecha_ingreso = result_ingreso[0] if result_ingreso else None
+                                
+                                # Obtener última fecha de estado (incluyendo el que acabamos de insertar)
+                                cursor_estados.execute("""
+                                    SELECT MAX(fecha_estado) 
+                                    FROM estados 
+                                    WHERE expediente_id = %s
+                                """, (expediente_id,))
+                                
+                                result_estado = cursor_estados.fetchone()
+                                ultima_fecha_estado = result_estado[0] if result_estado else None
+                                
+                                # Calcular estado correcto
+                                estado_nuevo = None
+                                
+                                if ultima_fecha_ingreso and ultima_fecha_estado:
+                                    # Normalizar fechas para comparación
+                                    from datetime import datetime, date
+                                    
+                                    if isinstance(ultima_fecha_ingreso, str):
+                                        ultima_fecha_ingreso = datetime.strptime(ultima_fecha_ingreso, '%Y-%m-%d').date()
+                                    elif isinstance(ultima_fecha_ingreso, datetime):
+                                        ultima_fecha_ingreso = ultima_fecha_ingreso.date()
+                                    
+                                    if isinstance(ultima_fecha_estado, str):
+                                        ultima_fecha_estado = datetime.strptime(ultima_fecha_estado, '%Y-%m-%d').date()
+                                    elif isinstance(ultima_fecha_estado, datetime):
+                                        ultima_fecha_estado = ultima_fecha_estado.date()
+                                    
+                                    if ultima_fecha_ingreso > ultima_fecha_estado:
+                                        # Ingreso más reciente → Activo Pendiente
+                                        estado_nuevo = "Activo Pendiente"
+                                    else:
+                                        # Estado más reciente → Verificar antigüedad
+                                        dias_desde_ultimo_estado = (date.today() - ultima_fecha_estado).days
+                                        
+                                        if dias_desde_ultimo_estado <= 365:
+                                            estado_nuevo = "Activo Resuelto"
+                                        else:
+                                            estado_nuevo = "Inactivo Resuelto"
+                                
+                                elif ultima_fecha_estado:
+                                    # Solo hay estados → Verificar antigüedad
+                                    from datetime import datetime, date
+                                    
+                                    if isinstance(ultima_fecha_estado, str):
+                                        ultima_fecha_estado = datetime.strptime(ultima_fecha_estado, '%Y-%m-%d').date()
+                                    elif isinstance(ultima_fecha_estado, datetime):
+                                        ultima_fecha_estado = ultima_fecha_estado.date()
+                                    
+                                    dias_desde_ultimo_estado = (date.today() - ultima_fecha_estado).days
+                                    
+                                    if dias_desde_ultimo_estado <= 365:
+                                        estado_nuevo = "Activo Resuelto"
+                                    else:
+                                        estado_nuevo = "Inactivo Resuelto"
+                                
+                                elif ultima_fecha_ingreso:
+                                    # Solo hay ingresos → Activo Pendiente
+                                    estado_nuevo = "Activo Pendiente"
+                                
+                                # Actualizar el campo estado en expediente
+                                if estado_nuevo:
+                                    cursor_estados.execute("""
+                                        UPDATE expediente 
+                                        SET estado = %s 
+                                        WHERE id = %s
+                                    """, (estado_nuevo, expediente_id))
+                                    
+                                    conn_estados.commit()
+                                    logger.debug(f"🔄 Estado del expediente actualizado a: {estado_nuevo}")
+                                    
+                                    # 🎫 GESTIÓN DE TURNOS: Si el estado cambió a Resuelto, eliminar turno y recalcular
+                                    if estado_nuevo in ["Activo Resuelto", "Inactivo Resuelto"]:
+                                        try:
+                                            # Verificar si el expediente tenía turno asignado
+                                            cursor_estados.execute("""
+                                                SELECT turno FROM expediente WHERE id = %s
+                                            """, (expediente_id,))
+                                            
+                                            result_turno = cursor_estados.fetchone()
+                                            turno_anterior = result_turno[0] if result_turno else None
+                                            
+                                            if turno_anterior:
+                                                logger.debug(f"🎫 Expediente tenía turno {turno_anterior} - eliminando y recalculando")
+                                                
+                                                # 1. Eliminar turno del expediente resuelto
+                                                cursor_estados.execute("""
+                                                    UPDATE expediente 
+                                                    SET turno = NULL 
+                                                    WHERE id = %s
+                                                """, (expediente_id,))
+                                                
+                                                # 2. Recalcular turnos de expedientes con estado "Activo Pendiente"
+                                                # Obtener todos los expedientes con turno, ordenados por turno actual
+                                                cursor_estados.execute("""
+                                                    SELECT id, turno 
+                                                    FROM expediente 
+                                                    WHERE estado = 'Activo Pendiente' 
+                                                      AND turno IS NOT NULL 
+                                                    ORDER BY turno
+                                                """)
+                                                
+                                                expedientes_con_turno = cursor_estados.fetchall()
+                                                
+                                                # Reasignar turnos secuencialmente (1, 2, 3, ...)
+                                                for nuevo_turno, (exp_id, turno_viejo) in enumerate(expedientes_con_turno, start=1):
+                                                    if turno_viejo != nuevo_turno:
+                                                        cursor_estados.execute("""
+                                                            UPDATE expediente 
+                                                            SET turno = %s 
+                                                            WHERE id = %s
+                                                        """, (nuevo_turno, exp_id))
+                                                
+                                                conn_estados.commit()
+                                                logger.debug(f"✅ Turnos recalculados: {len(expedientes_con_turno)} expedientes actualizados")
+                                            else:
+                                                logger.debug(f"ℹ️ Expediente no tenía turno asignado - no se requiere recálculo")
+                                        
+                                        except Exception as turno_error:
+                                            logger.warning(f"⚠️ Error gestionando turnos para expediente {expediente_id}: {turno_error}")
+                                            # No detener el proceso, el estado ya fue actualizado correctamente
+                                
+                            except Exception as update_error:
+                                logger.warning(f"⚠️ Error actualizando estado del expediente {expediente_id}: {update_error}")
+                                # No detener el proceso, el estado ya fue insertado correctamente
+                            
+                            
                         except Exception as e:
                             logger.error(f"❌ Error procesando fila {index + 2} de estados: {e}")
                             resultados['errores'] += 1
@@ -2009,6 +2148,76 @@ def procesar_excel_expedientes(file_content):
                         
                         logger.debug(f"  ✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
                     
+                    # 📥 INSERTAR AUTOMÁTICAMENTE EN TABLA INGRESOS
+                    # Verificar si existe la tabla ingresos
+                    cursor.execute("""
+                        SELECT table_name 
+                        FROM information_schema.tables 
+                        WHERE table_name = 'ingresos'
+                    """)
+                    
+                    if cursor.fetchone():
+                        logger.debug(f"  📥 Insertando ingreso automático para expediente {expediente_id}")
+                        
+                        # Preparar datos para inserción en ingresos
+                        # fecha_ingreso ya está disponible de la fila del Excel
+                        # solicitud ya está disponible de la fila del Excel
+                        # observaciones ya está disponible de la fila del Excel (si existe)
+                        
+                        # Extraer observaciones si no se hizo antes
+                        observaciones_ingreso = None
+                        for col_name in ['OBSERVACIONES', 'observaciones', 'Observaciones']:
+                            if col_name in df.columns and pd.notna(row.get(col_name)):
+                                observaciones_ingreso = str(row.get(col_name)).strip()
+                                break
+                        
+                        # Si no hay observaciones, usar un valor por defecto
+                        if not observaciones_ingreso:
+                            observaciones_ingreso = 'Ingreso desde Excel - Carga masiva'
+                        
+                        try:
+                            cursor.execute("""
+                                INSERT INTO ingresos (expediente_id, fecha_ingreso, solicitud, observaciones)
+                                VALUES (%s, %s, %s, %s)
+                            """, (expediente_id, fecha_ingreso, solicitud, observaciones_ingreso))
+                            
+                            logger.debug(f"  ✅ Ingreso creado para expediente {expediente_id}")
+                        except Exception as ingreso_error:
+                            logger.warning(f"  ⚠️ Error insertando ingreso para expediente {expediente_id}: {ingreso_error}")
+                            # No detener el proceso, solo registrar el error
+                    else:
+                        logger.debug(f"  ℹ️ Tabla 'ingresos' no existe - saltando inserción de ingreso")
+                    
+                    # 📤 INSERTAR AUTOMÁTICAMENTE EN TABLA ESTADOS (si hay estado)
+                    if estado_expediente:
+                        cursor.execute("""
+                            SELECT table_name 
+                            FROM information_schema.tables 
+                            WHERE table_name = 'estados'
+                        """)
+                        
+                        if cursor.fetchone():
+                            logger.debug(f"  📤 Insertando estado inicial para expediente {expediente_id}")
+                            
+                            try:
+                                cursor.execute("""
+                                    INSERT INTO estados (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
+                                    VALUES (%s, %s, %s, %s, %s)
+                                """, (
+                                    expediente_id, 
+                                    estado_expediente,  # clase = estado del expediente
+                                    fecha_ingreso,  # fecha_estado = fecha de ingreso
+                                    f'Estado inicial: {estado_expediente}',  # auto_anotacion
+                                    'Estado inicial desde Excel - Carga masiva'  # observaciones
+                                ))
+                                
+                                logger.debug(f"  ✅ Estado inicial creado para expediente {expediente_id}")
+                            except Exception as estado_error:
+                                logger.warning(f"  ⚠️ Error insertando estado para expediente {expediente_id}: {estado_error}")
+                                # No detener el proceso, solo registrar el error
+                        else:
+                            logger.debug(f"  ℹ️ Tabla 'estados' no existe - saltando inserción de estado")
+                    
                     # Agregar radicado al cache para evitar duplicados en el mismo archivo
                     if radicado_completo:
                         radicados_existentes.add(radicado_completo)
@@ -2047,7 +2256,6 @@ def procesar_excel_expedientes(file_content):
                 contenido_reporte += "REPORTE DE CARGA DE EXPEDIENTES NUEVOS\n"
                 contenido_reporte += "=" * 80 + "\n"
                 contenido_reporte += f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                contenido_reporte += f"Archivo procesado: {os.path.basename(filepath)}\n"
                 contenido_reporte += f"Hoja utilizada: {hoja_usada}\n"
                 contenido_reporte += "\n"
                 contenido_reporte += "RESUMEN:\n"
