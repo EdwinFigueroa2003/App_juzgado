@@ -1115,7 +1115,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
             'estados_agregados': 0,
             'errores': 0,
             'total_filas': 0,
-            'errores_detallados': []
+            'errores_detallados': [],
+            'ingresos_exitosos': [],  # Lista para rastrear ingresos exitosos
+            'estados_exitosos': []     # Lista para rastrear estados exitosos
         }
         
         # Procesar pestaña de ingresos (si existe)
@@ -1302,6 +1304,14 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             ingresos_insertados_cache.add(cache_key)  # Agregar al caché
                             resultados['ingresos_agregados'] += 1
                             logger.debug(f"✅ Ingreso agregado para expediente {radicado_completo}")
+                            
+                            # Registrar ingreso exitoso para el reporte
+                            resultados['ingresos_exitosos'].append({
+                                'fila': index + 2,
+                                'radicado': radicado_completo,
+                                'fecha_ingreso': str(fecha_ingreso),
+                                'solicitud': solicitud[:50] if solicitud and len(solicitud) > 50 else solicitud  # Limitar longitud
+                            })
                             
                         except Exception as e:
                             logger.error(f"❌ Error procesando fila {index + 2} de ingresos: {e}")
@@ -1522,6 +1532,15 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             resultados['estados_agregados'] += 1
                             logger.debug(f"✅ Estado agregado para expediente {radicado_completo}")
                             
+                            # Registrar estado exitoso para el reporte
+                            resultados['estados_exitosos'].append({
+                                'fila': index + 2,
+                                'radicado': radicado_completo,
+                                'fecha_estado': str(fecha_estado),
+                                'clase': clase[:50] if clase and len(clase) > 50 else clase,  # Limitar longitud
+                                'auto_anotacion': auto_anotacion[:50] if auto_anotacion and len(auto_anotacion) > 50 else auto_anotacion
+                            })
+                            
                             # 🔄 ACTUALIZAR AUTOMÁTICAMENTE EL CAMPO 'estado' EN TABLA EXPEDIENTE
                             # Basado en la lógica de actualizar_estados_expedientes.py
                             try:
@@ -1703,14 +1722,47 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 contenido_reporte += f"Estados agregados: {resultados['estados_agregados']}\n"
                 contenido_reporte += f"Total de errores: {resultados['errores']}\n\n"
                 
+                # SECCIÓN DE REGISTROS EXITOSOS
+                if resultados.get('ingresos_exitosos') or resultados.get('estados_exitosos'):
+                    contenido_reporte += "=" * 80 + "\n"
+                    contenido_reporte += "REGISTROS PROCESADOS EXITOSAMENTE\n"
+                    contenido_reporte += "=" * 80 + "\n\n"
+                    
+                    # Ingresos exitosos
+                    if resultados.get('ingresos_exitosos'):
+                        contenido_reporte += f"INGRESOS AGREGADOS ({len(resultados['ingresos_exitosos'])}):\n"
+                        contenido_reporte += "-" * 80 + "\n"
+                        for i, ingreso in enumerate(resultados['ingresos_exitosos'][:100], 1):  # Limitar a 100
+                            contenido_reporte += f"{i}. Fila {ingreso['fila']} - Radicado: {ingreso['radicado']}\n"
+                            contenido_reporte += f"   Fecha: {ingreso['fecha_ingreso']} | Solicitud: {ingreso['solicitud']}\n\n"
+                        
+                        if len(resultados['ingresos_exitosos']) > 100:
+                            contenido_reporte += f"   ... y {len(resultados['ingresos_exitosos']) - 100} ingresos más\n\n"
+                    
+                    # Estados exitosos
+                    if resultados.get('estados_exitosos'):
+                        contenido_reporte += f"ESTADOS AGREGADOS ({len(resultados['estados_exitosos'])}):\n"
+                        contenido_reporte += "-" * 80 + "\n"
+                        for i, estado in enumerate(resultados['estados_exitosos'][:100], 1):  # Limitar a 100
+                            contenido_reporte += f"{i}. Fila {estado['fila']} - Radicado: {estado['radicado']}\n"
+                            contenido_reporte += f"   Fecha: {estado['fecha_estado']} | Clase: {estado['clase']}\n"
+                            contenido_reporte += f"   Auto/Anotación: {estado['auto_anotacion']}\n\n"
+                        
+                        if len(resultados['estados_exitosos']) > 100:
+                            contenido_reporte += f"   ... y {len(resultados['estados_exitosos']) - 100} estados más\n\n"
+                
+                # SECCIÓN DE ERRORES
                 contenido_reporte += "=" * 80 + "\n"
                 contenido_reporte += "DETALLE DE ERRORES\n"
                 contenido_reporte += "=" * 80 + "\n\n"
                 
-                for i, error in enumerate(resultados['errores_detallados'], 1):
-                    contenido_reporte += f"{i}. Fila {error['fila']} - Hoja: {error.get('hoja', 'N/A')}\n"
-                    contenido_reporte += f"   Radicado: {error['radicado']}\n"
-                    contenido_reporte += f"   Motivo: {error['motivo']}\n\n"
+                if resultados['errores_detallados']:
+                    for i, error in enumerate(resultados['errores_detallados'], 1):
+                        contenido_reporte += f"{i}. Fila {error['fila']} - Hoja: {error.get('hoja', 'N/A')}\n"
+                        contenido_reporte += f"   Radicado: {error['radicado']}\n"
+                        contenido_reporte += f"   Motivo: {error['motivo']}\n\n"
+                else:
+                    contenido_reporte += "No se encontraron errores.\n\n"
                 
                 contenido_reporte += "=" * 80 + "\n"
                 
