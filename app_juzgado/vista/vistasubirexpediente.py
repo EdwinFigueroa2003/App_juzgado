@@ -982,7 +982,38 @@ def procesar_excel_actualizacion(file_content):
         
         # Crear diccionario en memoria: {radicado: expediente_id}
         expedientes_cache = {row[1]: row[0] for row in cursor.fetchall()}
-        logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria")
+        
+        # 🔍 BÚSQUEDA ADICIONAL: Para radicados no encontrados, buscar por últimos 13 dígitos
+        radicados_no_encontrados = [r for r in radicados_excel if r not in expedientes_cache]
+        
+        if radicados_no_encontrados:
+            logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados por últimos 13 dígitos...")
+            
+            # Obtener todos los radicados de la BD para comparar últimos 13 dígitos
+            cursor.execute("""
+                SELECT id, radicado_completo 
+                FROM expediente 
+                WHERE radicado_completo IS NOT NULL 
+                AND LENGTH(radicado_completo) >= 13
+            """)
+            
+            todos_radicados_bd = cursor.fetchall()
+            
+            # Para cada radicado no encontrado, buscar por últimos 13 dígitos
+            for radicado_excel in radicados_no_encontrados:
+                if len(radicado_excel) >= 13:
+                    ultimos_13_excel = radicado_excel[-13:]
+                    
+                    # Buscar en BD si algún radicado tiene los mismos últimos 13 dígitos
+                    for exp_id, radicado_bd in todos_radicados_bd:
+                        if len(radicado_bd) >= 13 and radicado_bd[-13:] == ultimos_13_excel:
+                            # Agregar al caché usando el radicado del Excel como clave
+                            expedientes_cache[radicado_excel] = exp_id
+                            if not IS_PRODUCTION:
+                                logger.debug(f"✓ Radicado {radicado_excel} encontrado por últimos 13 dígitos: {radicado_bd}")
+                            break
+        
+        logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria (incluyendo búsqueda por últimos 13 dígitos)")
         logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
 
         actualizados = 0
@@ -1175,6 +1206,7 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 conn_cache = obtener_conexion()
                 cursor_cache = conn_cache.cursor()
                 
+                # Buscar por radicado completo exacto
                 cursor_cache.execute("""
                     SELECT id, radicado_completo 
                     FROM expediente 
@@ -1183,10 +1215,41 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 
                 # Crear diccionario en memoria: {radicado: expediente_id}
                 expedientes_cache = {row[1]: row[0] for row in cursor_cache.fetchall()}
+                
+                # 🔍 BÚSQUEDA ADICIONAL: Para radicados no encontrados, buscar por últimos 13 dígitos
+                radicados_no_encontrados = [r for r in radicados_excel if r not in expedientes_cache]
+                
+                if radicados_no_encontrados:
+                    logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados por últimos 13 dígitos...")
+                    
+                    # Obtener todos los radicados de la BD para comparar últimos 13 dígitos
+                    cursor_cache.execute("""
+                        SELECT id, radicado_completo 
+                        FROM expediente 
+                        WHERE radicado_completo IS NOT NULL 
+                        AND LENGTH(radicado_completo) >= 13
+                    """)
+                    
+                    todos_radicados_bd = cursor_cache.fetchall()
+                    
+                    # Para cada radicado no encontrado, buscar por últimos 13 dígitos
+                    for radicado_excel in radicados_no_encontrados:
+                        if len(radicado_excel) >= 13:
+                            ultimos_13_excel = radicado_excel[-13:]
+                            
+                            # Buscar en BD si algún radicado tiene los mismos últimos 13 dígitos
+                            for exp_id, radicado_bd in todos_radicados_bd:
+                                if len(radicado_bd) >= 13 and radicado_bd[-13:] == ultimos_13_excel:
+                                    # Agregar al caché usando el radicado del Excel como clave
+                                    expedientes_cache[radicado_excel] = exp_id
+                                    if not IS_PRODUCTION:
+                                        logger.debug(f"✓ Radicado {radicado_excel} encontrado por últimos 13 dígitos: {radicado_bd}")
+                                    break
+                
                 cursor_cache.close()
                 conn_cache.close()
                 
-                logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria")
+                logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria (incluyendo búsqueda por últimos 13 dígitos)")
                 logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
                 
                 # Usar UNA SOLA conexión para todas las filas
@@ -1398,6 +1461,7 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 conn_cache_estados = obtener_conexion()
                 cursor_cache_estados = conn_cache_estados.cursor()
                 
+                # Buscar por radicado completo exacto
                 cursor_cache_estados.execute("""
                     SELECT id, radicado_completo 
                     FROM expediente 
@@ -1406,10 +1470,41 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 
                 # Crear diccionario en memoria: {radicado: expediente_id}
                 expedientes_cache_estados = {row[1]: row[0] for row in cursor_cache_estados.fetchall()}
+                
+                # 🔍 BÚSQUEDA ADICIONAL: Para radicados no encontrados, buscar por últimos 13 dígitos
+                radicados_no_encontrados = [r for r in radicados_excel_estados if r not in expedientes_cache_estados]
+                
+                if radicados_no_encontrados:
+                    logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados por últimos 13 dígitos...")
+                    
+                    # Obtener todos los radicados de la BD para comparar últimos 13 dígitos
+                    cursor_cache_estados.execute("""
+                        SELECT id, radicado_completo 
+                        FROM expediente 
+                        WHERE radicado_completo IS NOT NULL 
+                        AND LENGTH(radicado_completo) >= 13
+                    """)
+                    
+                    todos_radicados_bd = cursor_cache_estados.fetchall()
+                    
+                    # Para cada radicado no encontrado, buscar por últimos 13 dígitos
+                    for radicado_excel in radicados_no_encontrados:
+                        if len(radicado_excel) >= 13:
+                            ultimos_13_excel = radicado_excel[-13:]
+                            
+                            # Buscar en BD si algún radicado tiene los mismos últimos 13 dígitos
+                            for exp_id, radicado_bd in todos_radicados_bd:
+                                if len(radicado_bd) >= 13 and radicado_bd[-13:] == ultimos_13_excel:
+                                    # Agregar al caché usando el radicado del Excel como clave
+                                    expedientes_cache_estados[radicado_excel] = exp_id
+                                    if not IS_PRODUCTION:
+                                        logger.debug(f"✓ Radicado {radicado_excel} encontrado por últimos 13 dígitos: {radicado_bd}")
+                                    break
+                
                 cursor_cache_estados.close()
                 conn_cache_estados.close()
                 
-                logger.info(f"✅ {len(expedientes_cache_estados)} expedientes cargados en memoria")
+                logger.info(f"✅ {len(expedientes_cache_estados)} expedientes cargados en memoria (incluyendo búsqueda por últimos 13 dígitos)")
                 logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
                 
                 # Usar UNA SOLA conexión para todas las filas DE ESTADOS
