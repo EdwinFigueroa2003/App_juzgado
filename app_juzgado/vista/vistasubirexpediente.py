@@ -2011,9 +2011,17 @@ def procesar_excel_expedientes(file_content):
         
         # 🚀 OPTIMIZACIÓN: Cargar radicados existentes en memoria UNA SOLA VEZ
         logger.info("🚀 Cargando radicados existentes en memoria para verificación de duplicados...")
+        
+        # Cargar radicados completos (23 dígitos)
         cursor.execute("SELECT radicado_completo FROM expediente WHERE radicado_completo IS NOT NULL")
         radicados_existentes = set(row[0] for row in cursor.fetchall())
-        logger.info(f"✅ {len(radicados_existentes)} radicados existentes cargados en memoria")
+        
+        # Cargar también los últimos 13 dígitos de cada radicado para verificación flexible
+        cursor.execute("SELECT radicado_completo FROM expediente WHERE radicado_completo IS NOT NULL AND LENGTH(radicado_completo) >= 13")
+        radicados_ultimos_13 = set(row[0][-13:] for row in cursor.fetchall())
+        
+        logger.info(f"✅ {len(radicados_existentes)} radicados completos cargados en memoria")
+        logger.info(f"✅ {len(radicados_ultimos_13)} radicados (últimos 13 dígitos) cargados para verificación flexible")
         logger.info(f"⚡ Verificación de duplicados será instantánea...")
         
         procesados = 0
@@ -2109,13 +2117,24 @@ def procesar_excel_expedientes(file_content):
                     continue
                 
                 # 🚀 VERIFICACIÓN DE DUPLICADOS EN MEMORIA (instantánea, sin query a BD)
+                # Primero verificar por radicado completo (23 dígitos)
                 if radicado_completo:
                     if radicado_completo in radicados_existentes:
                         if not IS_PRODUCTION:
-                            logger.debug(f"  Saltando fila {index + 1} - radicado duplicado: {radicado_completo}")
+                            logger.debug(f"  Saltando fila {index + 1} - radicado duplicado (23 dígitos): {radicado_completo}")
                         rechazados_detalle['duplicados'].append(radicado_completo)
                         errores += 1
                         continue
+                    
+                    # Si no se encontró por 23 dígitos, verificar por últimos 13 dígitos
+                    if len(radicado_completo) >= 13:
+                        ultimos_13 = radicado_completo[-13:]
+                        if ultimos_13 in radicados_ultimos_13:
+                            if not IS_PRODUCTION:
+                                logger.debug(f"  Saltando fila {index + 1} - radicado duplicado (últimos 13 dígitos): {radicado_completo} -> {ultimos_13}")
+                            rechazados_detalle['duplicados'].append(f"{radicado_completo} (coincide con últimos 13: {ultimos_13})")
+                            errores += 1
+                            continue
                 
                 # Validación específica del radicado completo (debe tener exactamente 23 dígitos)
                 if radicado_completo:
