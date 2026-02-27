@@ -7,9 +7,21 @@ import logging
 from datetime import datetime
 from io import BytesIO
 
-# Configurar logging específico para subirexpediente
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# Detectar entorno (producción vs desarrollo)
+IS_PRODUCTION = os.getenv('RAILWAY_ENVIRONMENT') is not None or os.getenv('RENDER') is not None
+
+# Configurar logging según el entorno
+if IS_PRODUCTION:
+    # En producción: Solo INFO, WARNING, ERROR, CRITICAL
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    logger.info("🚀 Modo PRODUCCIÓN: Logs DEBUG desactivados")
+else:
+    # En desarrollo: Todos los niveles incluyendo DEBUG
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+    logger.info("🏠 Modo DESARROLLO: Logs DEBUG activados")
 
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -68,8 +80,9 @@ def obtener_roles_activos():
         
         roles = cursor.fetchall()
         logger.info(f"Roles obtenidos: {len(roles)} registros")
-        for rol in roles:
-            logger.debug(f"Rol encontrado: ID={rol[0]}, Nombre={rol[1]}")
+        if not IS_PRODUCTION:
+            for rol in roles:
+                logger.debug(f"Rol encontrado: ID={rol[0]}, Nombre={rol[1]}")
         
         cursor.close()
         conn.close()
@@ -913,7 +926,8 @@ def procesar_excel_actualizacion(file_content):
                     logger.info(f"Intentando leer hoja: '{nombre_hoja}'")
                     file_content.seek(0)
                     df_temp = pd.read_excel(file_content, sheet_name=nombre_hoja)
-                    logger.debug(f"  Columnas en hoja '{nombre_hoja}': {list(df_temp.columns)}")
+                    if not IS_PRODUCTION:
+                        logger.debug(f"  Columnas en hoja '{nombre_hoja}': {list(df_temp.columns)}")
 
                     # Verificar si tiene columna de radicado
                     for col_req in columnas_radicado:
@@ -1007,7 +1021,8 @@ def procesar_excel_actualizacion(file_content):
                     ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
 
                 if not radicado_completo:
-                    logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                    if not IS_PRODUCTION:
+                        logger.debug(f"Fila {index + 2} sin radicado - saltando")
                     errores += 1
                     errores_detallados.append({
                         'fila': index + 2,
@@ -1023,7 +1038,8 @@ def procesar_excel_actualizacion(file_content):
                 expediente_id = expedientes_cache.get(radicado_completo)
 
                 if not expediente_id:
-                    logger.debug(f"Expediente {radicado_completo} no encontrado")
+                    if not IS_PRODUCTION:
+                        logger.debug(f"Expediente {radicado_completo} no encontrado")
                     no_encontrados += 1
                     errores_detallados.append({
                         'fila': index + 2,
@@ -1053,7 +1069,8 @@ def procesar_excel_actualizacion(file_content):
 
                     if cursor.rowcount > 0:
                         actualizados += 1
-                        logger.debug(f"✅ Expediente {radicado_completo} actualizado")
+                        if not IS_PRODUCTION:
+                            logger.debug(f"✅ Expediente {radicado_completo} actualizado")
                     else:
                         sin_cambios += 1
                 else:
@@ -1200,7 +1217,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
                             
                             if not radicado_completo:
-                                logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Fila {index + 2} sin radicado - saltando")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1217,7 +1235,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             expediente_id = expedientes_cache.get(radicado_completo)
                             
                             if not expediente_id:
-                                logger.debug(f"Expediente {radicado_completo} no encontrado")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Expediente {radicado_completo} no encontrado")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1236,7 +1255,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 ['OBSERVACIONES', 'observaciones', 'Observaciones'])
                             
                             if not fecha_ingreso:
-                                logger.debug(f"Fila {index + 2}: Fecha de ingreso inválida")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Fila {index + 2}: Fecha de ingreso inválida")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1247,7 +1267,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 continue
                             
                             if not solicitud:
-                                logger.debug(f"Fila {index + 2}: Solicitud vacía")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Fila {index + 2}: Solicitud vacía")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1263,7 +1284,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             # Verificar duplicado en MEMORIA PRIMERO (dentro del mismo archivo)
                             cache_key = (expediente_id, fecha_ingreso, solicitud, obs_normalized)
                             if cache_key in ingresos_insertados_cache:
-                                logger.debug(f"⚠️ Ingreso duplicado EN EL ARCHIVO para {radicado_completo} - saltando FILA (no se insertará)")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"⚠️ Ingreso duplicado EN EL ARCHIVO para {radicado_completo} - saltando FILA (no se insertará)")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1284,7 +1306,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             """, (expediente_id, fecha_ingreso, solicitud, obs_normalized, obs_normalized))
                             
                             if cursor_ingresos.fetchone():
-                                logger.debug(f"⚠️ Ingreso duplicado en BD para expediente {radicado_completo} - saltando FILA (no se insertará)")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"⚠️ Ingreso duplicado en BD para expediente {radicado_completo} - saltando FILA (no se insertará)")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1303,7 +1326,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             conn_ingresos.commit()
                             ingresos_insertados_cache.add(cache_key)  # Agregar al caché
                             resultados['ingresos_agregados'] += 1
-                            logger.debug(f"✅ Ingreso agregado para expediente {radicado_completo}")
+                            if not IS_PRODUCTION:
+                                logger.debug(f"✅ Ingreso agregado para expediente {radicado_completo}")
                             
                             # Registrar ingreso exitoso para el reporte
                             resultados['ingresos_exitosos'].append({
@@ -1328,7 +1352,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                     # Cerrar conexión de ingresos al final (después de procesar TODAS las filas)
                     cursor_ingresos.close()
                     conn_ingresos.close()
-                    logger.info(f"✅ Conexión de ingresos cerrada correctamente")
+                    
+                    # 📊 Log de resumen de ingresos
+                    logger.info(f"✅ Procesamiento de INGRESOS completado: {resultados['ingresos_agregados']} agregados, {len([e for e in resultados['errores_detallados'] if e.get('hoja') == pestaña_ingreso])} errores")
                 
             except Exception as e:
                 logger.error(f"Error procesando pestaña de ingresos: {e}")
@@ -1405,6 +1431,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                     # Caché en memoria para duplicados DENTRO DEL MISMO ARCHIVO
                     estados_insertados_cache = set()
                     
+                    # 🎫 Flag para indicar si se necesita recalcular turnos al final
+                    necesita_recalculo_turnos = False
+                    
                     # Procesar cada fila de estados con búsqueda en memoria (RÁPIDO)
                     for index, row in df_estados.iterrows():
                         try:
@@ -1412,7 +1441,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
                         
                             if not radicado_completo:
-                                logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Fila {index + 2} sin radicado - saltando")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1429,7 +1459,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             expediente_id = expedientes_cache_estados.get(radicado_completo)
                             
                             if not expediente_id:
-                                logger.debug(f"Expediente {radicado_completo} no encontrado")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Expediente {radicado_completo} no encontrado")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1451,7 +1482,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             
                             # Validar campos requeridos
                             if not clase:
-                                logger.debug(f"Fila {index + 2}: Clase vacía")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Fila {index + 2}: Clase vacía")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1462,7 +1494,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 continue
                             
                             if not fecha_estado:
-                                logger.debug(f"Fila {index + 2}: Fecha de estado inválida")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Fila {index + 2}: Fecha de estado inválida")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1473,7 +1506,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 continue
                             
                             if not auto_anotacion:
-                                logger.debug(f"Fila {index + 2}: Auto/Anotación vacía")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"Fila {index + 2}: Auto/Anotación vacía")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1486,7 +1520,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             # Verificar duplicado en MEMORIA PRIMERO (dentro del mismo archivo)
                             cache_key = (expediente_id, fecha_estado, clase, auto_anotacion)
                             if cache_key in estados_insertados_cache:
-                                logger.debug(f"⚠️ Estado duplicado EN EL ARCHIVO para {radicado_completo} - saltando")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"⚠️ Estado duplicado EN EL ARCHIVO para {radicado_completo} - saltando")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1511,7 +1546,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             """, (expediente_id, fecha_estado, clase, auto_anotacion, obs_estado_normalized, obs_estado_normalized))
                             
                             if cursor_estados.fetchone():
-                                logger.debug(f"⚠️ Estado duplicado en BD para expediente {radicado_completo} - saltando FILA (no se insertará)")
+                                if not IS_PRODUCTION:
+                                    logger.debug(f"⚠️ Estado duplicado en BD para expediente {radicado_completo} - saltando FILA (no se insertará)")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1530,7 +1566,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             conn_estados.commit()
                             estados_insertados_cache.add(cache_key)  # Agregar al caché
                             resultados['estados_agregados'] += 1
-                            logger.debug(f"✅ Estado agregado para expediente {radicado_completo}")
+                            if not IS_PRODUCTION:
+                                logger.debug(f"✅ Estado agregado para expediente {radicado_completo}")
                             
                             # Registrar estado exitoso para el reporte
                             resultados['estados_exitosos'].append({
@@ -1622,9 +1659,10 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                     """, (estado_nuevo, expediente_id))
                                     
                                     conn_estados.commit()
-                                    logger.debug(f"🔄 Estado del expediente actualizado a: {estado_nuevo}")
+                                    if not IS_PRODUCTION:
+                                        logger.debug(f"🔄 Estado del expediente actualizado a: {estado_nuevo}")
                                     
-                                    # 🎫 GESTIÓN DE TURNOS: Si el estado cambió a Resuelto, eliminar turno y recalcular
+                                    # 🎫 GESTIÓN DE TURNOS: Si el estado cambió a Resuelto, marcar para recálculo
                                     if estado_nuevo in ["Activo Resuelto", "Inactivo Resuelto"]:
                                         try:
                                             # Verificar si el expediente tenía turno asignado
@@ -1636,40 +1674,21 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                             turno_anterior = result_turno[0] if result_turno else None
                                             
                                             if turno_anterior:
-                                                logger.debug(f"🎫 Expediente tenía turno {turno_anterior} - eliminando y recalculando")
+                                                if not IS_PRODUCTION:
+                                                    logger.debug(f"🎫 Expediente tenía turno {turno_anterior} - marcando para recálculo")
                                                 
-                                                # 1. Eliminar turno del expediente resuelto
+                                                # Eliminar turno del expediente resuelto
                                                 cursor_estados.execute("""
                                                     UPDATE expediente 
                                                     SET turno = NULL 
                                                     WHERE id = %s
                                                 """, (expediente_id,))
                                                 
-                                                # 2. Recalcular turnos de expedientes con estado "Activo Pendiente"
-                                                # Obtener todos los expedientes con turno, ordenados por turno actual
-                                                cursor_estados.execute("""
-                                                    SELECT id, turno 
-                                                    FROM expediente 
-                                                    WHERE estado = 'Activo Pendiente' 
-                                                      AND turno IS NOT NULL 
-                                                    ORDER BY turno
-                                                """)
-                                                
-                                                expedientes_con_turno = cursor_estados.fetchall()
-                                                
-                                                # Reasignar turnos secuencialmente (1, 2, 3, ...)
-                                                for nuevo_turno, (exp_id, turno_viejo) in enumerate(expedientes_con_turno, start=1):
-                                                    if turno_viejo != nuevo_turno:
-                                                        cursor_estados.execute("""
-                                                            UPDATE expediente 
-                                                            SET turno = %s 
-                                                            WHERE id = %s
-                                                        """, (nuevo_turno, exp_id))
-                                                
-                                                conn_estados.commit()
-                                                logger.debug(f"✅ Turnos recalculados: {len(expedientes_con_turno)} expedientes actualizados")
+                                                # Marcar que se necesita recalcular turnos al final
+                                                necesita_recalculo_turnos = True
                                             else:
-                                                logger.debug(f"ℹ️ Expediente no tenía turno asignado - no se requiere recálculo")
+                                                if not IS_PRODUCTION:
+                                                    logger.debug(f"ℹ️ Expediente no tenía turno asignado - no se requiere recálculo")
                                         
                                         except Exception as turno_error:
                                             logger.warning(f"⚠️ Error gestionando turnos para expediente {expediente_id}: {turno_error}")
@@ -1692,10 +1711,46 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             conn_estados.rollback()  # Revierte solo esta fila
                             continue
                     
+                    # 🎫 RECALCULAR TURNOS UNA SOLA VEZ (si es necesario)
+                    if necesita_recalculo_turnos:
+                        try:
+                            logger.info("🎫 Recalculando turnos de expedientes pendientes...")
+                            
+                            # Obtener todos los expedientes con turno, ordenados por turno actual
+                            cursor_estados.execute("""
+                                SELECT id, turno 
+                                FROM expediente 
+                                WHERE estado = 'Activo Pendiente' 
+                                  AND turno IS NOT NULL 
+                                ORDER BY turno
+                            """)
+                            
+                            expedientes_con_turno = cursor_estados.fetchall()
+                            
+                            # Reasignar turnos secuencialmente (1, 2, 3, ...)
+                            turnos_actualizados = 0
+                            for nuevo_turno, (exp_id, turno_viejo) in enumerate(expedientes_con_turno, start=1):
+                                if turno_viejo != nuevo_turno:
+                                    cursor_estados.execute("""
+                                        UPDATE expediente 
+                                        SET turno = %s 
+                                        WHERE id = %s
+                                    """, (nuevo_turno, exp_id))
+                                    turnos_actualizados += 1
+                            
+                            conn_estados.commit()
+                            logger.info(f"✅ Turnos recalculados: {turnos_actualizados} de {len(expedientes_con_turno)} expedientes actualizados")
+                        
+                        except Exception as turno_error:
+                            logger.error(f"❌ Error recalculando turnos: {turno_error}")
+                            conn_estados.rollback()
+                    
                     # Cerrar conexión de estados al final (después de procesar TODAS las filas)
                     cursor_estados.close()
                     conn_estados.close()
-                    logger.info(f"✅ Conexión de estados cerrada correctamente")
+                    
+                    # 📊 Log de resumen de estados
+                    logger.info(f"✅ Procesamiento de ESTADOS completado: {resultados['estados_agregados']} agregados, {len([e for e in resultados['errores_detallados'] if e.get('hoja') == pestaña_estados])} errores")
                 
             except Exception as e:
                 logger.error(f"Error procesando pestaña de estados: {e}")
@@ -1974,7 +2029,8 @@ def procesar_excel_expedientes(file_content):
         logger.info("Iniciando procesamiento fila por fila...")
         for index, row in df.iterrows():
             try:
-                logger.debug(f"Procesando fila {index + 1}")
+                if not IS_PRODUCTION:
+                    logger.debug(f"Procesando fila {index + 1}")
                 
                 # Mapear columnas del Excel de forma más flexible
                 radicado_completo = None
@@ -2036,16 +2092,18 @@ def procesar_excel_expedientes(file_content):
                         solicitud = str(row.get(col_name)).strip()
                         break
                 
-                logger.debug(f"  Radicado completo: '{radicado_completo}'")
-                logger.debug(f"  Radicado corto: '{radicado_corto}'")
-                logger.debug(f"  Demandante: '{demandante}'")
-                logger.debug(f"  Demandado: '{demandado}'")
-                logger.debug(f"  Fecha ingreso: '{fecha_ingreso}'")
-                logger.debug(f"  Solicitud: '{solicitud}'")
+                if not IS_PRODUCTION:
+                    logger.debug(f"  Radicado completo: '{radicado_completo}'")
+                    logger.debug(f"  Radicado corto: '{radicado_corto}'")
+                    logger.debug(f"  Demandante: '{demandante}'")
+                    logger.debug(f"  Demandado: '{demandado}'")
+                    logger.debug(f"  Fecha ingreso: '{fecha_ingreso}'")
+                    logger.debug(f"  Solicitud: '{solicitud}'")
                 
                 # Validar campos requeridos
                 if not radicado_completo and not radicado_corto:
-                    logger.debug(f"  Saltando fila {index + 1} - sin radicado")
+                    if not IS_PRODUCTION:
+                        logger.debug(f"  Saltando fila {index + 1} - sin radicado")
                     rechazados_detalle['campos_faltantes'].append(f"Fila {index + 1}: Sin radicado")
                     errores += 1
                     continue
@@ -2053,7 +2111,8 @@ def procesar_excel_expedientes(file_content):
                 # 🚀 VERIFICACIÓN DE DUPLICADOS EN MEMORIA (instantánea, sin query a BD)
                 if radicado_completo:
                     if radicado_completo in radicados_existentes:
-                        logger.debug(f"  Saltando fila {index + 1} - radicado duplicado: {radicado_completo}")
+                        if not IS_PRODUCTION:
+                            logger.debug(f"  Saltando fila {index + 1} - radicado duplicado: {radicado_completo}")
                         rechazados_detalle['duplicados'].append(radicado_completo)
                         errores += 1
                         continue
@@ -2062,7 +2121,8 @@ def procesar_excel_expedientes(file_content):
                 if radicado_completo:
                     es_valido, mensaje_error = validar_radicado_completo(radicado_completo)
                     if not es_valido:
-                        logger.debug(f"  Saltando fila {index + 1} - {mensaje_error}")
+                        if not IS_PRODUCTION:
+                            logger.debug(f"  Saltando fila {index + 1} - {mensaje_error}")
                         rechazados_detalle['radicado_invalido'].append(f"{radicado_completo} ({len(radicado_completo)} dígitos)")
                         errores += 1
                         continue
