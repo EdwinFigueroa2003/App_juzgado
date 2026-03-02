@@ -1955,24 +1955,18 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                     if resultados.get('ingresos_exitosos'):
                         contenido_reporte += f"INGRESOS AGREGADOS ({len(resultados['ingresos_exitosos'])}):\n"
                         contenido_reporte += "-" * 80 + "\n"
-                        for i, ingreso in enumerate(resultados['ingresos_exitosos'][:100], 1):  # Limitar a 100
+                        for i, ingreso in enumerate(resultados['ingresos_exitosos'], 1):  # TODOS los ingresos
                             contenido_reporte += f"{i}. Fila {ingreso['fila']} - Radicado: {ingreso['radicado']}\n"
                             contenido_reporte += f"   Fecha: {ingreso['fecha_ingreso']} | Solicitud: {ingreso['solicitud']}\n\n"
-                        
-                        if len(resultados['ingresos_exitosos']) > 100:
-                            contenido_reporte += f"   ... y {len(resultados['ingresos_exitosos']) - 100} ingresos más\n\n"
                     
                     # Estados exitosos
                     if resultados.get('estados_exitosos'):
                         contenido_reporte += f"ESTADOS AGREGADOS ({len(resultados['estados_exitosos'])}):\n"
                         contenido_reporte += "-" * 80 + "\n"
-                        for i, estado in enumerate(resultados['estados_exitosos'][:100], 1):  # Limitar a 100
+                        for i, estado in enumerate(resultados['estados_exitosos'], 1):  # TODOS los estados
                             contenido_reporte += f"{i}. Fila {estado['fila']} - Radicado: {estado['radicado']}\n"
                             contenido_reporte += f"   Fecha: {estado['fecha_estado']} | Clase: {estado['clase']}\n"
                             contenido_reporte += f"   Auto/Anotación: {estado['auto_anotacion']}\n\n"
-                        
-                        if len(resultados['estados_exitosos']) > 100:
-                            contenido_reporte += f"   ... y {len(resultados['estados_exitosos']) - 100} estados más\n\n"
                 
                 # SECCIÓN DE ERRORES
                 contenido_reporte += "=" * 80 + "\n"
@@ -2201,6 +2195,9 @@ def procesar_excel_expedientes(file_content):
             'radicado_invalido': [],
             'campos_faltantes': []
         }
+        
+        # 📊 Tracking de expedientes creados exitosamente
+        expedientes_exitosos = []
         
         logger.info("Iniciando procesamiento fila por fila...")
         for index, row in df.iterrows():
@@ -2522,6 +2519,18 @@ def procesar_excel_expedientes(file_content):
                         radicados_existentes.add(radicado_completo)
                     
                     procesados += 1
+                    
+                    # 📊 Registrar expediente exitoso para el reporte
+                    expedientes_exitosos.append({
+                        'fila': index + 1,
+                        'radicado_completo': radicado_completo if radicado_completo else 'N/A',
+                        'radicado_corto': radicado_corto if radicado_corto else 'N/A',
+                        'demandante': demandante[:50] if demandante and len(demandante) > 50 else demandante,
+                        'demandado': demandado[:50] if demandado and len(demandado) > 50 else demandado,
+                        'fecha_ingreso': str(fecha_ingreso) if fecha_ingreso else 'N/A',
+                        'estado': estado_expediente if estado_expediente else 'N/A'
+                    })
+                    
                     if procesados % 100 == 0:  # Log cada 100 registros procesados
                         logger.info(f"Procesados {procesados} expedientes...")
                 else:
@@ -2563,6 +2572,26 @@ def procesar_excel_expedientes(file_content):
                 contenido_reporte += f"Expedientes creados exitosamente: {procesados}\n"
                 contenido_reporte += f"Expedientes rechazados: {errores}\n"
                 contenido_reporte += "\n"
+                
+                # 📊 SECCIÓN DE EXPEDIENTES CREADOS EXITOSAMENTE
+                if expedientes_exitosos:
+                    contenido_reporte += "=" * 80 + "\n"
+                    contenido_reporte += "EXPEDIENTES CREADOS EXITOSAMENTE\n"
+                    contenido_reporte += "=" * 80 + "\n\n"
+                    
+                    contenido_reporte += f"TOTAL: {len(expedientes_exitosos)} expedientes\n"
+                    contenido_reporte += "-" * 80 + "\n\n"
+                    
+                    for i, exp in enumerate(expedientes_exitosos, 1):  # TODOS los expedientes
+                        contenido_reporte += f"{i}. Fila {exp['fila']}\n"
+                        contenido_reporte += f"   Radicado Completo: {exp['radicado_completo']}\n"
+                        contenido_reporte += f"   Radicado Corto: {exp['radicado_corto']}\n"
+                        contenido_reporte += f"   Demandante: {exp['demandante']}\n"
+                        contenido_reporte += f"   Demandado: {exp['demandado']}\n"
+                        contenido_reporte += f"   Fecha Ingreso: {exp['fecha_ingreso']}\n"
+                        contenido_reporte += f"   Estado: {exp['estado']}\n\n"
+                    
+                    contenido_reporte += "\n"
                 
                 # Detalle de rechazos
                 if rechazados_detalle:
