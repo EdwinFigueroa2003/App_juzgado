@@ -1806,35 +1806,108 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             conn_estados.rollback()  # Revierte solo esta fila
                             continue
                     
-                    # 🎫 RECALCULAR TURNOS UNA SOLA VEZ (si es necesario)
+                    # 🎫 RECALCULAR TURNOS UNA SOLA VEZ (si es necesario) - LÓGICA COMPLEJA
                     if necesita_recalculo_turnos:
                         try:
-                            logger.info("🎫 Recalculando turnos de expedientes pendientes...")
+                            logger.info("🔄 RECALCULANDO TODOS LOS TURNOS (LÓGICA COMPLEJA)...")
+                            logger.info("📋 Criterios: fecha sin salida → antigüedad expediente → última actuación → ID")
                             
-                            # Obtener todos los expedientes con turno, ordenados por turno actual
+                            # Paso 1: Limpiar todos los turnos de expedientes 'Activo Pendiente'
                             cursor_estados.execute("""
-                                SELECT id, turno 
-                                FROM expediente 
-                                WHERE estado = 'Activo Pendiente' 
-                                  AND turno IS NOT NULL 
-                                ORDER BY turno
+                                UPDATE expediente 
+                                SET turno = NULL 
+                                WHERE estado = 'Activo Pendiente'
                             """)
                             
-                            expedientes_con_turno = cursor_estados.fetchall()
+                            limpiados = cursor_estados.rowcount
+                            logger.info(f"🧹 Turnos limpiados: {limpiados}")
                             
-                            # Reasignar turnos secuencialmente (1, 2, 3, ...)
-                            turnos_actualizados = 0
-                            for nuevo_turno, (exp_id, turno_viejo) in enumerate(expedientes_con_turno, start=1):
-                                if turno_viejo != nuevo_turno:
+                            # Paso 2: Obtener TODOS los expedientes 'Activo Pendiente' con lógica compleja
+                            # Esta es la MISMA lógica que usa vistaactualizarexpediente.py
+                            cursor_estados.execute("""
+                                WITH expedientes_activos AS (
+                                    SELECT 
+                                        e.id,
+                                        e.radicado_completo,
+                                        e.fecha_ingreso as fecha_ingreso_expediente
+                                    FROM expediente e
+                                    WHERE e.estado = 'Activo Pendiente'
+                                ),
+                                ingresos_expedientes AS (
+                                    SELECT 
+                                        i.expediente_id,
+                                        i.fecha_ingreso
+                                    FROM ingresos i
+                                    WHERE i.fecha_ingreso IS NOT NULL
+                                ),
+                                ingresos_sin_salida AS (
+                                    -- Identificar qué ingresos NO tienen estado posterior
+                                    SELECT 
+                                        ie.expediente_id,
+                                        ie.fecha_ingreso
+                                    FROM ingresos_expedientes ie
+                                    WHERE NOT EXISTS (
+                                        SELECT 1 FROM estados est 
+                                        WHERE est.expediente_id = ie.expediente_id 
+                                          AND est.fecha_estado > ie.fecha_ingreso
+                                    )
+                                ),
+                                fecha_ingreso_mas_antigua_sin_salida AS (
+                                    -- Para cada expediente, obtener la fecha de ingreso MÁS ANTIGUA sin salida
+                                    SELECT 
+                                        expediente_id,
+                                        MIN(fecha_ingreso) as fecha_ingreso_sin_salida
+                                    FROM ingresos_sin_salida
+                                    GROUP BY expediente_id
+                                ),
+                                ultima_actuacion_expediente AS (
+                                    -- Para cada expediente, obtener la fecha de la última actuación
+                                    SELECT 
+                                        expediente_id,
+                                        MAX(fecha_estado) as ultima_actuacion
+                                    FROM estados
+                                    WHERE fecha_estado IS NOT NULL
+                                    GROUP BY expediente_id
+                                )
+                                SELECT 
+                                    ea.id,
+                                    ea.radicado_completo,
+                                    COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) as fecha_para_turno,
+                                    ea.fecha_ingreso_expediente,
+                                    uae.ultima_actuacion
+                                FROM expedientes_activos ea
+                                LEFT JOIN fecha_ingreso_mas_antigua_sin_salida fimass ON ea.id = fimass.expediente_id
+                                LEFT JOIN ultima_actuacion_expediente uae ON ea.id = uae.expediente_id
+                                WHERE COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) IS NOT NULL
+                                ORDER BY 
+                                    COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) ASC,
+                                    ea.fecha_ingreso_expediente ASC,
+                                    uae.ultima_actuacion ASC NULLS LAST,
+                                    ea.id ASC
+                            """)
+                            
+                            expedientes = cursor_estados.fetchall()
+                            logger.info(f"📋 Expedientes que deben tener turno: {len(expedientes)}")
+                            
+                            if expedientes:
+                                # Paso 3: Asignar turnos secuenciales
+                                turnos_asignados = 0
+                                
+                                for turno, (exp_id, radicado, fecha_para_turno, fecha_ing_exp, ultima_act) in enumerate(expedientes, 1):
                                     cursor_estados.execute("""
                                         UPDATE expediente 
                                         SET turno = %s 
                                         WHERE id = %s
-                                    """, (nuevo_turno, exp_id))
-                                    turnos_actualizados += 1
-                            
-                            conn_estados.commit()
-                            logger.info(f"✅ Turnos recalculados: {turnos_actualizados} de {len(expedientes_con_turno)} expedientes actualizados")
+                                    """, (turno, exp_id))
+                                    
+                                    if cursor_estados.rowcount == 1:
+                                        turnos_asignados += 1
+                                
+                                conn_estados.commit()
+                                logger.info(f"✅ Turnos recalculados: {turnos_asignados} expedientes actualizados")
+                                logger.info(f"   Criterios aplicados: fecha sin salida → antigüedad → última actuación → ID")
+                            else:
+                                logger.info("ℹ️ No hay expedientes que cumplan los criterios para asignar turnos")
                         
                         except Exception as turno_error:
                             logger.error(f"❌ Error recalculando turnos: {turno_error}")
