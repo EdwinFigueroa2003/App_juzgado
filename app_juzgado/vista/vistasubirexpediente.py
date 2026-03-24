@@ -39,6 +39,167 @@ ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def parsear_reporte_para_excel(contenido_reporte):
+    """
+    Parsea el contenido del reporte TXT y lo convierte en DataFrames estructurados
+
+    Args:
+        contenido_reporte (str): Contenido del reporte en formato texto
+
+    Returns:
+        dict: Diccionario con DataFrames para cada hoja del Excel
+    """
+    lineas = contenido_reporte.split('\n')
+    resultados = {
+        'ingresos_exitosos': [],
+        'estados_exitosos': [],
+        'errores': []
+    }
+
+    seccion_actual = None
+    i = 0
+
+    while i < len(lineas):
+        linea = lineas[i].strip()
+
+        # Detectar secciones
+        if 'INGRESOS AGREGADOS' in linea:
+            seccion_actual = 'ingresos'
+            i += 2  # Saltar línea de separación
+            continue
+        elif 'ESTADOS AGREGADOS' in linea:
+            seccion_actual = 'estados'
+            i += 2  # Saltar línea de separación
+            continue
+        elif 'DETALLE DE ERRORES' in linea:
+            seccion_actual = 'errores'
+            i += 2  # Saltar línea de separación
+            continue
+
+        # Procesar según sección
+        if seccion_actual == 'ingresos' and linea and not linea.startswith('=') and not linea.startswith('-'):
+            # Formato esperado: "1. Fila X - Radicado: Y"
+            # Siguiente línea: "   Fecha: Z | Solicitud: W"
+            if linea[0].isdigit() and '. Fila ' in linea:
+                try:
+                    # Extraer fila y radicado
+                    partes = linea.split(' - Radicado: ')
+                    if len(partes) == 2:
+                        fila_str = partes[0].split('. Fila ')[1]
+                        radicado = partes[1].strip()
+
+                        # Siguiente línea tiene fecha y solicitud
+                        if i + 1 < len(lineas):
+                            linea_siguiente = lineas[i + 1].strip()
+                            if 'Fecha:' in linea_siguiente and 'Solicitud:' in linea_siguiente:
+                                fecha_part = linea_siguiente.split(' | Solicitud: ')[0].replace('Fecha: ', '').strip()
+                                solicitud_part = linea_siguiente.split(' | Solicitud: ')[1].strip()
+
+                                resultados['ingresos_exitosos'].append({
+                                    'fila': int(fila_str),
+                                    'radicado': radicado,
+                                    'fecha_ingreso': fecha_part,
+                                    'solicitud': solicitud_part
+                                })
+                                i += 1  # Saltar la línea siguiente que ya procesamos
+                except Exception as e:
+                    logger.warning(f"Error parseando línea de ingresos: {linea} - {e}")
+
+        elif seccion_actual == 'estados' and linea and not linea.startswith('=') and not linea.startswith('-'):
+            # Formato esperado: "1. Fila X - Radicado: Y"
+            # Siguiente línea: "   Fecha: Z | Clase: W"
+            # Línea siguiente: "   Auto/Anotación: V"
+            if linea[0].isdigit() and '. Fila ' in linea:
+                try:
+                    # Extraer fila y radicado
+                    partes = linea.split(' - Radicado: ')
+                    if len(partes) == 2:
+                        fila_str = partes[0].split('. Fila ')[1]
+                        radicado = partes[1].strip()
+
+                        # Siguientes líneas tienen fecha, clase y auto/anotación
+                        fecha_estado = ''
+                        clase = ''
+                        auto_anotacion = ''
+
+                        if i + 1 < len(lineas):
+                            linea_fecha_clase = lineas[i + 1].strip()
+                            if 'Fecha:' in linea_fecha_clase and 'Clase:' in linea_fecha_clase:
+                                fecha_part = linea_fecha_clase.split(' | Clase: ')[0].replace('Fecha: ', '').strip()
+                                clase_part = linea_fecha_clase.split(' | Clase: ')[1].strip()
+                                fecha_estado = fecha_part
+                                clase = clase_part
+
+                        if i + 2 < len(lineas):
+                            linea_auto = lineas[i + 2].strip()
+                            if 'Auto/Anotación:' in linea_auto:
+                                auto_anotacion = linea_auto.replace('Auto/Anotación: ', '').strip()
+
+                        if fecha_estado or clase or auto_anotacion:
+                            resultados['estados_exitosos'].append({
+                                'fila': int(fila_str),
+                                'radicado': radicado,
+                                'fecha_estado': fecha_estado,
+                                'clase': clase,
+                                'auto_anotacion': auto_anotacion
+                            })
+                            i += 2  # Saltar las líneas siguientes que ya procesamos
+                except Exception as e:
+                    logger.warning(f"Error parseando línea de estados: {linea} - {e}")
+
+        elif seccion_actual == 'errores' and linea and not linea.startswith('=') and not linea.startswith('-'):
+            # Formato esperado: "1. Fila X - Hoja: Y"
+            # Siguiente línea: "   Radicado: Z"
+            # Línea siguiente: "   Motivo: W"
+            if linea[0].isdigit() and '. Fila ' in linea:
+                try:
+                    # Extraer fila y hoja
+                    partes = linea.split(' - Hoja: ')
+                    if len(partes) == 2:
+                        fila_str = partes[0].split('. Fila ')[1]
+                        hoja = partes[1].strip()
+
+                        # Siguientes líneas tienen radicado y motivo
+                        radicado = ''
+                        motivo = ''
+
+                        if i + 1 < len(lineas):
+                            linea_radicado = lineas[i + 1].strip()
+                            if 'Radicado:' in linea_radicado:
+                                radicado = linea_radicado.replace('Radicado: ', '').strip()
+
+                        if i + 2 < len(lineas):
+                            linea_motivo = lineas[i + 2].strip()
+                            if 'Motivo:' in linea_motivo:
+                                motivo = linea_motivo.replace('Motivo: ', '').strip()
+
+                        if radicado or motivo:
+                            resultados['errores'].append({
+                                'fila': int(fila_str),
+                                'hoja': hoja,
+                                'radicado': radicado,
+                                'motivo': motivo
+                            })
+                            i += 2  # Saltar las líneas siguientes que ya procesamos
+                except Exception as e:
+                    logger.warning(f"Error parseando línea de errores: {linea} - {e}")
+
+        i += 1
+
+    # Convertir a DataFrames
+    dfs = {}
+
+    if resultados['ingresos_exitosos']:
+        dfs['ingresos_actualizados'] = pd.DataFrame(resultados['ingresos_exitosos'])
+
+    if resultados['estados_exitosos']:
+        dfs['estados_actualizados'] = pd.DataFrame(resultados['estados_exitosos'])
+
+    if resultados['errores']:
+        dfs['errores'] = pd.DataFrame(resultados['errores'])
+
+    return dfs
+
 def validar_radicado_completo(radicado):
     """
     Valida que el radicado completo tenga exactamente 23 dígitos numéricos
@@ -218,10 +379,77 @@ def descargar_reporte_bd(reporte_id):
             return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
         
         nombre_archivo, contenido, tipo_reporte, fecha_generacion = resultado
+
+        if isinstance(contenido, bytes):
+            try:
+                contenido = contenido.decode('utf-8')
+            except Exception:
+                contenido = contenido.decode('latin-1', errors='ignore')
         
         logger.info(f"✅ Reporte encontrado: {nombre_archivo} (tipo: {tipo_reporte})")
-        
-        # Crear respuesta con el contenido del reporte
+
+        formato_salida = request.args.get('formato', 'txt').lower()
+
+        if formato_salida == 'xlsx':
+            logger.info("Generando descarga en formato XLSX estructurado")
+
+            # Parsear el contenido del reporte para obtener DataFrames estructurados
+            dfs_reportes = parsear_reporte_para_excel(str(contenido))
+
+            if not dfs_reportes:
+                # Fallback: si no se puede parsear, usar formato línea por línea
+                logger.warning("No se pudo parsear el reporte, usando formato línea por línea")
+                lineas = str(contenido).splitlines()
+                df_reporte = pd.DataFrame({'detalle': lineas})
+
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df_reporte.to_excel(writer, index=False, sheet_name='reporte_completo')
+                output.seek(0)
+
+                archivo_descarga = os.path.splitext(nombre_archivo)[0] + '.xlsx'
+                return send_file(
+                    output,
+                    as_attachment=True,
+                    download_name=archivo_descarga,
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+
+            # Crear Excel con múltiples hojas
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                # Hoja de ingresos actualizados (si existe)
+                if 'ingresos_actualizados' in dfs_reportes:
+                    df_ingresos = dfs_reportes['ingresos_actualizados']
+                    df_ingresos.to_excel(writer, index=False, sheet_name='Ingresos_Actualizados')
+
+                # Hoja de estados actualizados (si existe)
+                if 'estados_actualizados' in dfs_reportes:
+                    df_estados = dfs_reportes['estados_actualizados']
+                    df_estados.to_excel(writer, index=False, sheet_name='Estados_Actualizados')
+
+                # Hoja de errores (si existe)
+                if 'errores' in dfs_reportes:
+                    df_errores = dfs_reportes['errores']
+                    df_errores.to_excel(writer, index=False, sheet_name='Errores')
+
+                # Si no hay datos específicos, crear una hoja con todo el contenido
+                if not any(key in dfs_reportes for key in ['ingresos_actualizados', 'estados_actualizados', 'errores']):
+                    lineas = str(contenido).splitlines()
+                    df_completo = pd.DataFrame({'contenido_completo': lineas})
+                    df_completo.to_excel(writer, index=False, sheet_name='Reporte_Completo')
+
+            output.seek(0)
+
+            archivo_descarga = os.path.splitext(nombre_archivo)[0] + '.xlsx'
+            return send_file(
+                output,
+                as_attachment=True,
+                download_name=archivo_descarga,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+
+        # Comportamiento original: descarga TXT
         response = Response(
             contenido,
             mimetype='text/plain; charset=utf-8',
@@ -229,7 +457,7 @@ def descargar_reporte_bd(reporte_id):
                 'Content-Disposition': f'attachment; filename="{nombre_archivo}"'
             }
         )
-        
+
         return response
         
     except Exception as e:
@@ -2739,8 +2967,9 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
         if pestaña_ingreso:
             logger.info(f"Procesando pestaña de ingresos: {pestaña_ingreso}")
             try:
-                # Usar context manager para asegurar cierre del archivo
-                with pd.ExcelFile(filepath) as excel_file:
+                # Resetear puntero y leer desde BytesIO
+                file_content.seek(0)
+                with pd.ExcelFile(file_content) as excel_file:
                     df_ingresos = pd.read_excel(excel_file, sheet_name=pestaña_ingreso)
                 logger.info(f"Pestaña '{pestaña_ingreso}' leída: {len(df_ingresos)} filas, columnas: {list(df_ingresos.columns)}")
                 
@@ -2768,8 +2997,9 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
         if pestaña_estados and 'estados' in tablas_relacionadas:
             logger.info(f"Procesando pestaña de estados: {pestaña_estados}")
             try:
-                # Usar context manager para asegurar cierre del archivo
-                with pd.ExcelFile(filepath) as excel_file:
+                # Resetear puntero y leer desde BytesIO
+                file_content.seek(0)
+                with pd.ExcelFile(file_content) as excel_file:
                     df_estados = pd.read_excel(excel_file, sheet_name=pestaña_estados)
                 logger.info(f"Pestaña '{pestaña_estados}' leída: {len(df_estados)} filas, columnas: {list(df_estados.columns)}")
                 

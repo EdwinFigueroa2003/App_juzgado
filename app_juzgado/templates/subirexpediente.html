@@ -608,7 +608,7 @@
             
             const totalErrores = (reporte.errores_validacion || 0) + (reporte.errores_tecnicos || 0) + (reporte.no_encontrados || 0);
             
-            const urlDescarga = '{{ url_for("idvistasubirexpediente.descargar_reporte_bd", reporte_id=0) }}'.replace('0', reporte.id);
+            const urlDescarga = '{{ url_for("idvistasubirexpediente.descargar_reporte_bd", reporte_id=0) }}'.replace('0', reporte.id) + '?formato=xlsx';
             
             const fila = document.createElement('tr');
             fila.innerHTML = `
