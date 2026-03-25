@@ -541,14 +541,14 @@ def buscar_expedientes(radicado):
             
             # Calcular fecha de ingreso más antigua sin salida (para mostrar en la interfaz)
             try:
-                # Obtener ingresos sin salida (que no tienen estado posterior)
+                # Obtener ingresos sin salida (que no tienen estado posterior o igual)
                 ingresos_sin_salida = []
                 for ingreso in expediente['ingresos']:
                     fecha_ing = ingreso['fecha_ingreso']
                     if fecha_ing:
-                        # Verificar si existe un estado posterior a este ingreso
+                        # Verificar si existe un estado con fecha >= al ingreso (misma fecha o posterior)
                         tiene_salida = any(
-                            estado['fecha_estado'] > fecha_ing 
+                            estado['fecha_estado'] >= fecha_ing 
                             for estado in expediente['estados'] 
                             if estado['fecha_estado']
                         )
@@ -836,7 +836,7 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                     if fecha_ing:
                         # Verificar si existe un estado posterior a este ingreso
                         tiene_salida = any(
-                            estado['fecha_estado'] > fecha_ing 
+                            estado['fecha_estado'] >= fecha_ing 
                             for estado in expediente['estados'] 
                             if estado['fecha_estado']
                         )
@@ -1091,7 +1091,7 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
                     if fecha_ing:
                         # Verificar si existe un estado posterior a este ingreso
                         tiene_salida = any(
-                            estado['fecha_estado'] > fecha_ing 
+                            estado['fecha_estado'] >= fecha_ing 
                             for estado in expediente['estados'] 
                             if estado['fecha_estado']
                         )

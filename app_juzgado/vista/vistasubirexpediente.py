@@ -730,7 +730,9 @@ def procesar_archivo_excel():
                 mensaje_resultado += f'{resultados["estados_procesados"]} estados agregados.'
                 
                 if resultados["errores"] > 0:
-                    mensaje_resultado += f' {resultados["errores"]} errores encontrados.'
+                    mensaje_resultado += f' {resultados["errores"]} duplicados/errores detectados (no se crearon registros duplicados).'
+                else:
+                    mensaje_resultado += ' Sin duplicados detectados.'
                 
                 flash(mensaje_resultado, 'success' if resultados["errores"] == 0 else 'warning')
                 
@@ -1390,11 +1392,14 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
             'ingresos_agregados': 0,
             'estados_agregados': 0,
             'errores': 0,
-            'total_filas': 0,
+            'total_filas': 0,  # 🎯 Contará SOLO filas únicas procesadas
             'errores_detallados': [],
-            'ingresos_exitosos': [],  # Lista para rastrear ingresos exitosos
-            'estados_exitosos': []     # Lista para rastrear estados exitosos
+            'ingresos_exitosos': [],
+            'estados_exitosos': []
         }
+        
+        # 🎯 TRACK: Radicados únicos ya procesados (para evitar doble conteo entre pestañas)
+        radicados_unicos_procesados = set()
         
         # Procesar pestaña de ingresos (si existe)
         pestaña_ingreso = None
@@ -1411,7 +1416,16 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 with pd.ExcelFile(file_content) as excel_file:
                     df_ingresos = pd.read_excel(excel_file, sheet_name=pestaña_ingreso)
                 logger.info(f"Pestaña '{pestaña_ingreso}' leída: {len(df_ingresos)} filas")
-                resultados['total_filas'] += len(df_ingresos)
+                
+                # 🎯 Contar solo filas NUEVAS (no contadas antes)
+                for idx, row in df_ingresos.iterrows():
+                    rad = extraer_valor_flexible(row, df_ingresos.columns, 
+                        ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+                    if rad:
+                        rad_norm = re.sub(r'[^0-9]', '', str(rad).strip())
+                        if rad_norm and rad_norm not in radicados_unicos_procesados:
+                            radicados_unicos_procesados.add(rad_norm)
+                            resultados['total_filas'] += 1
                 
                 # 🚀 OPTIMIZACIÓN: Cargar todos los expedientes en memoria UNA SOLA VEZ
                 logger.info("🚀 Cargando expedientes en memoria para búsqueda rápida...")
@@ -1502,14 +1516,17 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                     # Procesar cada fila de ingresos con búsqueda en memoria (RÁPIDO)
                     for index, row in df_ingresos.iterrows():
                         try:
+                            # 🎯 TRACK: Clasificar cada fila
+                            clasificacion = None
                             
                             # Extraer radicado
                             radicado_completo = extraer_valor_flexible(row, df_ingresos.columns, 
                                 ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
                             
                             if not radicado_completo:
+                                clasificacion = 'ERROR: radicado vacío'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                                    logger.debug(f"Fila {index + 2} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1526,8 +1543,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             expediente_id = expedientes_cache.get(radicado_completo)
                             
                             if not expediente_id:
+                                clasificacion = 'ERROR: expediente no encontrado'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Expediente {radicado_completo} no encontrado")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1546,8 +1564,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 ['OBSERVACIONES', 'observaciones', 'Observaciones'])
                             
                             if not fecha_ingreso:
+                                clasificacion = 'ERROR: fecha inválida'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Fila {index + 2}: Fecha de ingreso inválida")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1558,8 +1577,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 continue
                             
                             if not solicitud:
+                                clasificacion = 'ERROR: solicitud vacía'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Fila {index + 2}: Solicitud vacía")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1575,8 +1595,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             # Verificar duplicado en MEMORIA PRIMERO (dentro del mismo archivo)
                             cache_key = (expediente_id, fecha_ingreso, solicitud, obs_normalized)
                             if cache_key in ingresos_insertados_cache:
+                                clasificacion = 'ERROR: duplicado en archivo'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"⚠️ Ingreso duplicado EN EL ARCHIVO para {radicado_completo} - saltando FILA (no se insertará)")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1586,25 +1607,47 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 })
                                 continue
                             
-                            # Verificar si ya existe un ingreso IDÉNTICO en BD (uploads previos)
-                            # IMPORTANTE: Validar con los MISMOS valores que se van a insertar
+                            # Verificar si existe ingreso con misma clave (puede tener observaciones distintas)
                             cursor_ingresos.execute("""
-                                SELECT id FROM ingresos 
+                                SELECT id, observaciones FROM ingresos 
                                 WHERE expediente_id = %s 
                                 AND fecha_ingreso = %s 
                                 AND solicitud = %s
-                                AND (observaciones IS NULL AND %s IS NULL OR observaciones = %s)
-                            """, (expediente_id, fecha_ingreso, solicitud, obs_normalized, obs_normalized))
+                            """, (expediente_id, fecha_ingreso, solicitud))
+                            ingreso_bd = cursor_ingresos.fetchone()
                             
-                            if cursor_ingresos.fetchone():
+                            if ingreso_bd:
+                                id_bd, obs_bd = ingreso_bd
+                                obs_bd_norm = obs_bd.strip() if obs_bd and str(obs_bd).strip() else None
+
+                                if obs_normalized and obs_bd_norm != obs_normalized:
+                                    # Actualizar solo observaciones nuevas
+                                    cursor_ingresos.execute("""
+                                        UPDATE ingresos SET observaciones = %s WHERE id = %s
+                                    """, (obs_normalized, id_bd))
+                                    conn_ingresos.commit()
+                                    ingresos_insertados_cache.add(cache_key)
+                                    resultados['ingresos_agregados'] += 1
+                                    clasificacion = 'EXITO: ingreso existente actualizado observaciones'
+                                    if not IS_PRODUCTION:
+                                        logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
+                                    resultados['ingresos_exitosos'].append({
+                                        'fila': index + 2,
+                                        'radicado': radicado_completo,
+                                        'fecha_ingreso': str(fecha_ingreso),
+                                        'solicitud': solicitud[:50] if solicitud and len(solicitud) > 50 else solicitud
+                                    })
+                                    continue
+
+                                clasificacion = 'ERROR: duplicado en BD'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"⚠️ Ingreso duplicado en BD para expediente {radicado_completo} - saltando FILA (no se insertará)")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
                                     'hoja': pestaña_ingreso,
                                     'radicado': radicado_completo,
-                                    'motivo': 'Ingreso duplicado (información idéntica ya existe en BD)'
+                                    'motivo': 'Ingreso duplicado (información ya existe en BD)'
                                 })
                                 continue
                             
@@ -1617,8 +1660,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             conn_ingresos.commit()
                             ingresos_insertados_cache.add(cache_key)  # Agregar al caché
                             resultados['ingresos_agregados'] += 1
+                            clasificacion = 'EXITO: ingreso agregado'
                             if not IS_PRODUCTION:
-                                logger.debug(f"✅ Ingreso agregado para expediente {radicado_completo}")
+                                logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                             
                             # Registrar ingreso exitoso para el reporte
                             resultados['ingresos_exitosos'].append({
@@ -1629,7 +1673,10 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             })
                             
                         except Exception as e:
+                            clasificacion = f'ERROR TECNICO: {str(e)[:60]}'
                             logger.error(f"❌ Error procesando fila {index + 2} de ingresos: {e}")
+                            if not IS_PRODUCTION:
+                                logger.debug(f"Fila {index + 2} radicado {radicado_completo if 'radicado_completo' in locals() else 'N/A'} → {clasificacion}")
                             resultados['errores'] += 1
                             resultados['errores_detallados'].append({
                                 'fila': index + 2,
@@ -1666,7 +1713,16 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 with pd.ExcelFile(file_content) as excel_file:
                     df_estados = pd.read_excel(excel_file, sheet_name=pestaña_estados)
                 logger.info(f"Pestaña '{pestaña_estados}' leída: {len(df_estados)} filas")
-                resultados['total_filas'] += len(df_estados)
+                
+                # 🎯 Contar solo filas NUEVAS (no contadas antes)
+                for idx, row in df_estados.iterrows():
+                    rad = extraer_valor_flexible(row, df_estados.columns, 
+                        ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+                    if rad:
+                        rad_norm = re.sub(r'[^0-9]', '', str(rad).strip())
+                        if rad_norm and rad_norm not in radicados_unicos_procesados:
+                            radicados_unicos_procesados.add(rad_norm)
+                            resultados['total_filas'] += 1
                 
                 # 🚀 OPTIMIZACIÓN: Cargar todos los expedientes en memoria UNA SOLA VEZ
                 logger.info("🚀 Cargando expedientes en memoria para búsqueda rápida...")
@@ -1760,12 +1816,16 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                     # Procesar cada fila de estados con búsqueda en memoria (RÁPIDO)
                     for index, row in df_estados.iterrows():
                         try:
+                            # 🎯 TRACK: Clasificar cada fila
+                            clasificacion = None
+                            
                             radicado_completo = extraer_valor_flexible(row, df_estados.columns, 
                                 ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
                         
                             if not radicado_completo:
+                                clasificacion = 'ERROR: radicado vacío'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Fila {index + 2} sin radicado - saltando")
+                                    logger.debug(f"Fila {index + 2} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1782,8 +1842,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             expediente_id = expedientes_cache_estados.get(radicado_completo)
                             
                             if not expediente_id:
+                                clasificacion = 'ERROR: expediente no encontrado'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Expediente {radicado_completo} no encontrado")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1805,8 +1866,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             
                             # Validar campos requeridos
                             if not clase:
+                                clasificacion = 'ERROR: clase vacía'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Fila {index + 2}: Clase vacía")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1817,8 +1879,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 continue
                             
                             if not fecha_estado:
+                                clasificacion = 'ERROR: fecha inválida'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Fila {index + 2}: Fecha de estado inválida")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1829,8 +1892,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 continue
                             
                             if not auto_anotacion:
+                                clasificacion = 'ERROR: auto/anotación vacía'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"Fila {index + 2}: Auto/Anotación vacía")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1843,8 +1907,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             # Verificar duplicado en MEMORIA PRIMERO (dentro del mismo archivo)
                             cache_key = (expediente_id, fecha_estado, clase, auto_anotacion)
                             if cache_key in estados_insertados_cache:
+                                clasificacion = 'ERROR: duplicado en archivo'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"⚠️ Estado duplicado EN EL ARCHIVO para {radicado_completo} - saltando")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
@@ -1857,26 +1922,50 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             # Estandarizar observaciones para estados (usar NULL si está vacía)
                             obs_estado_normalized = observaciones if observaciones and str(observaciones).strip() else None
                             
-                            # Verificar si ya existe un estado IDÉNTICO en BD (uploads previos)
-                            # Esto evita duplicados exactos de información
+                            # Verificar si ya existe estado (ignora observaciones como clave)
                             cursor_estados.execute("""
-                                SELECT id FROM estados 
+                                SELECT id, observaciones FROM estados 
                                 WHERE expediente_id = %s 
                                 AND fecha_estado = %s 
                                 AND clase = %s
                                 AND auto_anotacion = %s
-                                AND (observaciones IS NULL AND %s IS NULL OR observaciones = %s)
-                            """, (expediente_id, fecha_estado, clase, auto_anotacion, obs_estado_normalized, obs_estado_normalized))
+                            """, (expediente_id, fecha_estado, clase, auto_anotacion))
+                            estado_bd = cursor_estados.fetchone()
                             
-                            if cursor_estados.fetchone():
+                            if estado_bd:
+                                id_estado_bd, obs_estado_bd = estado_bd
+                                obs_estado_bd_norm = obs_estado_bd.strip() if obs_estado_bd and str(obs_estado_bd).strip() else None
+
+                                if obs_estado_normalized and obs_estado_bd_norm != obs_estado_normalized:
+                                    # Actualizar observaciones si vienen nuevas
+                                    cursor_estados.execute("""
+                                        UPDATE estados SET observaciones = %s WHERE id = %s
+                                    """, (obs_estado_normalized, id_estado_bd))
+                                    conn_estados.commit()
+                                    estados_insertados_cache.add(cache_key)
+                                    resultados['estados_agregados'] += 1
+                                    clasificacion = 'EXITO: estado existente actualizado observaciones'
+                                    if not IS_PRODUCTION:
+                                        logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
+                                    resultados['estados_exitosos'].append({
+                                        'fila': index + 2,
+                                        'radicado': radicado_completo,
+                                        'fecha_estado': str(fecha_estado),
+                                        'clase': clase[:50] if clase and len(clase) > 50 else clase,
+                                        'auto_anotacion': auto_anotacion[:50] if auto_anotacion and len(auto_anotacion) > 50 else auto_anotacion
+                                    })
+                                    # continuar para evitar insertar duplicado
+                                    continue
+
+                                clasificacion = 'ERROR: duplicado en BD'
                                 if not IS_PRODUCTION:
-                                    logger.debug(f"⚠️ Estado duplicado en BD para expediente {radicado_completo} - saltando FILA (no se insertará)")
+                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                                 resultados['errores'] += 1
                                 resultados['errores_detallados'].append({
                                     'fila': index + 2,
                                     'hoja': pestaña_estados,
                                     'radicado': radicado_completo,
-                                    'motivo': 'Estado duplicado (información idéntica ya existe en BD)'
+                                    'motivo': 'Estado duplicado (información ya existe en BD)'
                                 })
                                 continue
                             
@@ -1889,8 +1978,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             conn_estados.commit()
                             estados_insertados_cache.add(cache_key)  # Agregar al caché
                             resultados['estados_agregados'] += 1
+                            clasificacion = 'EXITO: estado agregado'
                             if not IS_PRODUCTION:
-                                logger.debug(f"✅ Estado agregado para expediente {radicado_completo}")
+                                logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
                             
                             # Registrar estado exitoso para el reporte
                             resultados['estados_exitosos'].append({
@@ -2077,7 +2167,7 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                     WHERE NOT EXISTS (
                                         SELECT 1 FROM estados est 
                                         WHERE est.expediente_id = ie.expediente_id 
-                                          AND est.fecha_estado > ie.fecha_ingreso
+                                          AND est.fecha_estado >= ie.fecha_ingreso
                                     )
                                 ),
                                 fecha_ingreso_mas_antigua_sin_salida AS (
@@ -2974,7 +3064,7 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
                 logger.info(f"Pestaña '{pestaña_ingreso}' leída: {len(df_ingresos)} filas, columnas: {list(df_ingresos.columns)}")
                 
                 # Procesar expedientes desde la pestaña de ingresos
-                resultado_ingresos = procesar_pestaña_ingresos(df_ingresos, cursor, expediente_columns)
+                resultado_ingresos = procesar_pestaña_ingresos(df_ingresos, expediente_columns)
                 resultados['expedientes_procesados'] += resultado_ingresos['procesados']
                 resultados['ingresos_procesados'] += resultado_ingresos['ingresos_creados']
                 resultados['errores'] += resultado_ingresos['errores']
@@ -3004,7 +3094,7 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
                 logger.info(f"Pestaña '{pestaña_estados}' leída: {len(df_estados)} filas, columnas: {list(df_estados.columns)}")
                 
                 # Procesar estados
-                resultado_estados = procesar_pestaña_estados(df_estados, cursor)
+                resultado_estados = procesar_pestaña_estados(df_estados)
                 resultados['estados_procesados'] += resultado_estados['procesados']
                 resultados['errores'] += resultado_estados['errores']
                 
@@ -3021,77 +3111,101 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
         cursor.close()
         conn.close()
         
-        # 📊 GUARDAR REPORTE EN BASE DE DATOS si hay errores
-        if resultados.get('errores_detallados') and len(resultados['errores_detallados']) > 0:
-            try:
-                logger.info("📝 Generando reporte de errores en BD...")
-                
-                from datetime import datetime
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                
-                # Construir contenido del reporte
-                contenido_reporte = "=" * 80 + "\n"
-                contenido_reporte += "REPORTE DE CARGA NUEVA - MÚLTIPLES PESTAÑAS\n"
-                contenido_reporte += "=" * 80 + "\n\n"
-                contenido_reporte += f"Fecha de procesamiento: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                contenido_reporte += f"Expedientes procesados: {resultados['expedientes_procesados']}\n"
-                contenido_reporte += f"Ingresos procesados: {resultados['ingresos_procesados']}\n"
-                contenido_reporte += f"Estados procesados: {resultados['estados_procesados']}\n"
-                contenido_reporte += f"Total de errores: {resultados['errores']}\n\n"
-                
+        # 📊 GUARDAR REPORTE COMPLETO EN BASE DE DATOS
+        try:
+            logger.info("📝 Generando reporte completo en BD...")
+            
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # Construir contenido del reporte
+            contenido_reporte = "=" * 80 + "\n"
+            contenido_reporte += "REPORTE DE CARGA NUEVA - MÚLTIPLES PESTAÑAS\n"
+            contenido_reporte += "=" * 80 + "\n\n"
+            contenido_reporte += f"Fecha de procesamiento: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            contenido_reporte += f"Expedientes procesados: {resultados['expedientes_procesados']}\n"
+            contenido_reporte += f"Ingresos procesados: {resultados['ingresos_procesados']}\n"
+            contenido_reporte += f"Estados procesados: {resultados['estados_procesados']}\n"
+            contenido_reporte += f"Total de errores: {resultados['errores']}\n\n"
+            
+            # SECCIÓN DE INGRESOS EXITOSOS
+            if resultado_ingresos.get('ingresos_exitosos') and len(resultado_ingresos['ingresos_exitosos']) > 0:
                 contenido_reporte += "=" * 80 + "\n"
-                contenido_reporte += "DETALLE DE ERRORES\n"
+                contenido_reporte += f"INGRESOS AGREGADOS ({len(resultado_ingresos['ingresos_exitosos'])})\n"
                 contenido_reporte += "=" * 80 + "\n\n"
                 
+                for i, ingreso in enumerate(resultado_ingresos['ingresos_exitosos'], 1):
+                    contenido_reporte += f"{i}. Fila {ingreso['fila']} - Radicado: {ingreso['radicado']}\n"
+                    contenido_reporte += f"   Fecha: {ingreso['fecha_ingreso']} | Solicitud: {ingreso['solicitud']}\n\n"
+            
+            # SECCIÓN DE ESTADOS EXITOSOS
+            if resultado_estados.get('estados_exitosos') and len(resultado_estados['estados_exitosos']) > 0:
+                contenido_reporte += "=" * 80 + "\n"
+                contenido_reporte += f"ESTADOS AGREGADOS ({len(resultado_estados['estados_exitosos'])})\n"
+                contenido_reporte += "=" * 80 + "\n\n"
+                
+                for i, estado in enumerate(resultado_estados['estados_exitosos'], 1):
+                    contenido_reporte += f"{i}. Fila {estado['fila']} - Radicado: {estado['radicado']}\n"
+                    contenido_reporte += f"   Fecha: {estado['fecha_estado']} | Clase: {estado['clase']}\n"
+                    contenido_reporte += f"   Auto/Anotación: {estado['auto_anotacion']}\n\n"
+            
+            # SECCIÓN DE ERRORES
+            contenido_reporte += "=" * 80 + "\n"
+            contenido_reporte += "DETALLE DE ERRORES Y DUPLICADOS\n"
+            contenido_reporte += "=" * 80 + "\n\n"
+            
+            if resultados.get('errores_detallados') and len(resultados['errores_detallados']) > 0:
                 for i, error in enumerate(resultados['errores_detallados'], 1):
                     contenido_reporte += f"{i}. Fila {error['fila']} - Hoja: {error.get('hoja', 'N/A')}\n"
                     contenido_reporte += f"   Radicado: {error['radicado']}\n"
                     contenido_reporte += f"   Motivo: {error['motivo']}\n\n"
-                
-                contenido_reporte += "=" * 80 + "\n"
-                
-                # Obtener usuario_id de la sesión
-                from flask import session
-                usuario_id = session.get('usuario_id') if 'session' in dir() else None
-                
-                # Insertar reporte en la base de datos
-                conn_reporte = obtener_conexion()
-                cursor_reporte = conn_reporte.cursor()
-                
-                reporte_filename = f"reporte_carga_multiples_{timestamp}.txt"
-                
-                cursor_reporte.execute("""
-                    INSERT INTO reportes_actualizacion 
-                    (nombre_archivo, contenido, tipo_reporte, total_filas, actualizados, 
-                     sin_cambios, no_encontrados, errores_validacion, errores_tecnicos, usuario_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id
-                """, (
-                    reporte_filename,
-                    contenido_reporte,
-                    'carga_multiples',
-                    resultados['expedientes_procesados'] + resultados['errores'],  # total_filas
-                    resultados['expedientes_procesados'],  # actualizados (expedientes creados)
-                    0,  # sin_cambios
-                    0,  # no_encontrados
-                    resultados['errores'],  # errores_validacion
-                    0,  # errores_tecnicos
-                    usuario_id
-                ))
-                
-                reporte_id = cursor_reporte.fetchone()[0]
-                conn_reporte.commit()
-                cursor_reporte.close()
-                conn_reporte.close()
-                
-                logger.info(f"📊 Reporte de carga guardado en BD con ID: {reporte_id}")
-                
-                # Agregar ID del reporte a los resultados
-                resultados['reporte_id'] = reporte_id
-                resultados['tiene_errores'] = True
-                
-            except Exception as e:
-                logger.error(f"Error guardando reporte de carga en BD: {e}")
+            else:
+                contenido_reporte += "No se encontraron errores ni duplicados.\n\n"
+            
+            contenido_reporte += "=" * 80 + "\n"
+            
+            # Obtener usuario_id de la sesión
+            from flask import session
+            usuario_id = session.get('usuario_id') if 'session' in dir() else None
+            
+            # Insertar reporte en la base de datos
+            conn_reporte = obtener_conexion()
+            cursor_reporte = conn_reporte.cursor()
+            
+            reporte_filename = f"reporte_carga_multiples_{timestamp}.txt"
+            
+            cursor_reporte.execute("""
+                INSERT INTO reportes_actualizacion 
+                (nombre_archivo, contenido, tipo_reporte, total_filas, actualizados, 
+                 sin_cambios, no_encontrados, errores_validacion, errores_tecnicos, usuario_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                reporte_filename,
+                contenido_reporte,
+                'carga_multiples',
+                resultados['expedientes_procesados'] + resultados['errores'],  # total_filas
+                resultados['expedientes_procesados'],  # actualizados (expedientes creados)
+                0,  # sin_cambios
+                0,  # no_encontrados
+                resultados['errores'],  # errores_validacion
+                0,  # errores_tecnicos
+                usuario_id
+            ))
+            
+            reporte_id = cursor_reporte.fetchone()[0]
+            conn_reporte.commit()
+            cursor_reporte.close()
+            conn_reporte.close()
+            
+            logger.info(f"📊 Reporte de carga guardado en BD con ID: {reporte_id}")
+            
+            # Agregar ID del reporte a los resultados
+            resultados['reporte_id'] = reporte_id
+            resultados['tiene_errores'] = len(resultados.get('errores_detallados', [])) > 0
+            
+        except Exception as e:
+            logger.error(f"Error guardando reporte de carga en BD: {e}")
         
         logger.info(f"=== FIN procesar_excel_multiples_pestañas - Resultado: {resultados} ===")
         return resultados
@@ -3100,7 +3214,7 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
         logger.error(f"ERROR GENERAL en procesar_excel_multiples_pestañas: {str(e)}")
         raise Exception(f"Error procesando archivo Excel con múltiples pestañas: {str(e)}")
 
-def procesar_pestaña_ingresos(df, cursor, expediente_columns):
+def procesar_pestaña_ingresos(df, expediente_columns):
     """Procesa la pestaña de ingresos con información actual de expedientes"""
     logger.info("=== INICIO procesar_pestaña_ingresos ===")
     
@@ -3108,7 +3222,8 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
         'procesados': 0,
         'ingresos_creados': 0,
         'errores': 0,
-        'errores_detallados': []  # Agregar lista de errores detallados
+        'errores_detallados': [],  # Agregar lista de errores detallados
+        'ingresos_exitosos': []  # Agregar lista de ingresos exitosos
     }
     
     try:
@@ -3134,12 +3249,20 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
         
         # 🚀 OPTIMIZACIÓN: Cargar expedientes existentes en memoria UNA SOLA VEZ
         logger.info("🚀 Cargando expedientes existentes en memoria...")
-        cursor.execute("SELECT id, radicado_completo FROM expediente WHERE radicado_completo IS NOT NULL")
-        expedientes_cache = {row[1]: row[0] for row in cursor.fetchall()}
+        conn_cache = obtener_conexion()
+        cursor_cache = conn_cache.cursor()
+        cursor_cache.execute("SELECT id, radicado_completo FROM expediente WHERE radicado_completo IS NOT NULL")
+        expedientes_cache = {row[1]: row[0] for row in cursor_cache.fetchall()}
+        cursor_cache.close()
+        conn_cache.close()
         logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria")
         
         # Procesar cada fila con búsqueda en memoria (RÁPIDO)
         for index, row in df.iterrows():
+            # Usar una conexión separada por fila para evitar abortar toda la transacción
+            conn_fila = obtener_conexion()
+            cursor_fila = conn_fila.cursor()
+            
             try:
                 # Extraer datos con mapeo flexible
                 radicado_completo = extraer_valor_flexible(row, df.columns, ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio'])
@@ -3208,23 +3331,87 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
                         continue
                 
                 # Crear registro en tabla ingresos si existe
-                cursor.execute("""
+                cursor_fila.execute("""
                     SELECT table_name FROM information_schema.tables WHERE table_name = 'ingresos'
                 """)
                 
-                if cursor.fetchone():
+                if cursor_fila.fetchone():
+                    # Extraer observaciones para verificación de duplicados
+                    observaciones = extraer_valor_flexible(row, df.columns, ['OBSERVACIONES', 'observaciones'])
+                    obs_normalized = observaciones if observaciones and str(observaciones).strip() else None
+                    
+                    # 🔍 VERIFICAR EXISTENCIA POR CLAVE IGNORANDO OBSERVACIONES
+                    cursor_fila.execute("""
+                        SELECT id, observaciones FROM ingresos 
+                        WHERE expediente_id = %s 
+                        AND fecha_ingreso = %s 
+                        AND solicitud = %s
+                    """, (expediente_id, fecha_ingreso, solicitud))
+                    
+                    ingreso_existente = cursor_fila.fetchone()
+                    
+                    if ingreso_existente:
+                        ingreso_id, ingreso_obs_bd = ingreso_existente
+                        ingreso_obs_bd_norm = ingreso_obs_bd.strip() if ingreso_obs_bd and str(ingreso_obs_bd).strip() else None
+                        
+                        if obs_normalized and ingreso_obs_bd_norm != obs_normalized:
+                            # Si hay observaciones nuevas, actualizamos el registro existente y consideramos como actualización
+                            cursor_fila.execute("""
+                                UPDATE ingresos SET observaciones = %s WHERE id = %s
+                            """, (obs_normalized, ingreso_id))
+                            conn_fila.commit()
+                            resultado['ingresos_creados'] += 1
+                            resultado['ingresos_exitosos'].append({
+                                'fila': index + 2,
+                                'radicado': radicado_completo,
+                                'fecha_ingreso': fecha_ingreso.strftime('%Y-%m-%d') if hasattr(fecha_ingreso, 'strftime') else str(fecha_ingreso),
+                                'solicitud': solicitud
+                            })
+                            logger.debug(f"Ingreso existente actualizado en observaciones para expediente {expediente_id}")
+                            conn_fila.close()
+                            continue
+                        else:
+                            # Duplicado sin cambio relevante (o observaciones idénticas/vacías)
+                            logger.debug(f"Ingreso duplicado encontrado para expediente {expediente_id} - omitiendo inserción")
+                            resultado['errores'] += 1
+                            resultado['errores_detallados'].append({
+                                'fila': index + 2,
+                                'hoja': 'ingreso',
+                                'radicado': radicado_completo,
+                                'motivo': f'Ingreso duplicado (ya existe con fecha {fecha_ingreso} y solicitud "{solicitud}")'
+                            })
+                            conn_fila.close()
+                            continue
+                    
                     try:
-                        cursor.execute("""
+                        cursor_fila.execute("""
                             INSERT INTO ingresos (expediente_id, fecha_ingreso, solicitud, observaciones)
                             VALUES (%s, %s, %s, %s)
-                        """, (expediente_id, fecha_ingreso, solicitud, 
-                              extraer_valor_flexible(row, df.columns, ['OBSERVACIONES', 'observaciones']) or 'Ingreso desde Excel'))
+                        """, (expediente_id, fecha_ingreso, solicitud, observaciones))
                         
                         resultado['ingresos_creados'] += 1
+                        
+                        # Guardar ingreso exitoso para el reporte
+                        resultado['ingresos_exitosos'].append({
+                            'fila': index + 2,
+                            'radicado': radicado_completo,
+                            'fecha_ingreso': fecha_ingreso.strftime('%Y-%m-%d') if hasattr(fecha_ingreso, 'strftime') else str(fecha_ingreso),
+                            'solicitud': solicitud
+                        })
+                        
                         logger.debug(f"Ingreso creado para expediente {expediente_id}")
                         
                     except Exception as ingreso_error:
                         logger.warning(f"Error creando ingreso para expediente {expediente_id}: {ingreso_error}")
+                        conn_fila.rollback()
+                        cursor_fila.close()
+                        conn_fila.close()
+                        continue
+                
+                # Commit de la fila exitosa
+                conn_fila.commit()
+                cursor_fila.close()
+                conn_fila.close()
                 
             except Exception as row_error:
                 logger.error(f"Error procesando fila {index + 2} en pestaña ingresos: {row_error}")
@@ -3235,6 +3422,13 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
                     'radicado': radicado_completo if 'radicado_completo' in locals() else 'N/A',
                     'motivo': f'Error técnico: {str(row_error)}'
                 })
+                # Rollback y cerrar conexión en caso de error
+                try:
+                    conn_fila.rollback()
+                    cursor_fila.close()
+                    conn_fila.close()
+                except:
+                    pass
                 continue
         
         logger.info(f"=== FIN procesar_pestaña_ingresos - Resultado: {resultado} ===")
@@ -3245,7 +3439,7 @@ def procesar_pestaña_ingresos(df, cursor, expediente_columns):
         resultado['errores'] = len(df)
         return resultado
 
-def procesar_pestaña_estados(df, cursor):
+def procesar_pestaña_estados(df):
     """
     Procesa la pestaña de estados con columnas requeridas:
     RADICADO COMPLETO, CLASE, FECHA ESTADO, AUTO / ANOTACION
@@ -3254,7 +3448,8 @@ def procesar_pestaña_estados(df, cursor):
     
     resultado = {
         'procesados': 0,
-        'errores': 0
+        'errores': 0,
+        'estados_exitosos': []  # Agregar lista de estados exitosos
     }
     
     try:
@@ -3280,6 +3475,10 @@ def procesar_pestaña_estados(df, cursor):
         
         # Procesar cada fila
         for index, row in df.iterrows():
+            # Usar una conexión separada por fila para evitar abortar toda la transacción
+            conn_fila = obtener_conexion()
+            cursor_fila = conn_fila.cursor()
+            
             try:
                 # Extraer datos con mapeo flexible (solo los requeridos)
                 radicado_completo = extraer_valor_flexible(row, df.columns, ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio'])
@@ -3296,18 +3495,22 @@ def procesar_pestaña_estados(df, cursor):
                 if not radicado_completo or not clase or not fecha_estado or not auto_anotacion:
                     logger.debug(f"Saltando fila {index + 1} - faltan datos requeridos para estado (radicado: {radicado_completo}, clase: {clase}, fecha: {fecha_estado}, auto: {auto_anotacion})")
                     resultado['errores'] += 1
+                    cursor_fila.close()
+                    conn_fila.close()
                     continue
                 
                 # Buscar el expediente por radicado completo
-                cursor.execute("""
+                cursor_fila.execute("""
                     SELECT id FROM expediente WHERE radicado_completo = %s
                 """, (radicado_completo,))
                 
-                expediente_existente = cursor.fetchone()
+                expediente_existente = cursor_fila.fetchone()
                 
                 if not expediente_existente:
                     logger.debug(f"Expediente {radicado_completo} no encontrado para crear estado")
                     resultado['errores'] += 1
+                    cursor_fila.close()
+                    conn_fila.close()
                     continue
                 
                 expediente_id = expediente_existente[0]
@@ -3328,24 +3531,68 @@ def procesar_pestaña_estados(df, cursor):
                 
                 # Crear registro en tabla estados
                 try:
-                    cursor.execute("""
+                    # 🔍 VERIFICAR SI YA EXISTE UN ESTADO DUPLICADO (igual que en modo actualización)
+                    cursor_fila.execute("""
+                        SELECT id FROM estados 
+                        WHERE expediente_id = %s 
+                        AND fecha_estado = %s 
+                        AND clase = %s
+                        AND auto_anotacion = %s
+                        AND (observaciones IS NULL AND %s IS NULL OR observaciones = %s)
+                    """, (expediente_id, fecha_estado, clase, auto_anotacion, 
+                          observaciones_finales if observaciones_finales and str(observaciones_finales).strip() else None,
+                          observaciones_finales if observaciones_finales and str(observaciones_finales).strip() else None))
+                    
+                    estado_existente = cursor_fila.fetchone()
+                    
+                    if estado_existente:
+                        logger.debug(f"Estado duplicado encontrado para expediente {expediente_id} - omitiendo inserción")
+                        resultado['errores'] += 1
+                        cursor_fila.close()
+                        conn_fila.close()
+                        continue
+                    
+                    cursor_fila.execute("""
                         INSERT INTO estados (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
                         VALUES (%s, %s, %s, %s, %s)
                     """, (expediente_id, clase, fecha_estado, auto_anotacion, observaciones_finales))
                     
                     resultado['procesados'] += 1
+                    
+                    # Guardar estado exitoso para el reporte
+                    resultado['estados_exitosos'].append({
+                        'fila': index + 2,
+                        'radicado': radicado_completo,
+                        'fecha_estado': fecha_estado.strftime('%Y-%m-%d') if hasattr(fecha_estado, 'strftime') else str(fecha_estado),
+                        'clase': clase,
+                        'auto_anotacion': auto_anotacion
+                    })
+                    
                     logger.debug(f"Estado creado para expediente {radicado_completo} (ID: {expediente_id})")
+                    
+                    # Commit de la fila exitosa
+                    conn_fila.commit()
+                    cursor_fila.close()
+                    conn_fila.close()
                     
                 except Exception as estado_error:
                     logger.error(f"Error creando estado para expediente {expediente_id}: {estado_error}")
                     resultado['errores'] += 1
+                    conn_fila.rollback()
+                    cursor_fila.close()
+                    conn_fila.close()
                     continue
-                
+                    
             except Exception as row_error:
                 logger.error(f"Error procesando fila {index + 1} en pestaña estados: {row_error}")
                 resultado['errores'] += 1
-                continue
-        
+                # Rollback y cerrar conexión en caso de error
+                try:
+                    conn_fila.rollback()
+                    cursor_fila.close()
+                    conn_fila.close()
+                except:
+                    pass
         logger.info(f"=== FIN procesar_pestaña_estados - Resultado: {resultado} ===")
         return resultado
         

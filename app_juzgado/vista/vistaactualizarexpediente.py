@@ -321,7 +321,7 @@ def recalcular_todos_los_turnos(cursor):
                 WHERE NOT EXISTS (
                     SELECT 1 FROM estados est 
                     WHERE est.expediente_id = ie.expediente_id 
-                      AND est.fecha_estado > ie.fecha_ingreso
+                      AND est.fecha_estado >= ie.fecha_ingreso
                 )
             ),
             fecha_ingreso_mas_antigua_sin_salida AS (
