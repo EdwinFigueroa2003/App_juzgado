@@ -71,10 +71,30 @@ def parsear_reporte_para_excel(contenido_reporte):
             seccion_actual = 'estados'
             i += 2  # Saltar línea de separación
             continue
-        elif 'DETALLE DE ERRORES' in linea:
+        elif 'DETALLE DE ERRORES' in linea or 'DETALLE DE RECHAZOS' in linea:
             seccion_actual = 'errores'
             i += 2  # Saltar línea de separación
             continue
+        elif 'EXPEDIENTES CREADOS EXITOSAMENTE' in linea:
+            seccion_actual = 'expedientes_nuevos'
+            i += 2
+            continue
+        
+        # Subsecciones dentro de errores para reporte de expedientes nuevos
+        subseccion_error = None
+        if seccion_actual == 'errores':
+            if 'DUPLICADOS' in linea and linea.startswith('DUPLICADOS'):
+                subseccion_error = 'Radicado duplicado'
+                i += 2
+                continue
+            elif 'RADICADO INVÁLIDO' in linea:
+                subseccion_error = 'Radicado inválido'
+                i += 2
+                continue
+            elif 'CAMPOS FALTANTES' in linea:
+                subseccion_error = 'Campos faltantes'
+                i += 2
+                continue
 
         # Procesar según sección
         if seccion_actual == 'ingresos' and linea and not linea.startswith('=') and not linea.startswith('-'):
@@ -153,36 +173,53 @@ def parsear_reporte_para_excel(contenido_reporte):
             # Línea siguiente: "   Motivo: W"
             if linea[0].isdigit() and '. Fila ' in linea:
                 try:
-                    # Extraer fila y hoja
-                    partes = linea.split(' - Hoja: ')
-                    if len(partes) == 2:
+                    # Extraer fila y hoja (si existe)
+                    hoja = ''
+                    if ' - Hoja: ' in linea:
+                        partes = linea.split(' - Hoja: ')
                         fila_str = partes[0].split('. Fila ')[1]
                         hoja = partes[1].strip()
+                    else:
+                        fila_str = linea.split('. Fila ')[1].strip()
 
-                        # Siguientes líneas tienen radicado y motivo
-                        radicado = ''
-                        motivo = ''
+                    # Siguientes líneas tienen radicado y motivo
+                    radicado = ''
+                    motivo = ''
 
-                        if i + 1 < len(lineas):
-                            linea_radicado = lineas[i + 1].strip()
-                            if 'Radicado:' in linea_radicado:
-                                radicado = linea_radicado.replace('Radicado: ', '').strip()
+                    if i + 1 < len(lineas):
+                        linea_radicado = lineas[i + 1].strip()
+                        if 'Radicado:' in linea_radicado:
+                            radicado = linea_radicado.replace('Radicado: ', '').strip()
 
-                        if i + 2 < len(lineas):
-                            linea_motivo = lineas[i + 2].strip()
-                            if 'Motivo:' in linea_motivo:
-                                motivo = linea_motivo.replace('Motivo: ', '').strip()
+                    if i + 2 < len(lineas):
+                        linea_motivo = lineas[i + 2].strip()
+                        if 'Motivo:' in linea_motivo:
+                            motivo = linea_motivo.replace('Motivo: ', '').strip()
 
-                        if radicado or motivo:
-                            resultados['errores'].append({
-                                'fila': int(fila_str),
-                                'hoja': hoja,
-                                'radicado': radicado,
-                                'motivo': motivo
-                            })
-                            i += 2  # Saltar las líneas siguientes que ya procesamos
+                    if radicado or motivo:
+                        resultados['errores'].append({
+                            'fila': int(fila_str),
+                            'hoja': hoja,
+                            'radicado': radicado,
+                            'motivo': motivo
+                        })
+                        i += 2  # Saltar las líneas siguientes que ya procesamos
                 except Exception as e:
                     logger.warning(f"Error parseando línea de errores: {linea} - {e}")
+            
+            # Formato alternativo para reporte de expedientes nuevos: "1. radicado" bajo sección DUPLICADOS/INVÁLIDO/CAMPOS
+            elif seccion_actual == 'errores' and linea[0].isdigit() and '. ' in linea:
+                try:
+                    contenido = linea.split('. ', 1)[1].strip()
+                    # Determinar tipo de error según la subsección anterior
+                    resultados['errores'].append({
+                        'fila': 0,
+                        'hoja': '',
+                        'radicado': contenido,
+                        'motivo': 'Ver detalle en reporte completo'
+                    })
+                except Exception as e:
+                    logger.warning(f"Error parseando línea alternativa de errores: {linea} - {e}")
 
         i += 1
 
@@ -339,12 +376,104 @@ def listar_reportes():
                 'usuario_id': reporte[10]
             })
         
-        from flask import jsonify
         return jsonify({'reportes': reportes_lista, 'total': len(reportes_lista)})
         
     except Exception as e:
         logger.error(f"Error listando reportes: {e}")
-        from flask import jsonify
+        return jsonify({'error': str(e)}), 500
+
+@vistasubirexpediente.route('/obtener_ultimos_errores')
+@login_required
+def obtener_ultimos_errores():
+    """
+    Obtiene resumen general de errores del último reporte de carga
+    """
+    try:
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        
+        # Obtener el último reporte (con o sin errores, para mostrar resumen general)
+        cursor.execute("""
+            SELECT id, contenido, fecha_generacion, tipo_reporte,
+                   total_filas, actualizados, errores_validacion, errores_tecnicos, no_encontrados
+            FROM reportes_actualizacion
+            ORDER BY fecha_generacion DESC
+            LIMIT 1
+        """)
+        
+        reporte = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if not reporte:
+            return jsonify({'errores': []})
+        
+        reporte_id, contenido, fecha, tipo_reporte, total_filas, actualizados, err_validacion, err_tecnicos, no_encontrados = reporte
+        
+        # Parsear errores del contenido del reporte
+        errores_agrupados = {}
+        
+        if contenido:
+            lineas = contenido.split('\n')
+            seccion_errores = False
+            subseccion = None
+            
+            for linea in lineas:
+                linea_strip = linea.strip()
+                
+                # Detectar inicio de sección de errores
+                if 'DETALLE DE ERRORES' in linea_strip or 'DETALLE DE RECHAZOS' in linea_strip:
+                    seccion_errores = True
+                    continue
+                
+                if not seccion_errores:
+                    continue
+                
+                # Detectar subsecciones del reporte de expedientes nuevos
+                if linea_strip.startswith('DUPLICADOS'):
+                    subseccion = 'Radicado duplicado'
+                    continue
+                elif linea_strip.startswith('RADICADO INVÁLIDO') or linea_strip.startswith('RADICADO INVALIDO'):
+                    subseccion = 'Radicado inválido'
+                    continue
+                elif linea_strip.startswith('CAMPOS FALTANTES'):
+                    subseccion = 'Campos faltantes'
+                    continue
+                
+                # Detectar motivo en formato de actualización: "   Motivo: texto"
+                if linea_strip.startswith('Motivo:'):
+                    motivo = linea_strip.replace('Motivo:', '').strip()
+                    if motivo:
+                        errores_agrupados[motivo] = errores_agrupados.get(motivo, 0) + 1
+                
+                # Detectar entradas numeradas en subsecciones de expedientes nuevos: "1. radicado"
+                elif subseccion and linea_strip and linea_strip[0].isdigit() and '. ' in linea_strip:
+                    errores_agrupados[subseccion] = errores_agrupados.get(subseccion, 0) + 1
+        
+        # Convertir a lista ordenada por cantidad
+        errores_lista = [
+            {'tipo_error': motivo, 'cantidad': cantidad}
+            for motivo, cantidad in sorted(errores_agrupados.items(), key=lambda x: x[1], reverse=True)
+        ]
+        
+        return jsonify({
+            'errores': errores_lista,
+            'fecha_reporte': fecha.strftime('%Y-%m-%d %H:%M:%S') if fecha else None,
+            'resumen': {
+                'total_filas': total_filas or 0,
+                'procesados': actualizados or 0,
+                'total_errores': (err_validacion or 0) + (err_tecnicos or 0) + (no_encontrados or 0)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo últimos errores: {e}")
+        logger.error(f"Tipo de error: {type(e).__name__}")
+        try:
+            if conn:
+                conn.close()
+        except NameError:
+            pass
         return jsonify({'error': str(e)}), 500
 
 @vistasubirexpediente.route('/descargar_reporte_bd/<int:reporte_id>')

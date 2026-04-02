@@ -11,7 +11,7 @@
             </h2>
             
             <!-- Mensajes de flash -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
+            <!-- {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
             {% for category, message in messages %}
             <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' if category == 'info' else 'warning' }} alert-dismissible fade show"
@@ -26,38 +26,28 @@
             </div>
             {% endfor %}
             {% endif %}
-            {% endwith %}
+            {% endwith %} -->
 
-            <!-- Información sobre roles -->
-            <div class="alert alert-info mb-4" style="margin-top: 2%;">
-                <h6><i class="fas fa-info-circle"></i> Información sobre Asignación por Roles</h6>
-                <div class="row">
-                    <div class="col-md-6">
-                        <strong><i class="fas fa-pen text-success"></i> ESCRIBIENTE:</strong>
-                        <small class="text-muted d-block">Encargado de redacción, documentación y actualización de
-                            expedientes</small>
-                    </div>
-                    <div class="col-md-6">
-                        <strong><i class="fas fa-gavel text-info"></i> SUSTANCIADOR:</strong>
-                        <small class="text-muted d-block">Encargado de revisión, análisis y sustanciación de
-                            casos</small>
-                    </div>
+            <!-- Últimos errores de carga -->
+            <div class="alert alert-warning mb-4" style="margin-top: 2%;">
+                <h6><i class="fas fa-exclamation-triangle"></i> Últimos Errores de Carga de Datos</h6>
+                <div id="ultimos-errores" class="mb-3">
+                    <!-- Aquí se cargarán dinámicamente los errores más comunes -->
+                    <p class="text-muted mb-2"><small>Cargando información de errores...</small></p>
                 </div>
-                <hr class="my-2">
-                <small class="text-muted">
-                    <i class="fas fa-lightbulb"></i>
-                    <strong>Ventaja:</strong> Al asignar por rol, cualquier usuario con ese rol puede trabajar el
-                    expediente,
-                    proporcionando mayor flexibilidad en la gestión de casos.
-                </small>
+                <div class="mb-4 text-center">
+                    <button type="button" class="btn btn-warning btn-sm" onclick="abrirModalReportes()">
+                        <i class="fas fa-file-download"></i> Ver Reporte Completo de Errores
+                    </button>
+                </div>
             </div>
             
             <!-- Botón para ver reportes de errores -->
-            <div class="mb-4 text-center">
+            <!-- <div class="mb-4 text-center">
                 <button type="button" class="btn btn-warning btn-lg" onclick="abrirModalReportes()">
                     <i class="fas fa-file-download"></i> Descargar Reportes de Errores
                 </button>
-            </div>
+            </div> -->
 
             <!-- Pestañas simples -->
             <div class="tab">
@@ -632,6 +622,83 @@
         
         console.log('Reportes mostrados correctamente');
     }
+    
+    // Función para cargar los últimos errores comunes
+    function cargarUltimosErrores() {
+        console.log('Cargando últimos errores...');
+        
+        const erroresEl = document.getElementById('ultimos-errores');
+        if (!erroresEl) {
+            console.error('Elemento ultimos-errores no encontrado');
+            return;
+        }
+        
+        // Hacer petición AJAX para obtener errores comunes
+        fetch('{{ url_for("idvistasubirexpediente.obtener_ultimos_errores") }}')
+            .then(response => {
+                console.log('Respuesta de errores:', response.status);
+                if (!response.ok) {
+                    throw new Error('Error obteniendo errores: ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Errores comunes recibidos:', data);
+                
+                if (data.errores && data.errores.length > 0) {
+                    mostrarErroresComunes(data.errores, data.fecha_reporte, data.resumen);
+                } else {
+                    erroresEl.innerHTML = '<p class="text-muted mb-2"><small>No hay errores recientes para mostrar.</small></p>';
+                }
+            })
+            .catch(error => {
+                console.error('Error cargando errores:', error);
+                erroresEl.innerHTML = '<p class="text-muted mb-2"><small>Error cargando información de errores.</small></p>';
+            });
+    }
+    
+    function mostrarErroresComunes(errores, fechaReporte, resumen) {
+        const erroresEl = document.getElementById('ultimos-errores');
+        if (!erroresEl) return;
+        
+        let html = '';
+        
+        // Mostrar fecha y resumen general
+        if (fechaReporte) {
+            html += `<p class="text-muted mb-2"><small><i class="fas fa-clock"></i> Último reporte: ${fechaReporte}</small></p>`;
+        }
+        
+        if (resumen) {
+            html += `
+                <div class="d-flex justify-content-around text-center mb-2">
+                    <div><span class="font-weight-bold text-secondary">${resumen.total_filas}</span><br><small class="text-muted">Total filas</small></div>
+                    <div><span class="font-weight-bold text-success">${resumen.procesados}</span><br><small class="text-muted">Procesados</small></div>
+                    <div><span class="font-weight-bold text-danger">${resumen.total_errores}</span><br><small class="text-muted">Errores</small></div>
+                </div>
+            `;
+        }
+        
+        html += '<div class="list-group list-group-flush">';
+        
+        errores.forEach(error => {
+            html += `
+                <div class="list-group-item px-0 py-1">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-danger">${error.tipo_error}</small>
+                        <span class="badge badge-warning badge-pill ml-2">${error.cantidad}</span>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        erroresEl.innerHTML = html;
+    }
+    
+    // Cargar errores al cargar la página
+    document.addEventListener('DOMContentLoaded', function() {
+        cargarUltimosErrores();
+    });
 </script>
 
 <!-- Incluir CSS personalizado -->
