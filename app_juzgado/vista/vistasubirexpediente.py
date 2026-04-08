@@ -4,7 +4,7 @@ import os, re
 from werkzeug.utils import secure_filename
 import sys
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from io import BytesIO
 
 # Detectar entorno (producción vs desarrollo)
@@ -1040,8 +1040,6 @@ def procesar_formulario_manual():
             
             # Manejar fecha_ingreso si existe en la tabla
             if 'fecha_ingreso' in available_columns:
-                from datetime import datetime, date
-                
                 if fecha_ingreso:
                     try:
                         fecha_ingreso_obj = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
@@ -1381,7 +1379,7 @@ def procesar_excel_actualizacion(file_content):
         errores = 0
         errores_detallados = []
 
-        # Mapeo de columnas Excel a columnas BD
+        # Mapeo de columnas Excel a columnas BD (solo columnas que existen en tabla expediente)
         mapeo_columnas = {
             'RADICADO COMPLETO': 'radicado_completo',
             'radicado_completo': 'radicado_completo',
@@ -1391,14 +1389,9 @@ def procesar_excel_actualizacion(file_content):
             'DEMANDANTE_HOMOLOGADO': 'demandante',
             'DEMANDADO': 'demandado',
             'DEMANDADO_HOMOLOGADO': 'demandado',
-            'CLASE': 'clase',
-            'clase': 'clase',
             'FECHA INGRESO': 'fecha_ingreso',
             'fecha_ingreso': 'fecha_ingreso',
             'FECHA_INGRESO': 'fecha_ingreso',
-            'FECHA ESTADO': 'fecha_estado',
-            'fecha_estado': 'fecha_estado',
-            'FECHA_ESTADO': 'fecha_estado',
             'SOLICITUD': 'solicitud',
             'solicitud': 'solicitud',
         }
@@ -1985,7 +1978,10 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             
                             # Extraer datos del estado
                             clase = extraer_valor_flexible(row, df_estados.columns, 
-                                ['CLASE', 'clase', 'Clase', 'ESTADO_TRAMITE', 'Estado_Tramite'])
+                                ['CLASE', 'clase', 'Clase', 'ESTADO_TRAMITE', 'Estado_Tramite',
+                                 'TIPO', 'tipo', 'Tipo', 'TIPO_ACTUACION', 'tipo_actuacion',
+                                 'ACTUACION', 'actuacion', 'Actuacion', 'ACTO', 'acto',
+                                 'DESCRIPCION', 'descripcion', 'Descripcion', 'DESCRIPTION'])
                             fecha_estado = extraer_fecha_flexible(row, df_estados.columns, 
                                 ['FECHA ESTADO', 'fecha_estado', 'FECHA_ESTADO', 'Fecha Estado'])
                             auto_anotacion = extraer_valor_flexible(row, df_estados.columns, 
@@ -2034,7 +2030,10 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 continue
                             
                             # Verificar duplicado en MEMORIA PRIMERO (dentro del mismo archivo)
-                            cache_key = (expediente_id, fecha_estado, clase, auto_anotacion)
+                            # Normalizar valores para comparación consistente
+                            clase_norm = clase.strip() if clase else clase
+                            auto_anotacion_norm = auto_anotacion.strip() if auto_anotacion else auto_anotacion
+                            cache_key = (expediente_id, fecha_estado, clase_norm, auto_anotacion_norm)
                             if cache_key in estados_insertados_cache:
                                 clasificacion = 'ERROR: duplicado en archivo'
                                 if not IS_PRODUCTION:
@@ -2052,13 +2051,17 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             obs_estado_normalized = observaciones if observaciones and str(observaciones).strip() else None
                             
                             # Verificar si ya existe estado (ignora observaciones como clave)
+                            # Normalizar para comparación consistente
+                            clase_norm = clase.strip() if clase else clase
+                            auto_anotacion_norm = auto_anotacion.strip() if auto_anotacion else auto_anotacion
+                            
                             cursor_estados.execute("""
                                 SELECT id, observaciones FROM estados 
                                 WHERE expediente_id = %s 
                                 AND fecha_estado = %s 
-                                AND clase = %s
-                                AND auto_anotacion = %s
-                            """, (expediente_id, fecha_estado, clase, auto_anotacion))
+                                AND TRIM(clase) = TRIM(%s)
+                                AND TRIM(auto_anotacion) = TRIM(%s)
+                            """, (expediente_id, fecha_estado, clase_norm, auto_anotacion_norm))
                             estado_bd = cursor_estados.fetchone()
                             
                             if estado_bd:
@@ -2102,7 +2105,7 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             cursor_estados.execute("""
                                 INSERT INTO estados (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
                                 VALUES (%s, %s, %s, %s, %s)
-                            """, (expediente_id, clase, fecha_estado, auto_anotacion, obs_estado_normalized))
+                            """, (expediente_id, clase_norm, fecha_estado, auto_anotacion_norm, obs_estado_normalized))
                             
                             conn_estados.commit()
                             estados_insertados_cache.add(cache_key)  # Agregar al caché
@@ -2148,8 +2151,6 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 
                                 if ultima_fecha_ingreso and ultima_fecha_estado:
                                     # Normalizar fechas para comparación
-                                    from datetime import datetime, date
-                                    
                                     if isinstance(ultima_fecha_ingreso, str):
                                         ultima_fecha_ingreso = datetime.strptime(ultima_fecha_ingreso, '%Y-%m-%d').date()
                                     elif isinstance(ultima_fecha_ingreso, datetime):
@@ -2174,8 +2175,6 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 
                                 elif ultima_fecha_estado:
                                     # Solo hay estados → Verificar antigüedad
-                                    from datetime import datetime, date
-                                    
                                     if isinstance(ultima_fecha_estado, str):
                                         ultima_fecha_estado = datetime.strptime(ultima_fecha_estado, '%Y-%m-%d').date()
                                     elif isinstance(ultima_fecha_estado, datetime):
@@ -2379,7 +2378,6 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
             try:
                 logger.info("📝 Generando reporte de errores en BD...")
                 
-                from datetime import datetime
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 
                 # Construir contenido del reporte
@@ -2646,6 +2644,8 @@ def procesar_excel_expedientes(file_content):
         # 📊 Tracking de expedientes creados exitosamente
         expedientes_exitosos = []
         
+        # 🎫 Flag para recálculo de turnos al final
+        necesita_recalculo_turnos = False
         logger.info("Iniciando procesamiento fila por fila...")
         for index, row in df.iterrows():
             try:
@@ -2691,7 +2691,6 @@ def procesar_excel_expedientes(file_content):
                         try:
                             if isinstance(fecha_valor, str):
                                 # Intentar diferentes formatos de fecha
-                                from datetime import datetime
                                 for formato in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
                                     try:
                                         fecha_ingreso = datetime.strptime(fecha_valor.strip(), formato).date()
@@ -2829,6 +2828,12 @@ def procesar_excel_expedientes(file_content):
                                     values_to_insert.append(value)
                                     break
                 
+                # Si el estado no fue extraído del Excel, usar 'Activo Pendiente' por defecto
+                if 'estado' in available_columns and 'estado' not in columns_to_insert:
+                    columns_to_insert.append('estado')
+                    placeholders.append('%s')
+                    values_to_insert.append('Activo Pendiente')
+                
                 # Manejar juzgado_origen (puede ser integer en la BD)
                 juzgado_origen_cols = ['JuzgadoOrigen', 'juzgado_origen', 'JUZGADO_ORIGEN', 'Juzgado Origen', 'J. ORIGEN']
                 for col_name in juzgado_origen_cols:
@@ -2869,27 +2874,8 @@ def procesar_excel_expedientes(file_content):
                             break
                     
                     if estado_expediente == 'Activo Pendiente' and 'turno' in available_columns:
-                        logger.debug(f"  🎫 Expediente {expediente_id} creado con estado 'Activo Pendiente' - asignando turno")
-                        
-                        # Obtener el siguiente turno disponible
-                        cursor.execute("""
-                            SELECT MAX(turno) 
-                            FROM expediente 
-                            WHERE estado = 'Activo Pendiente' AND turno IS NOT NULL
-                        """)
-                        
-                        resultado = cursor.fetchone()
-                        ultimo_turno = resultado[0] if resultado and resultado[0] is not None else 0
-                        siguiente_turno = ultimo_turno + 1
-                        
-                        # Asignar turno al expediente recién creado
-                        cursor.execute("""
-                            UPDATE expediente 
-                            SET turno = %s 
-                            WHERE id = %s
-                        """, (siguiente_turno, expediente_id))
-                        
-                        logger.debug(f"  ✅ Turno {siguiente_turno} asignado al expediente {expediente_id}")
+                        # Marcar para recálculo al final (no asignar turno aquí)
+                        necesita_recalculo_turnos = True
                     
                     # 📥 INSERTAR AUTOMÁTICAMENTE EN TABLA INGRESOS
                     # Verificar si existe la tabla ingresos
@@ -2991,6 +2977,61 @@ def procesar_excel_expedientes(file_content):
         
         conn.commit()
         logger.info("Transacción masiva confirmada (COMMIT)")
+        
+        # 🎫 RECALCULAR TURNOS UNA SOLA VEZ con lógica compleja (si es necesario)
+        if necesita_recalculo_turnos:
+            try:
+                logger.info("🔄 RECALCULANDO TODOS LOS TURNOS (LÓGICA COMPLEJA)...")
+                
+                cursor.execute("""
+                    UPDATE expediente SET turno = NULL WHERE estado = 'Activo Pendiente'
+                """)
+                
+                cursor.execute("""
+                    WITH expedientes_activos AS (
+                        SELECT e.id, e.radicado_completo, e.fecha_ingreso as fecha_ingreso_expediente
+                        FROM expediente e WHERE e.estado = 'Activo Pendiente'
+                    ),
+                    ingresos_sin_salida AS (
+                        SELECT ie.expediente_id, ie.fecha_ingreso
+                        FROM ingresos ie
+                        WHERE ie.fecha_ingreso IS NOT NULL
+                          AND NOT EXISTS (
+                            SELECT 1 FROM estados est 
+                            WHERE est.expediente_id = ie.expediente_id 
+                              AND est.fecha_estado > ie.fecha_ingreso
+                          )
+                    ),
+                    fecha_mas_antigua_sin_salida AS (
+                        SELECT expediente_id, MIN(fecha_ingreso) as fecha_ingreso_sin_salida
+                        FROM ingresos_sin_salida GROUP BY expediente_id
+                    ),
+                    ultima_actuacion AS (
+                        SELECT expediente_id, MAX(fecha_estado) as ultima_actuacion
+                        FROM estados WHERE fecha_estado IS NOT NULL GROUP BY expediente_id
+                    )
+                    SELECT ea.id
+                    FROM expedientes_activos ea
+                    LEFT JOIN fecha_mas_antigua_sin_salida fmass ON ea.id = fmass.expediente_id
+                    LEFT JOIN ultima_actuacion ua ON ea.id = ua.expediente_id
+                    WHERE COALESCE(fmass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) IS NOT NULL
+                    ORDER BY
+                        COALESCE(fmass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) ASC,
+                        ea.fecha_ingreso_expediente ASC,
+                        ua.ultima_actuacion ASC NULLS LAST,
+                        ea.id ASC
+                """)
+                
+                expedientes = cursor.fetchall()
+                for turno, (exp_id,) in enumerate(expedientes, 1):
+                    cursor.execute("UPDATE expediente SET turno = %s WHERE id = %s", (turno, exp_id))
+                
+                conn.commit()
+                logger.info(f"✅ Turnos recalculados: {len(expedientes)} expedientes actualizados")
+            
+            except Exception as turno_error:
+                logger.error(f"❌ Error recalculando turnos: {turno_error}")
+                conn.rollback()
         
         cursor.close()
         conn.close()
@@ -3244,7 +3285,6 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
         try:
             logger.info("📝 Generando reporte completo en BD...")
             
-            from datetime import datetime
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
             # Construir contenido del reporte
@@ -3611,7 +3651,7 @@ def procesar_pestaña_estados(df):
             try:
                 # Extraer datos con mapeo flexible (solo los requeridos)
                 radicado_completo = extraer_valor_flexible(row, df.columns, ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio'])
-                clase = extraer_valor_flexible(row, df.columns, ['CLASE', 'clase'])
+                clase = extraer_valor_flexible(row, df.columns, ['CLASE', 'clase', 'Clase'])
                 fecha_estado = extraer_fecha_flexible(row, df.columns, ['FECHA ESTADO', 'fecha_estado', 'FECHA_ESTADO'])
                 auto_anotacion = extraer_valor_flexible(row, df.columns, ['AUTO / ANOTACION', 'auto_anotacion', 'AUTO_ANOTACION', 'AUTO', 'ANOTACION'])
                 
