@@ -1661,17 +1661,7 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 continue
                             
                             if not solicitud:
-                                clasificacion = 'ERROR: solicitud vacía'
-                                if not IS_PRODUCTION:
-                                    logger.debug(f"Fila {index + 2} radicado {radicado_completo} → {clasificacion}")
-                                resultados['errores'] += 1
-                                resultados['errores_detallados'].append({
-                                    'fila': index + 2,
-                                    'hoja': pestaña_ingreso,
-                                    'radicado': radicado_completo,
-                                    'motivo': 'Solicitud vacía'
-                                })
-                                continue
+                                solicitud = 'Sin especificar'
                             
                             # Estandarizar observaciones (usar NULL si está vacía)
                             obs_normalized = observaciones if observaciones and str(observaciones).strip() else None
@@ -3802,8 +3792,8 @@ def extraer_valor_flexible(row, columnas_df, posibles_nombres):
     """Extrae un valor de una fila usando nombres de columnas flexibles"""
     for nombre in posibles_nombres:
         for col_df in columnas_df:
-            # Comparación exacta (normalizada: minúsculas, espacios → guión bajo)
-            if nombre.lower().replace(' ', '_') == col_df.lower().replace(' ', '_'):
+            # Comparación exacta con strip() para manejar espacios al final
+            if nombre.lower().replace(' ', '_') == col_df.lower().replace(' ', '_').strip():
                 valor = row.get(col_df)
                 if pd.notna(valor) and str(valor).strip():
                     return str(valor).strip()
@@ -3815,19 +3805,17 @@ def extraer_fecha_flexible(row, columnas_df, posibles_nombres):
     
     for nombre in posibles_nombres:
         for col_df in columnas_df:
-            if nombre.lower().replace(' ', '_') in col_df.lower().replace(' ', '_') or col_df.lower().replace(' ', '_') in nombre.lower().replace(' ', '_'):
+            if nombre.lower().replace(' ', '_') == col_df.lower().replace(' ', '_').strip():
                 fecha_valor = row.get(col_df)
                 if pd.notna(fecha_valor):
                     try:
                         if isinstance(fecha_valor, str):
-                            # Intentar diferentes formatos de fecha
                             for formato in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
                                 try:
                                     return datetime.strptime(fecha_valor.strip(), formato).date()
                                 except ValueError:
                                     continue
                         else:
-                            # Si ya es un objeto datetime o date
                             if hasattr(fecha_valor, 'date'):
                                 return fecha_valor.date()
                             else:
