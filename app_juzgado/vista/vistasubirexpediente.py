@@ -3802,7 +3802,8 @@ def extraer_valor_flexible(row, columnas_df, posibles_nombres):
     """Extrae un valor de una fila usando nombres de columnas flexibles"""
     for nombre in posibles_nombres:
         for col_df in columnas_df:
-            if nombre.lower().replace(' ', '_') in col_df.lower().replace(' ', '_') or col_df.lower().replace(' ', '_') in nombre.lower().replace(' ', '_'):
+            # Comparación exacta (normalizada: minúsculas, espacios → guión bajo)
+            if nombre.lower().replace(' ', '_') == col_df.lower().replace(' ', '_'):
                 valor = row.get(col_df)
                 if pd.notna(valor) and str(valor).strip():
                     return str(valor).strip()
