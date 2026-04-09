@@ -3769,30 +3769,30 @@ def buscar_expedientes_flexible(radicados_no_encontrados, conn):
                         logger.debug(f"✓ {radicado_excel} → encontrado por últimos 13 dígitos: {radicado_bd}")
                     break
 
-    # ── Paso 2: LIKE sufijo para radicados entre 8 y 12 dígitos ──────────────
+    # ── Paso 2: LIKE para radicados entre 8 y 12 dígitos ──────────────────────
     if entre_8_y_12:
         if not IS_PRODUCTION:
-            logger.debug(f"🔍 Buscando {len(entre_8_y_12)} radicados cortos por LIKE sufijo...")
+            logger.debug(f"🔍 Buscando {len(entre_8_y_12)} radicados cortos por LIKE...")
         for radicado_excel in entre_8_y_12:
             if radicado_excel in encontrados:
                 continue
-            # Anclaje por sufijo: busca radicados que TERMINEN con este valor
+            # Usar %valor% ya que estos radicados aparecen en el medio del radicado completo
             cursor.execute("""
                 SELECT id, radicado_completo FROM expediente
                 WHERE radicado_completo LIKE %s
                 LIMIT 2
-            """, (f'%{radicado_excel}',))
+            """, (f'%{radicado_excel}%',))
             candidatos = cursor.fetchall()
 
             if len(candidatos) == 1:
                 # Solo un candidato → asociación segura
                 encontrados[radicado_excel] = (candidatos[0][0], 'like_sufijo')
                 if not IS_PRODUCTION:
-                    logger.debug(f"✓ {radicado_excel} → encontrado por LIKE sufijo: {candidatos[0][1]}")
+                    logger.debug(f"✓ {radicado_excel} → encontrado por LIKE: {candidatos[0][1]}")
             elif len(candidatos) > 1:
                 # Múltiples candidatos → ambiguo, no asociar
                 if not IS_PRODUCTION:
-                    logger.debug(f"⚠️ {radicado_excel} → LIKE sufijo ambiguo ({len(candidatos)} candidatos), descartado")
+                    logger.debug(f"⚠️ {radicado_excel} → LIKE ambiguo ({len(candidatos)} candidatos), descartado")
 
     cursor.close()
     return encontrados
