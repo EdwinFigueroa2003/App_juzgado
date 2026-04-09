@@ -1340,35 +1340,16 @@ def procesar_excel_actualizacion(file_content):
         # Crear diccionario en memoria: {radicado: expediente_id}
         expedientes_cache = {row[1]: row[0] for row in cursor.fetchall()}
         
-        # 🔍 BÚSQUEDA ADICIONAL: Para radicados no encontrados, buscar por últimos 13 dígitos
+        # 🔍 BÚSQUEDA ADICIONAL: últimos 13 dígitos + LIKE sufijo para radicados cortos
         radicados_no_encontrados = [r for r in radicados_excel if r not in expedientes_cache]
-        
+        radicados_dudosos = {}  # {radicado: radicado_bd_encontrado} para marcar en reporte
         if radicados_no_encontrados:
-            logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados por últimos 13 dígitos...")
-            
-            # Obtener todos los radicados de la BD para comparar últimos 13 dígitos
-            cursor.execute("""
-                SELECT id, radicado_completo 
-                FROM expediente 
-                WHERE radicado_completo IS NOT NULL 
-                AND LENGTH(radicado_completo) >= 13
-            """)
-            
-            todos_radicados_bd = cursor.fetchall()
-            
-            # Para cada radicado no encontrado, buscar por últimos 13 dígitos
-            for radicado_excel in radicados_no_encontrados:
-                if len(radicado_excel) >= 13:
-                    ultimos_13_excel = radicado_excel[-13:]
-                    
-                    # Buscar en BD si algún radicado tiene los mismos últimos 13 dígitos
-                    for exp_id, radicado_bd in todos_radicados_bd:
-                        if len(radicado_bd) >= 13 and radicado_bd[-13:] == ultimos_13_excel:
-                            # Agregar al caché usando el radicado del Excel como clave
-                            expedientes_cache[radicado_excel] = exp_id
-                            if not IS_PRODUCTION:
-                                logger.debug(f"✓ Radicado {radicado_excel} encontrado por últimos 13 dígitos: {radicado_bd}")
-                            break
+            logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados no encontrados (13 dígitos / LIKE sufijo)...")
+            encontrados_extra = buscar_expedientes_flexible(radicados_no_encontrados, conn)
+            for rad, (exp_id, metodo) in encontrados_extra.items():
+                expedientes_cache[rad] = exp_id
+                if metodo == 'like_sufijo':
+                    radicados_dudosos[rad] = metodo
         
         logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria (incluyendo búsqueda por últimos 13 dígitos)")
         logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
@@ -1580,35 +1561,16 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 # Crear diccionario en memoria: {radicado: expediente_id}
                 expedientes_cache = {row[1]: row[0] for row in cursor_cache.fetchall()}
                 
-                # 🔍 BÚSQUEDA ADICIONAL: Para radicados no encontrados, buscar por últimos 13 dígitos
+                # 🔍 BÚSQUEDA ADICIONAL: últimos 13 dígitos + LIKE sufijo para radicados cortos
                 radicados_no_encontrados = [r for r in radicados_excel if r not in expedientes_cache]
-                
+                radicados_dudosos_ingresos = {}
                 if radicados_no_encontrados:
-                    logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados por últimos 13 dígitos...")
-                    
-                    # Obtener todos los radicados de la BD para comparar últimos 13 dígitos
-                    cursor_cache.execute("""
-                        SELECT id, radicado_completo 
-                        FROM expediente 
-                        WHERE radicado_completo IS NOT NULL 
-                        AND LENGTH(radicado_completo) >= 13
-                    """)
-                    
-                    todos_radicados_bd = cursor_cache.fetchall()
-                    
-                    # Para cada radicado no encontrado, buscar por últimos 13 dígitos
-                    for radicado_excel in radicados_no_encontrados:
-                        if len(radicado_excel) >= 13:
-                            ultimos_13_excel = radicado_excel[-13:]
-                            
-                            # Buscar en BD si algún radicado tiene los mismos últimos 13 dígitos
-                            for exp_id, radicado_bd in todos_radicados_bd:
-                                if len(radicado_bd) >= 13 and radicado_bd[-13:] == ultimos_13_excel:
-                                    # Agregar al caché usando el radicado del Excel como clave
-                                    expedientes_cache[radicado_excel] = exp_id
-                                    if not IS_PRODUCTION:
-                                        logger.debug(f"✓ Radicado {radicado_excel} encontrado por últimos 13 dígitos: {radicado_bd}")
-                                    break
+                    logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados no encontrados (13 dígitos / LIKE sufijo)...")
+                    encontrados_extra = buscar_expedientes_flexible(radicados_no_encontrados, conn_cache)
+                    for rad, (exp_id, metodo) in encontrados_extra.items():
+                        expedientes_cache[rad] = exp_id
+                        if metodo == 'like_sufijo':
+                            radicados_dudosos_ingresos[rad] = metodo
                 
                 cursor_cache.close()
                 conn_cache.close()
@@ -1791,7 +1753,8 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 'fila': index + 2,
                                 'radicado': radicado_completo,
                                 'fecha_ingreso': str(fecha_ingreso),
-                                'solicitud': solicitud[:50] if solicitud and len(solicitud) > 50 else solicitud  # Limitar longitud
+                                'solicitud': solicitud[:50] if solicitud and len(solicitud) > 50 else solicitud,
+                                'dudoso': radicado_completo in radicados_dudosos_ingresos  # ⚠️ Asociado por LIKE
                             })
                             
                         except Exception as e:
@@ -1877,35 +1840,16 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 # Crear diccionario en memoria: {radicado: expediente_id}
                 expedientes_cache_estados = {row[1]: row[0] for row in cursor_cache_estados.fetchall()}
                 
-                # 🔍 BÚSQUEDA ADICIONAL: Para radicados no encontrados, buscar por últimos 13 dígitos
+                # 🔍 BÚSQUEDA ADICIONAL: últimos 13 dígitos + LIKE sufijo para radicados cortos
                 radicados_no_encontrados = [r for r in radicados_excel_estados if r not in expedientes_cache_estados]
-                
+                radicados_dudosos_estados = {}
                 if radicados_no_encontrados:
-                    logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados por últimos 13 dígitos...")
-                    
-                    # Obtener todos los radicados de la BD para comparar últimos 13 dígitos
-                    cursor_cache_estados.execute("""
-                        SELECT id, radicado_completo 
-                        FROM expediente 
-                        WHERE radicado_completo IS NOT NULL 
-                        AND LENGTH(radicado_completo) >= 13
-                    """)
-                    
-                    todos_radicados_bd = cursor_cache_estados.fetchall()
-                    
-                    # Para cada radicado no encontrado, buscar por últimos 13 dígitos
-                    for radicado_excel in radicados_no_encontrados:
-                        if len(radicado_excel) >= 13:
-                            ultimos_13_excel = radicado_excel[-13:]
-                            
-                            # Buscar en BD si algún radicado tiene los mismos últimos 13 dígitos
-                            for exp_id, radicado_bd in todos_radicados_bd:
-                                if len(radicado_bd) >= 13 and radicado_bd[-13:] == ultimos_13_excel:
-                                    # Agregar al caché usando el radicado del Excel como clave
-                                    expedientes_cache_estados[radicado_excel] = exp_id
-                                    if not IS_PRODUCTION:
-                                        logger.debug(f"✓ Radicado {radicado_excel} encontrado por últimos 13 dígitos: {radicado_bd}")
-                                    break
+                    logger.info(f"🔍 Buscando {len(radicados_no_encontrados)} radicados no encontrados (13 dígitos / LIKE sufijo)...")
+                    encontrados_extra = buscar_expedientes_flexible(radicados_no_encontrados, conn_cache_estados)
+                    for rad, (exp_id, metodo) in encontrados_extra.items():
+                        expedientes_cache_estados[rad] = exp_id
+                        if metodo == 'like_sufijo':
+                            radicados_dudosos_estados[rad] = metodo
                 
                 cursor_cache_estados.close()
                 conn_cache_estados.close()
@@ -2119,8 +2063,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 'fila': index + 2,
                                 'radicado': radicado_completo,
                                 'fecha_estado': str(fecha_estado),
-                                'clase': clase[:50] if clase and len(clase) > 50 else clase,  # Limitar longitud
-                                'auto_anotacion': auto_anotacion[:50] if auto_anotacion and len(auto_anotacion) > 50 else auto_anotacion
+                                'clase': clase[:50] if clase and len(clase) > 50 else clase,
+                                'auto_anotacion': auto_anotacion[:50] if auto_anotacion and len(auto_anotacion) > 50 else auto_anotacion,
+                                'dudoso': radicado_completo in radicados_dudosos_estados  # ⚠️ Asociado por LIKE
                             })
                             
                             # 🔄 ACTUALIZAR AUTOMÁTICAMENTE EL CAMPO 'estado' EN TABLA EXPEDIENTE
@@ -2398,18 +2343,28 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                     
                     # Ingresos exitosos
                     if resultados.get('ingresos_exitosos'):
-                        contenido_reporte += f"INGRESOS AGREGADOS ({len(resultados['ingresos_exitosos'])}):\n"
+                        dudosos_ing = [i for i in resultados['ingresos_exitosos'] if i.get('dudoso')]
+                        contenido_reporte += f"INGRESOS AGREGADOS ({len(resultados['ingresos_exitosos'])})"
+                        if dudosos_ing:
+                            contenido_reporte += f" - ⚠️ {len(dudosos_ing)} asociados por coincidencia parcial (verificar)"
+                        contenido_reporte += ":\n"
                         contenido_reporte += "-" * 80 + "\n"
-                        for i, ingreso in enumerate(resultados['ingresos_exitosos'], 1):  # TODOS los ingresos
-                            contenido_reporte += f"{i}. Fila {ingreso['fila']} - Radicado: {ingreso['radicado']}\n"
+                        for i, ingreso in enumerate(resultados['ingresos_exitosos'], 1):
+                            marca = " ⚠️ VERIFICAR ASOCIACIÓN" if ingreso.get('dudoso') else ""
+                            contenido_reporte += f"{i}. Fila {ingreso['fila']} - Radicado: {ingreso['radicado']}{marca}\n"
                             contenido_reporte += f"   Fecha: {ingreso['fecha_ingreso']} | Solicitud: {ingreso['solicitud']}\n\n"
                     
                     # Estados exitosos
                     if resultados.get('estados_exitosos'):
-                        contenido_reporte += f"ESTADOS AGREGADOS ({len(resultados['estados_exitosos'])}):\n"
+                        dudosos_est = [e for e in resultados['estados_exitosos'] if e.get('dudoso')]
+                        contenido_reporte += f"ESTADOS AGREGADOS ({len(resultados['estados_exitosos'])})"
+                        if dudosos_est:
+                            contenido_reporte += f" - ⚠️ {len(dudosos_est)} asociados por coincidencia parcial (verificar)"
+                        contenido_reporte += ":\n"
                         contenido_reporte += "-" * 80 + "\n"
-                        for i, estado in enumerate(resultados['estados_exitosos'], 1):  # TODOS los estados
-                            contenido_reporte += f"{i}. Fila {estado['fila']} - Radicado: {estado['radicado']}\n"
+                        for i, estado in enumerate(resultados['estados_exitosos'], 1):
+                            marca = " ⚠️ VERIFICAR ASOCIACIÓN" if estado.get('dudoso') else ""
+                            contenido_reporte += f"{i}. Fila {estado['fila']} - Radicado: {estado['radicado']}{marca}\n"
                             contenido_reporte += f"   Fecha: {estado['fecha_estado']} | Clase: {estado['clase']}\n"
                             contenido_reporte += f"   Auto/Anotación: {estado['auto_anotacion']}\n\n"
                 
@@ -3769,6 +3724,79 @@ def procesar_pestaña_estados(df):
         logger.error(f"ERROR en procesar_pestaña_estados: {str(e)}")
         resultado['errores'] = len(df)
         return resultado
+
+def buscar_expedientes_flexible(radicados_no_encontrados, conn):
+    """
+    Busca expedientes en BD usando tres estrategias en orden:
+    1. Últimos 13 dígitos (si el radicado tiene >= 13 dígitos)
+    2. LIKE sufijo '%radicado' para radicados entre 8 y 12 dígitos
+       - Usa anclaje por sufijo para reducir falsos positivos
+       - Radicados < 8 dígitos se descartan (riesgo de ambigüedad muy alto)
+    
+    Returns:
+        dict: {radicado_excel: (expediente_id, metodo)}
+              metodo: 'exacto', '13_digitos', 'like_sufijo'
+    """
+    encontrados = {}
+    if not radicados_no_encontrados:
+        return encontrados
+
+    cursor = conn.cursor()
+
+    # Separar por longitud
+    con_13_o_mas = [r for r in radicados_no_encontrados if len(r) >= 13]
+    entre_8_y_12 = [r for r in radicados_no_encontrados if 8 <= len(r) < 13]
+    muy_cortos   = [r for r in radicados_no_encontrados if len(r) < 8]
+
+    if muy_cortos and not IS_PRODUCTION:
+        logger.debug(f"⚠️ {len(muy_cortos)} radicados con < 8 dígitos descartados (riesgo de falso positivo): {muy_cortos[:5]}")
+
+    # ── Paso 1: Últimos 13 dígitos ────────────────────────────────────────────
+    if con_13_o_mas:
+        cursor.execute("""
+            SELECT id, radicado_completo FROM expediente
+            WHERE radicado_completo IS NOT NULL
+              AND LENGTH(radicado_completo) >= 13
+        """)
+        todos_bd = cursor.fetchall()
+
+        for radicado_excel in con_13_o_mas:
+            ultimos_13 = radicado_excel[-13:]
+            for exp_id, radicado_bd in todos_bd:
+                if len(radicado_bd) >= 13 and radicado_bd[-13:] == ultimos_13:
+                    encontrados[radicado_excel] = (exp_id, '13_digitos')
+                    if not IS_PRODUCTION:
+                        logger.debug(f"✓ {radicado_excel} → encontrado por últimos 13 dígitos: {radicado_bd}")
+                    break
+
+    # ── Paso 2: LIKE sufijo para radicados entre 8 y 12 dígitos ──────────────
+    if entre_8_y_12:
+        if not IS_PRODUCTION:
+            logger.debug(f"🔍 Buscando {len(entre_8_y_12)} radicados cortos por LIKE sufijo...")
+        for radicado_excel in entre_8_y_12:
+            if radicado_excel in encontrados:
+                continue
+            # Anclaje por sufijo: busca radicados que TERMINEN con este valor
+            cursor.execute("""
+                SELECT id, radicado_completo FROM expediente
+                WHERE radicado_completo LIKE %s
+                LIMIT 2
+            """, (f'%{radicado_excel}',))
+            candidatos = cursor.fetchall()
+
+            if len(candidatos) == 1:
+                # Solo un candidato → asociación segura
+                encontrados[radicado_excel] = (candidatos[0][0], 'like_sufijo')
+                if not IS_PRODUCTION:
+                    logger.debug(f"✓ {radicado_excel} → encontrado por LIKE sufijo: {candidatos[0][1]}")
+            elif len(candidatos) > 1:
+                # Múltiples candidatos → ambiguo, no asociar
+                if not IS_PRODUCTION:
+                    logger.debug(f"⚠️ {radicado_excel} → LIKE sufijo ambiguo ({len(candidatos)} candidatos), descartado")
+
+    cursor.close()
+    return encontrados
+
 
 def extraer_valor_flexible(row, columnas_df, posibles_nombres):
     """Extrae un valor de una fila usando nombres de columnas flexibles"""
