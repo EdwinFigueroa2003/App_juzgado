@@ -3417,7 +3417,7 @@ def procesar_pestaña_ingresos(df, expediente_columns):
                     logger.debug(f"Expediente {radicado_completo} ya existe (ID: {expediente_id})")
                 else:
                     # Crear nuevo expediente
-                    expediente_id = crear_expediente_desde_ingreso(cursor, expediente_columns, {
+                    expediente_id = crear_expediente_desde_ingreso(cursor_fila, expediente_columns, {
                         'radicado_completo': radicado_completo,
                         'demandante': demandante,
                         'demandado': demandado,
