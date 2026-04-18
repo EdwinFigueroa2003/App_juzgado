@@ -4,9 +4,10 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # Cargar variables de entorno desde múltiples ubicaciones posibles
+# override=True garantiza que el .env de la raíz siempre tiene la última palabra
 load_dotenv()  # Busca .env en directorio actual
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))  # app_juzgado/.env
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'))  # raíz/.env
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'), override=True)       # app_juzgado/.env
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'), override=True) # raíz/.env
 
 """def obtener_conexion():
     #Conexión que funciona tanto en desarrollo como en producción (Railway)
@@ -24,7 +25,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.en
             db_name = os.getenv('DB_NAME')
             db_user = os.getenv('DB_USER')
             db_password = os.getenv('DB_PASSWORD')
-            db_port = os.getenv('DB_PORT', '5432')
+            db_port = os.getenv('DB_PORT', '5433')
             
             # Verificar que las credenciales críticas estén configuradas
             if not db_password:
@@ -62,7 +63,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.en
                 database=url.path[1:],  # Remover el '/' inicial
                 user=url.username,
                 password=url.password,
-                port=url.port or 5432,
+                port=url.port or 5433,
                 client_encoding='utf8'
             )
         else:
@@ -74,7 +75,7 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.en
             db_name = os.getenv('DB_NAME')
             db_user = os.getenv('DB_USER')
             db_password = os.getenv('DB_PASSWORD')
-            db_port = os.getenv('DB_PORT', '5432')
+            db_port = os.getenv('DB_PORT', '5433')
             
             # Verificar que las credenciales críticas estén configuradas
             if not db_password:

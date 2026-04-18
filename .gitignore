@@ -62,13 +62,7 @@ __pycache__/
 *.py[cod]
 
 
-migrate_data_fixed.py
-README_SETUP_RAILWAY.txt
-migrar_a_railway.bat
-test_conexion.py
-verificar_seguridad.py
-migrate_data_fixed.py
-migrate_data_to_railway.py
+
 README_SETUP_RAILWAY.txt
 backup.sql
-.env.example
+app_juzgado.backup

@@ -1519,6 +1519,11 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 with pd.ExcelFile(file_content) as excel_file:
                     df_ingresos = pd.read_excel(excel_file, sheet_name=pestaña_ingreso)
                 logger.info(f"Pestaña '{pestaña_ingreso}' leída: {len(df_ingresos)} filas")
+
+                # Detectar fórmulas no calculadas
+                formulas_hoja_ingreso = detectar_formulas_en_archivo(file_content, pestaña_ingreso)
+                if formulas_hoja_ingreso:
+                    logger.warning(f"⚠️ {len(formulas_hoja_ingreso)} celdas con fórmulas no calculadas en '{pestaña_ingreso}'")
                 
                 # 🎯 Contar solo filas NUEVAS (no contadas antes)
                 for idx, row in df_ingresos.iterrows():
@@ -1602,10 +1607,18 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                         try:
                             # 🎯 TRACK: Clasificar cada fila
                             clasificacion = None
-                            
+
+                            # Construir mapa de fórmulas para esta fila
+                            formulas_fila = {}
+                            if formulas_hoja_ingreso:
+                                for (row_idx, col_nombre), formula in formulas_hoja_ingreso.items():
+                                    if row_idx == index:
+                                        formulas_fila[col_nombre] = formula
+
                             # Extraer radicado
                             radicado_completo = extraer_valor_flexible(row, df_ingresos.columns, 
-                                ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'])
+                                ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio', 'RADICADO_MODIFICADO_OFI'],
+                                formulas_fila)
                             
                             if not radicado_completo:
                                 clasificacion = 'ERROR: radicado vacío'
@@ -1641,11 +1654,11 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                             
                             # Extraer datos del ingreso
                             fecha_ingreso = extraer_fecha_flexible(row, df_ingresos.columns, 
-                                ['FECHA INGRESO', 'fecha_ingreso', 'FECHA_INGRESO', 'Fecha Ingreso'])
+                                ['FECHA INGRESO', 'fecha_ingreso', 'FECHA_INGRESO', 'Fecha Ingreso'], formulas_fila)
                             solicitud = extraer_valor_flexible(row, df_ingresos.columns, 
-                                ['SOLICITUD', 'solicitud', 'Solicitud', 'TIPO_SOLICITUD'])
+                                ['SOLICITUD', 'solicitud', 'Solicitud', 'TIPO_SOLICITUD'], formulas_fila)
                             observaciones = extraer_valor_flexible(row, df_ingresos.columns, 
-                                ['OBSERVACIONES', 'observaciones', 'Observaciones'])
+                                ['OBSERVACIONES', 'observaciones', 'Observaciones'], formulas_fila)
                             
                             if not fecha_ingreso:
                                 clasificacion = 'ERROR: fecha inválida'
@@ -3178,8 +3191,13 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
                     df_ingresos = pd.read_excel(excel_file, sheet_name=pestaña_ingreso)
                 logger.info(f"Pestaña '{pestaña_ingreso}' leída: {len(df_ingresos)} filas, columnas: {list(df_ingresos.columns)}")
                 
+                # Detectar fórmulas no calculadas antes de procesar
+                formulas_hoja_ingreso = detectar_formulas_en_archivo(file_content, pestaña_ingreso)
+                if formulas_hoja_ingreso:
+                    logger.warning(f"⚠️ Se detectaron {len(formulas_hoja_ingreso)} celdas con fórmulas no calculadas en '{pestaña_ingreso}'")
+
                 # Procesar expedientes desde la pestaña de ingresos
-                resultado_ingresos = procesar_pestaña_ingresos(df_ingresos, expediente_columns)
+                resultado_ingresos = procesar_pestaña_ingresos(df_ingresos, expediente_columns, formulas_hoja_ingreso)
                 resultados['expedientes_procesados'] += resultado_ingresos['procesados']
                 resultados['ingresos_procesados'] += resultado_ingresos['ingresos_creados']
                 resultados['errores'] += resultado_ingresos['errores']
@@ -3328,10 +3346,11 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
         logger.error(f"ERROR GENERAL en procesar_excel_multiples_pestañas: {str(e)}")
         raise Exception(f"Error procesando archivo Excel con múltiples pestañas: {str(e)}")
 
-def procesar_pestaña_ingresos(df, expediente_columns):
+def procesar_pestaña_ingresos(df, expediente_columns, formulas_detectadas=None):
     """Procesa la pestaña de ingresos con información actual de expedientes"""
     logger.info("=== INICIO procesar_pestaña_ingresos ===")
-    
+    if formulas_detectadas:
+        logger.warning(f"⚠️ {len(formulas_detectadas)} celdas con fórmulas no calculadas serán reportadas como error")
     resultado = {
         'procesados': 0,
         'ingresos_creados': 0,
@@ -3378,12 +3397,19 @@ def procesar_pestaña_ingresos(df, expediente_columns):
             cursor_fila = conn_fila.cursor()
             
             try:
+                # Construir mapa de fórmulas para esta fila específica
+                formulas_fila = {}
+                if formulas_detectadas:
+                    for (row_idx, col_nombre), formula in formulas_detectadas.items():
+                        if row_idx == index:
+                            formulas_fila[col_nombre] = formula
+
                 # Extraer datos con mapeo flexible
-                radicado_completo = extraer_valor_flexible(row, df.columns, ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio'])
-                demandante = extraer_valor_flexible(row, df.columns, ['DEMANDANTE', 'demandante', 'DEMANDANTE_HOMOLOGADO'])
-                demandado = extraer_valor_flexible(row, df.columns, ['DEMANDADO', 'demandado', 'DEMANDADO_HOMOLOGADO'])
-                fecha_ingreso = extraer_fecha_flexible(row, df.columns, ['FECHA INGRESO', 'fecha_ingreso', 'FECHA_INGRESO'])
-                solicitud = extraer_valor_flexible(row, df.columns, ['SOLICITUD', 'solicitud', 'TIPO_SOLICITUD'])
+                radicado_completo = extraer_valor_flexible(row, df.columns, ['RADICADO COMPLETO', 'radicado_completo', 'RadicadoUnicoLimpio'], formulas_fila)
+                demandante = extraer_valor_flexible(row, df.columns, ['DEMANDANTE', 'demandante', 'DEMANDANTE_HOMOLOGADO'], formulas_fila)
+                demandado = extraer_valor_flexible(row, df.columns, ['DEMANDADO', 'demandado', 'DEMANDADO_HOMOLOGADO'], formulas_fila)
+                fecha_ingreso = extraer_fecha_flexible(row, df.columns, ['FECHA INGRESO', 'fecha_ingreso', 'FECHA_INGRESO'], formulas_fila)
+                solicitud = extraer_valor_flexible(row, df.columns, ['SOLICITUD', 'solicitud', 'TIPO_SOLICITUD'], formulas_fila)
                 
                 # Validaciones básicas
                 if not radicado_completo or not demandante or not demandado or not fecha_ingreso or not solicitud:
@@ -3788,24 +3814,106 @@ def buscar_expedientes_flexible(radicados_no_encontrados, conn):
     return encontrados
 
 
-def extraer_valor_flexible(row, columnas_df, posibles_nombres):
-    """Extrae un valor de una fila usando nombres de columnas flexibles"""
+def detectar_formulas_en_archivo(file_content, nombre_hoja):
+    """
+    Lee el archivo con openpyxl en modo fórmulas (data_only=False) y devuelve
+    un dict { (fila_idx, col_nombre): texto_formula } para celdas que contienen
+    fórmulas sin calcular o con valor cacheado sospechoso (0 / vacío).
+
+    fila_idx es el índice 0-based de pandas (0 = primera fila de datos, sin cabecera).
+    """
+    try:
+        import openpyxl
+        file_content.seek(0)
+        # Leer con fórmulas visibles
+        wb_formulas = openpyxl.load_workbook(file_content, data_only=False)
+        file_content.seek(0)
+        # Leer con valores cacheados
+        wb_values   = openpyxl.load_workbook(file_content, data_only=True)
+        file_content.seek(0)
+
+        if nombre_hoja not in wb_formulas.sheetnames:
+            return {}
+
+        ws_f = wb_formulas[nombre_hoja]
+        ws_v = wb_values[nombre_hoja]
+
+        # Obtener cabeceras (fila 1)
+        headers = {}
+        for col_idx, cell in enumerate(next(ws_f.iter_rows(min_row=1, max_row=1)), 1):
+            if cell.value is not None:
+                headers[col_idx] = str(cell.value).strip()
+
+        formulas_detectadas = {}
+        # Iterar desde fila 2 (datos)
+        for row_idx, (row_f, row_v) in enumerate(
+            zip(ws_f.iter_rows(min_row=2), ws_v.iter_rows(min_row=2))
+        ):
+            for cell_f, cell_v in zip(row_f, row_v):
+                col_nombre = headers.get(cell_f.column, f'Col{cell_f.column}')
+                valor_formula  = cell_f.value
+                valor_cacheado = cell_v.value
+
+                # Detectar fórmula: el valor en modo fórmulas empieza con '='
+                if isinstance(valor_formula, str) and valor_formula.startswith('='):
+                    # Marcar si el valor cacheado es sospechoso (0, None, vacío)
+                    cacheado_sospechoso = (
+                        valor_cacheado is None
+                        or str(valor_cacheado).strip() == ''
+                        or valor_cacheado == 0
+                    )
+                    if cacheado_sospechoso:
+                        formulas_detectadas[(row_idx, col_nombre)] = valor_formula
+
+        return formulas_detectadas
+
+    except Exception as e:
+        logger.warning(f"No se pudo analizar fórmulas del archivo: {e}")
+        return {}
+
+
+def extraer_valor_flexible(row, columnas_df, posibles_nombres, formulas_fila=None):
+    """
+    Extrae un valor de una fila usando nombres de columnas flexibles.
+    Si formulas_fila es un dict {col_nombre: texto_formula}, lanza ValueError
+    cuando la celda tiene una fórmula con valor cacheado sospechoso.
+    """
     for nombre in posibles_nombres:
         for col_df in columnas_df:
-            # Comparación exacta con strip() para manejar espacios al final
             if nombre.lower().replace(' ', '_') == col_df.lower().replace(' ', '_').strip():
+                # Verificar si esta columna tiene fórmula no calculada
+                if formulas_fila and col_df in formulas_fila:
+                    raise ValueError(
+                        f"La celda en la columna '{col_df}' contiene una fórmula no calculada "
+                        f"({formulas_fila[col_df][:60]}...). "
+                        f"Abrí el archivo en Excel, seleccioná las celdas con fórmulas, "
+                        f"copiá y pegá como 'Solo valores' antes de subir."
+                    )
                 valor = row.get(col_df)
                 if pd.notna(valor) and str(valor).strip():
                     return str(valor).strip()
     return None
 
-def extraer_fecha_flexible(row, columnas_df, posibles_nombres):
-    """Extrae una fecha de una fila usando nombres de columnas flexibles"""
+
+def extraer_fecha_flexible(row, columnas_df, posibles_nombres, formulas_fila=None):
+    """
+    Extrae una fecha de una fila usando nombres de columnas flexibles.
+    Si formulas_fila es un dict {col_nombre: texto_formula}, lanza ValueError
+    cuando la celda tiene una fórmula con valor cacheado sospechoso.
+    """
     from datetime import datetime
-    
+
     for nombre in posibles_nombres:
         for col_df in columnas_df:
             if nombre.lower().replace(' ', '_') == col_df.lower().replace(' ', '_').strip():
+                # Verificar si esta columna tiene fórmula no calculada
+                if formulas_fila and col_df in formulas_fila:
+                    raise ValueError(
+                        f"La celda en la columna '{col_df}' contiene una fórmula no calculada "
+                        f"({formulas_fila[col_df][:60]}...). "
+                        f"Abrí el archivo en Excel, seleccioná las celdas con fórmulas, "
+                        f"copiá y pegá como 'Solo valores' antes de subir."
+                    )
                 fecha_valor = row.get(col_df)
                 if pd.notna(fecha_valor):
                     try:
