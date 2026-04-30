@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, jsonify, send_file, redirect, url_for
+﻿from flask import Blueprint, render_template, request, flash, jsonify, send_file, redirect, url_for
 import sys
 import os
 import logging
@@ -68,7 +68,7 @@ def calcular_estado_expediente(expediente_id, cursor):
     """
     Calcula el estado del expediente basado en la nueva lógica:
     - Si está en ingresos o actuaciones → Activo Pendiente
-    - Si está en estados → Activo Resuelto (si < 1 año) o Inactivo Resuelto (si > 1 año)
+    - Si está en estados → Activo Resuelto (si < 2 años) o Inactivo Resuelto (si > 2 años)
     - Los expedientes siempre están activos, lo que cambia es el sub-estado
     
     Returns: (estado, descripcion)
@@ -131,12 +131,12 @@ def calcular_estado_expediente(expediente_id, cursor):
                 if ultima_fecha_estado:
                     dias_desde_ultimo_estado = (datetime.now().date() - ultima_fecha_estado).days
                     
-                    if dias_desde_ultimo_estado <= 365:
-                        # Menos de 1 año → Activo Resuelto
+                    if dias_desde_ultimo_estado <= 730:
+                        # Menos de 2 años → Activo Resuelto
                         return "Activo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días - {estados_count} estado(s)"
                     else:
-                        # Más de 1 año → Inactivo Resuelto
-                        return "Inactivo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días (>1 año) - {estados_count} estado(s)"
+                        # Más de 2 años → Inactivo Resuelto
+                        return "Inactivo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días (>2 años) - {estados_count} estado(s)"
             
             # Si no se puede determinar la fecha, asumir activo resuelto
             return "Activo Resuelto", f"Resuelto - {estados_count} estado(s)"
@@ -177,10 +177,10 @@ def calcular_estado_expediente(expediente_id, cursor):
                         if actuaciones_count > 0:
                             desc_actividad.append(f"{actuaciones_count} actuación(es)")
                         
-                        if dias_desde_ultimo_estado <= 365:
+                        if dias_desde_ultimo_estado <= 730:
                             return "Activo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días - {', '.join(desc_actividad)}, {estados_count} estado(s)"
                         else:
-                            return "Inactivo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días (>1 año) - {', '.join(desc_actividad)}, {estados_count} estado(s)"
+                            return "Inactivo Resuelto", f"Resuelto hace {dias_desde_ultimo_estado} días (>2 años) - {', '.join(desc_actividad)}, {estados_count} estado(s)"
                     else:
                         desc_actividad = []
                         if ingresos_count > 0:
@@ -539,31 +539,19 @@ def buscar_expedientes(radicado):
                 logger.error(f"ERROR obteniendo estados para expediente {exp_id}: {e}")
                 expediente['estados'] = []
             
-            # Calcular fecha de ingreso más antigua sin salida (para mostrar en la interfaz)
+            # Calcular fecha de ingreso más reciente (para mostrar en la interfaz)
             try:
-                # Obtener ingresos sin salida (que no tienen estado posterior o igual)
-                ingresos_sin_salida = []
-                for ingreso in expediente['ingresos']:
-                    fecha_ing = ingreso['fecha_ingreso']
-                    if fecha_ing:
-                        # Verificar si existe un estado con fecha >= al ingreso (misma fecha o posterior)
-                        tiene_salida = any(
-                            estado['fecha_estado'] >= fecha_ing 
-                            for estado in expediente['estados'] 
-                            if estado['fecha_estado']
-                        )
-                        if not tiene_salida:
-                            ingresos_sin_salida.append(fecha_ing)
+                # Obtener todas las fechas de ingreso y seleccionar la más reciente
+                ingresos_fechas = [ingreso['fecha_ingreso'] for ingreso in expediente['ingresos'] if ingreso.get('fecha_ingreso')]
                 
-                # Seleccionar la fecha más antigua sin salida
-                if ingresos_sin_salida:
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(ingresos_sin_salida)
-                    logger.info(f"Fecha ingreso sin salida para exp {exp_id}: {expediente['fecha_ingreso_mas_antigua_sin_salida']}")
+                if ingresos_fechas:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(ingresos_fechas)
+                    logger.info(f"Fecha ingreso más reciente para exp {exp_id}: {expediente['fecha_ingreso_mas_antigua_sin_salida']}")
                 else:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
-                    logger.info(f"No hay ingresos sin salida para exp {exp_id}")
+                    logger.info(f"No hay ingresos para exp {exp_id}")
             except Exception as e:
-                logger.error(f"ERROR calculando fecha sin salida para expediente {exp_id}: {e}")
+                logger.error(f"ERROR calculando fecha más reciente para expediente {exp_id}: {e}")
                 expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
             
             # Obtener actuaciones con manejo de errores y logging detallado
@@ -646,30 +634,36 @@ def buscar_expedientes(radicado):
             else:
                 expediente['fecha_actuacion'] = None  # N/A - "para resolver"
 
-            # Calcular fecha de ingreso más antigua SIN estado posterior (usada para asignar turno)
-            fecha_mas_antigua_sin_salida = None
+            # Fecha de ingreso más antigua SIN estado posterior
+            # Regla: de todos los ingresos que no tienen ningún estado con fecha > fecha_ingreso,
+            # tomar el más antiguo (lleva más tiempo esperando resolución).
+            # Fallback: si todos los ingresos tienen estado posterior, mostrar el último ingreso.
             try:
+                fechas_sin_salida = []
+                todas_fechas_ingreso = []
                 for ingreso in expediente['ingresos']:
                     fi = normalize_date(ingreso.get('fecha_ingreso'))
                     if not fi:
                         continue
-                    tiene_salida = False
-                    for estado in expediente['estados']:
-                        fe = normalize_date(estado.get('fecha_estado'))
-                        if fe and fe > fi:
-                            tiene_salida = True
-                            break
+                    todas_fechas_ingreso.append(fi)
+                    tiene_salida = any(
+                        normalize_date(est.get('fecha_estado')) and normalize_date(est.get('fecha_estado')) > fi
+                        for est in expediente['estados']
+                    )
                     if not tiene_salida:
-                        if fecha_mas_antigua_sin_salida is None or fi < fecha_mas_antigua_sin_salida:
-                            fecha_mas_antigua_sin_salida = fi
+                        fechas_sin_salida.append(fi)
+
+                if fechas_sin_salida:
+                    # Más antiguo sin salida
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(fechas_sin_salida)
+                elif todas_fechas_ingreso:
+                    # Todos tienen salida → mostrar el último ingreso
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(todas_fechas_ingreso)
+                else:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = normalize_date(expediente.get('fecha_ingreso'))
             except Exception:
                 logger.exception('Error calculando fecha_ingreso_mas_antigua_sin_salida')
-
-            # Fallback a la fecha de ingreso del expediente si no hay ingresos sin salida
-            if fecha_mas_antigua_sin_salida is None:
-                fecha_mas_antigua_sin_salida = normalize_date(expediente.get('fecha_ingreso'))
-
-            expediente['fecha_ingreso_mas_antigua_sin_salida'] = fecha_mas_antigua_sin_salida
+                expediente['fecha_ingreso_mas_antigua_sin_salida'] = normalize_date(expediente.get('fecha_ingreso'))
             
             expedientes_completos.append(expediente)
         
@@ -827,31 +821,34 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
             ]
             
             
-            # Calcular fecha de ingreso más antigua sin salida (para mostrar en la interfaz)
+            # Fecha de ingreso más antigua SIN estado posterior
+            # Regla: de todos los ingresos que no tienen ningún estado con fecha > fecha_ingreso,
+            # tomar el más antiguo (lleva más tiempo esperando resolución).
+            # Fallback: si todos los ingresos tienen estado posterior, mostrar el último ingreso.
             try:
-                # Obtener ingresos sin salida (que no tienen estado posterior)
-                ingresos_sin_salida_list = []
+                fechas_sin_salida_f = []
+                todas_fechas_ingreso_f = []
                 for ingreso in expediente['ingresos']:
-                    fecha_ing = ingreso['fecha_ingreso']
-                    if fecha_ing:
-                        # Verificar si existe un estado posterior a este ingreso
-                        tiene_salida = any(
-                            estado['fecha_estado'] >= fecha_ing 
-                            for estado in expediente['estados'] 
-                            if estado['fecha_estado']
-                        )
-                        if not tiene_salida:
-                            ingresos_sin_salida_list.append(fecha_ing)
-                
-                # Seleccionar la fecha más antigua sin salida
-                if ingresos_sin_salida_list:
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(ingresos_sin_salida_list)
+                    fi = normalize_date(ingreso.get('fecha_ingreso'))
+                    if not fi:
+                        continue
+                    todas_fechas_ingreso_f.append(fi)
+                    tiene_salida = any(
+                        normalize_date(est.get('fecha_estado')) and normalize_date(est.get('fecha_estado')) > fi
+                        for est in expediente['estados']
+                    )
+                    if not tiene_salida:
+                        fechas_sin_salida_f.append(fi)
+
+                if fechas_sin_salida_f:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(fechas_sin_salida_f)
+                elif todas_fechas_ingreso_f:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(todas_fechas_ingreso_f)
                 else:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
             except Exception as e:
-                logger.error(f"ERROR calculando fecha sin salida para expediente {exp_id}: {e}")
+                logger.error(f"ERROR calculando fecha_ingreso_mas_antigua_sin_salida para expediente {exp_id}: {e}")
                 expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
-
             # Obtener actuaciones
             cursor.execute("""
                 SELECT numero_actuacion, descripcion_actuacion, tipo_origen, 
@@ -1082,31 +1079,34 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
             ]
             
             
-            # Calcular fecha de ingreso más antigua sin salida (para mostrar en la interfaz)
+            # Fecha de ingreso más antigua SIN estado posterior
+            # Regla: de todos los ingresos que no tienen ningún estado con fecha > fecha_ingreso,
+            # tomar el más antiguo (lleva más tiempo esperando resolución).
+            # Fallback: si todos los ingresos tienen estado posterior, mostrar el último ingreso.
             try:
-                # Obtener ingresos sin salida (que no tienen estado posterior)
-                ingresos_sin_salida_list = []
+                fechas_sin_salida_f = []
+                todas_fechas_ingreso_f = []
                 for ingreso in expediente['ingresos']:
-                    fecha_ing = ingreso['fecha_ingreso']
-                    if fecha_ing:
-                        # Verificar si existe un estado posterior a este ingreso
-                        tiene_salida = any(
-                            estado['fecha_estado'] >= fecha_ing 
-                            for estado in expediente['estados'] 
-                            if estado['fecha_estado']
-                        )
-                        if not tiene_salida:
-                            ingresos_sin_salida_list.append(fecha_ing)
-                
-                # Seleccionar la fecha más antigua sin salida
-                if ingresos_sin_salida_list:
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(ingresos_sin_salida_list)
+                    fi = normalize_date(ingreso.get('fecha_ingreso'))
+                    if not fi:
+                        continue
+                    todas_fechas_ingreso_f.append(fi)
+                    tiene_salida = any(
+                        normalize_date(est.get('fecha_estado')) and normalize_date(est.get('fecha_estado')) > fi
+                        for est in expediente['estados']
+                    )
+                    if not tiene_salida:
+                        fechas_sin_salida_f.append(fi)
+
+                if fechas_sin_salida_f:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(fechas_sin_salida_f)
+                elif todas_fechas_ingreso_f:
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(todas_fechas_ingreso_f)
                 else:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
             except Exception as e:
-                logger.error(f"ERROR calculando fecha sin salida para expediente {exp_id}: {e}")
+                logger.error(f"ERROR calculando fecha_ingreso_mas_antigua_sin_salida para expediente {exp_id}: {e}")
                 expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
-
             # Obtener actuaciones
             cursor.execute("""
                 SELECT numero_actuacion, descripcion_actuacion, tipo_origen, 

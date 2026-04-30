@@ -66,3 +66,4 @@ __pycache__/
 README_SETUP_RAILWAY.txt
 backup.sql
 app_juzgado.backup
+app_juzgado.sql

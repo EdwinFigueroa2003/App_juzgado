@@ -325,11 +325,19 @@ def recalcular_todos_los_turnos(cursor):
                 )
             ),
             fecha_ingreso_mas_antigua_sin_salida AS (
-                -- Para cada expediente, obtener la fecha de ingreso MÁS ANTIGUA sin salida
+                -- Para cada expediente, obtener la fecha de ingreso MÁS RECIENTE (independientemente de salida)
                 SELECT 
                     expediente_id,
-                    MIN(fecha_ingreso) as fecha_ingreso_sin_salida
-                FROM ingresos_sin_salida
+                    MAX(fecha_ingreso) as fecha_ingreso_sin_salida
+                FROM ingresos_expedientes
+                GROUP BY expediente_id
+            ),
+            ingresos_mas_antigua AS (
+                -- Para cada expediente, obtener la fecha de ingreso MÁS ANTIGUA disponible en ingresos
+                SELECT
+                    expediente_id,
+                    MIN(fecha_ingreso) as fecha_ingreso_mas_antigua
+                FROM ingresos_expedientes
                 GROUP BY expediente_id
             ),
             ultima_actuacion_expediente AS (
@@ -344,15 +352,16 @@ def recalcular_todos_los_turnos(cursor):
             SELECT 
                 ea.id,
                 ea.radicado_completo,
-                COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) as fecha_para_turno,
+                COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) as fecha_para_turno,
                 ea.fecha_ingreso_expediente,
                 uae.ultima_actuacion
             FROM expedientes_activos ea
             LEFT JOIN fecha_ingreso_mas_antigua_sin_salida fimass ON ea.id = fimass.expediente_id
+            LEFT JOIN ingresos_mas_antigua ima ON ea.id = ima.expediente_id
             LEFT JOIN ultima_actuacion_expediente uae ON ea.id = uae.expediente_id
-            WHERE COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) IS NOT NULL
+            WHERE COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) IS NOT NULL
             ORDER BY 
-                COALESCE(fimass.fecha_ingreso_sin_salida, ea.fecha_ingreso_expediente) ASC,
+                COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) ASC,
                 ea.fecha_ingreso_expediente ASC,
                 uae.ultima_actuacion ASC NULLS LAST,
                 ea.id ASC

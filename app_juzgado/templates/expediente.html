@@ -516,8 +516,9 @@
                                     <!-- Fechas -->
                                     <div class="row mb-3 pb-3 border-bottom">
                                         <div class="col-md-4">
-                                            <small class="text-muted d-block">Fecha de Ingreso (Más Antigua sin Salida)</small>
-                                                                                        <strong class="text-dark" title="Fecha de ingreso más antigua sin estado posterior - Usada para asignar turno">
+                                            <!-- <small class="text-muted d-block">Fecha de Ingreso (Más Antigua sin Salida)</small> -->
+                                             <small class="text-muted d-block">Fecha de Ingreso</small>
+                                                                                        <strong class="text-dark" title="Ingreso más antiguo sin estado posterior - Usada para asignar turno">
                                                                                                 {% if expediente.fecha_ingreso_mas_antigua_sin_salida %}
                                                                                                         {{ expediente.fecha_ingreso_mas_antigua_sin_salida.strftime('%d/%m/%Y') }}
                                                                                                 {% elif expediente.fecha_ingreso %}
@@ -777,7 +778,7 @@
 
                             <div class="col-md-3">
                                 <h6 class="text-muted small">Fecha de Ingreso (Más Antigua sin Salida)</h6>
-                                <p class="mb-3" title="Fecha de ingreso más antigua sin estado posterior - Usada para asignar turno"><strong>
+                                <p class="mb-3" title="Ingreso más antiguo sin estado posterior - Usada para asignar turno"><strong>
                                                                                 {% if expediente.fecha_ingreso_mas_antigua_sin_salida %}
                                                                                         {{ expediente.fecha_ingreso_mas_antigua_sin_salida.strftime('%d/%m/%Y') }}
                                                                                 {% elif expediente.fecha_ingreso %}
