@@ -10,22 +10,6 @@ from io import BytesIO
 # Detectar entorno (producción vs desarrollo)
 IS_PRODUCTION = os.getenv('RAILWAY_ENVIRONMENT') is not None or os.getenv('RENDER') is not None
 
-# Configurar logging según el entorno
-if IS_PRODUCTION:
-    # En producción: Solo INFO, WARNING, ERROR, CRITICAL
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    logger.info("🚀 Modo PRODUCCIÓN: Logs DEBUG desactivados")
-else:
-    # En desarrollo: Todos los niveles incluyendo DEBUG
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
-    logger.info("🏠 Modo DESARROLLO: Logs DEBUG activados")
-
-# Agregar el directorio padre al path para importar módulos
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from modelo.configBd import obtener_conexion
 from utils.auth import login_required
 
@@ -38,6 +22,330 @@ ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def normalize_date(fecha_valor):
+    if fecha_valor is None:
+        return None
+    if isinstance(fecha_valor, date):
+        return fecha_valor
+    if isinstance(fecha_valor, datetime):
+        return fecha_valor.date()
+    if isinstance(fecha_valor, str):
+        for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y']:
+            try:
+                return datetime.strptime(fecha_valor.strip(), fmt).date()
+            except ValueError:
+                continue
+    return None
+
+
+def calcular_estado_correcto(expediente_id, cursor):
+    cursor.execute(
+        """
+        SELECT COUNT(*), MAX(fecha_ingreso) 
+        FROM ingresos 
+        WHERE expediente_id = %s
+        """,
+        (expediente_id,)
+    )
+    ingresos_count, ultima_fecha_ingreso = cursor.fetchone()
+    ultima_fecha_ingreso = normalize_date(ultima_fecha_ingreso)
+
+    cursor.execute(
+        """
+        SELECT COUNT(*), MAX(fecha_estado) 
+        FROM estados 
+        WHERE expediente_id = %s
+        """,
+        (expediente_id,)
+    )
+    estados_count, ultima_fecha_estado = cursor.fetchone()
+    ultima_fecha_estado = normalize_date(ultima_fecha_estado)
+
+    if ingresos_count > 0 and estados_count == 0:
+        return 'Activo Pendiente'
+
+    if estados_count > 0 and ingresos_count == 0:
+        if ultima_fecha_estado:
+            dias_desde_ultimo_estado = (date.today() - ultima_fecha_estado).days
+            return 'Activo Resuelto' if dias_desde_ultimo_estado <= 730 else 'Inactivo Resuelto'
+        return 'Activo Resuelto'
+
+    if ingresos_count > 0 and estados_count > 0:
+        if ultima_fecha_ingreso and ultima_fecha_estado:
+            if ultima_fecha_ingreso > ultima_fecha_estado:
+                return 'Activo Pendiente'
+            dias_desde_ultimo_estado = (date.today() - ultima_fecha_estado).days
+            return 'Activo Resuelto' if dias_desde_ultimo_estado <= 730 else 'Inactivo Resuelto'
+        if ultima_fecha_ingreso:
+            return 'Activo Pendiente'
+        if ultima_fecha_estado:
+            dias_desde_ultimo_estado = (date.today() - ultima_fecha_estado).days
+            return 'Activo Resuelto' if dias_desde_ultimo_estado <= 730 else 'Inactivo Resuelto'
+        return 'Activo Pendiente'
+
+    return 'Pendiente'
+
+
+def manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_nuevo):
+    if estado_nuevo == 'Activo Pendiente' and estado_anterior != 'Activo Pendiente':
+        return True
+    if estado_anterior == 'Activo Pendiente' and estado_nuevo != 'Activo Pendiente':
+        cursor.execute(
+            "UPDATE expediente SET turno = NULL WHERE id = %s",
+            (expediente_id,)
+        )
+        return True
+    return False
+
+
+def sincronizar_estados_y_turnos(conn):
+    """
+    Función central que recalcula estados y turnos de TODOS los expedientes
+    basándose en el contenido real de las tablas ingresos y estados.
+
+    Debe llamarse al final de cualquier operación que modifique datos
+    (carga manual, Excel nuevos, Excel actualizaciones).
+
+    Paso 1 — Estados: actualiza el campo `estado` en la tabla `expediente`
+      - Activo Pendiente  : MAX(fecha_ingreso) > MAX(fecha_estado), o solo ingresos
+      - Activo Resuelto   : MAX(fecha_estado) >= MAX(fecha_ingreso) y <= 730 días
+      - Inactivo Resuelto : MAX(fecha_estado) >= MAX(fecha_ingreso) y > 730 días
+      - Pendiente         : sin ingresos ni estados
+
+    Paso 2 — Turnos: reasigna turnos secuenciales a expedientes 'Activo Pendiente'
+      ordenados por: ingreso más antiguo sin salida → fecha_ingreso expediente → id
+    """
+    cursor = conn.cursor()
+    try:
+        logger.info("🔄 [SYNC] Iniciando sincronización global de estados y turnos...")
+
+        # ── PASO 1: ACTUALIZAR ESTADOS ────────────────────────────────────────
+        cursor.execute("""
+            UPDATE expediente e
+            SET estado = calc.estado_nuevo
+            FROM (
+                SELECT
+                    exp.id,
+                    CASE
+                        -- Solo ingresos, sin estados → Activo Pendiente
+                        WHEN ing.cnt > 0 AND est.cnt = 0
+                            THEN 'Activo Pendiente'
+
+                        -- Solo estados, sin ingresos → por antigüedad
+                        WHEN est.cnt > 0 AND ing.cnt = 0
+                            THEN CASE
+                                WHEN (CURRENT_DATE - est.ultima_fecha) <= 730
+                                    THEN 'Activo Resuelto'
+                                ELSE 'Inactivo Resuelto'
+                            END
+
+                        -- Ambos → comparar fechas
+                        WHEN ing.cnt > 0 AND est.cnt > 0
+                            THEN CASE
+                                WHEN ing.ultima_fecha > est.ultima_fecha
+                                    THEN 'Activo Pendiente'
+                                WHEN (CURRENT_DATE - est.ultima_fecha) <= 730
+                                    THEN 'Activo Resuelto'
+                                ELSE 'Inactivo Resuelto'
+                            END
+
+                        -- Sin nada
+                        ELSE 'Pendiente'
+                    END AS estado_nuevo
+                FROM expediente exp
+                LEFT JOIN (
+                    SELECT expediente_id,
+                           COUNT(*)            AS cnt,
+                           MAX(fecha_ingreso)  AS ultima_fecha
+                    FROM ingresos
+                    WHERE fecha_ingreso IS NOT NULL
+                    GROUP BY expediente_id
+                ) ing ON ing.expediente_id = exp.id
+                LEFT JOIN (
+                    SELECT expediente_id,
+                           COUNT(*)           AS cnt,
+                           MAX(fecha_estado)  AS ultima_fecha
+                    FROM estados
+                    WHERE fecha_estado IS NOT NULL
+                    GROUP BY expediente_id
+                ) est ON est.expediente_id = exp.id
+            ) calc
+            WHERE e.id = calc.id
+              AND (e.estado IS DISTINCT FROM calc.estado_nuevo)
+        """)
+        estados_actualizados = cursor.rowcount
+        logger.info(f"✅ [SYNC] Estados actualizados: {estados_actualizados}")
+
+        # ── PASO 2: RECALCULAR TURNOS ─────────────────────────────────────────
+        # Limpiar turnos de todos los expedientes que ya no son Activo Pendiente
+        cursor.execute("""
+            UPDATE expediente
+            SET turno = NULL
+            WHERE estado != 'Activo Pendiente'
+              AND turno IS NOT NULL
+        """)
+
+        # Limpiar turnos de Activo Pendiente para reasignarlos desde cero
+        cursor.execute("""
+            UPDATE expediente
+            SET turno = NULL
+            WHERE estado = 'Activo Pendiente'
+        """)
+
+        # Obtener expedientes Activo Pendiente ordenados por:
+        # 1. Ingreso más antiguo sin estado posterior (el que lleva más tiempo esperando)
+        # 2. Fallback: ingreso más antiguo disponible
+        # 3. Fallback: fecha_ingreso del expediente
+        # 4. id como desempate final
+        cursor.execute("""
+            WITH ingresos_exp AS (
+                SELECT expediente_id, fecha_ingreso
+                FROM ingresos
+                WHERE fecha_ingreso IS NOT NULL
+            ),
+            ingresos_sin_salida AS (
+                -- Ingresos que NO tienen ningún estado con fecha posterior
+                SELECT ie.expediente_id, ie.fecha_ingreso
+                FROM ingresos_exp ie
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM estados est
+                    WHERE est.expediente_id = ie.expediente_id
+                      AND est.fecha_estado > ie.fecha_ingreso
+                )
+            ),
+            fecha_antigua_sin_salida AS (
+                -- El más antiguo sin salida por expediente
+                SELECT expediente_id, MIN(fecha_ingreso) AS fecha_ref
+                FROM ingresos_sin_salida
+                GROUP BY expediente_id
+            ),
+            fecha_antigua_total AS (
+                -- Fallback: el más antiguo de todos los ingresos
+                SELECT expediente_id, MIN(fecha_ingreso) AS fecha_ref
+                FROM ingresos_exp
+                GROUP BY expediente_id
+            )
+            SELECT e.id
+            FROM expediente e
+            LEFT JOIN fecha_antigua_sin_salida fass ON fass.expediente_id = e.id
+            LEFT JOIN fecha_antigua_total       fat  ON fat.expediente_id  = e.id
+            WHERE e.estado = 'Activo Pendiente'
+              AND COALESCE(fass.fecha_ref, fat.fecha_ref, e.fecha_ingreso) IS NOT NULL
+            ORDER BY
+                COALESCE(fass.fecha_ref, fat.fecha_ref, e.fecha_ingreso) ASC,
+                e.fecha_ingreso ASC NULLS LAST,
+                e.id ASC
+        """)
+
+        expedientes_ordenados = cursor.fetchall()
+        for turno_num, (exp_id,) in enumerate(expedientes_ordenados, 1):
+            cursor.execute(
+                "UPDATE expediente SET turno = %s WHERE id = %s",
+                (turno_num, exp_id)
+            )
+
+        turnos_asignados = len(expedientes_ordenados)
+        logger.info(f"✅ [SYNC] Turnos asignados: {turnos_asignados}")
+
+        conn.commit()
+        logger.info(f"✅ [SYNC] Sincronización completada — estados: {estados_actualizados}, turnos: {turnos_asignados}")
+
+        return {'estados_actualizados': estados_actualizados, 'turnos_asignados': turnos_asignados}
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ [SYNC] Error en sincronización: {e}")
+        raise
+    finally:
+        cursor.close()
+
+
+def recalcular_todos_los_turnos(cursor):
+    cursor.execute(
+        """
+        UPDATE expediente 
+        SET turno = NULL 
+        WHERE estado = 'Activo Pendiente'
+        """
+    )
+
+    cursor.execute(
+        """
+        WITH expedientes_activos AS (
+            SELECT 
+                e.id,
+                e.radicado_completo,
+                e.fecha_ingreso as fecha_ingreso_expediente
+            FROM expediente e
+            WHERE e.estado = 'Activo Pendiente'
+        ),
+        ingresos_expedientes AS (
+            SELECT 
+                i.expediente_id,
+                i.fecha_ingreso
+            FROM ingresos i
+            WHERE i.fecha_ingreso IS NOT NULL
+        ),
+        ingresos_sin_salida AS (
+            SELECT 
+                ie.expediente_id,
+                ie.fecha_ingreso
+            FROM ingresos_expedientes ie
+            WHERE NOT EXISTS (
+                SELECT 1 FROM estados est 
+                WHERE est.expediente_id = ie.expediente_id 
+                  AND est.fecha_estado >= ie.fecha_ingreso
+            )
+        ),
+        fecha_ingreso_mas_antigua_sin_salida AS (
+            SELECT 
+                expediente_id,
+                MAX(fecha_ingreso) as fecha_ingreso_sin_salida
+            FROM ingresos_expedientes
+            GROUP BY expediente_id
+        ),
+        ingresos_mas_antigua AS (
+            SELECT
+                expediente_id,
+                MIN(fecha_ingreso) as fecha_ingreso_mas_antigua
+            FROM ingresos_expedientes
+            GROUP BY expediente_id
+        ),
+        ultima_actuacion_expediente AS (
+            SELECT 
+                expediente_id,
+                MAX(fecha_estado) as ultima_actuacion
+            FROM estados
+            WHERE fecha_estado IS NOT NULL
+            GROUP BY expediente_id
+        )
+        SELECT 
+            ea.id,
+            ea.radicado_completo,
+            COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) as fecha_para_turno,
+            ea.fecha_ingreso_expediente,
+            uae.ultima_actuacion
+        FROM expedientes_activos ea
+        LEFT JOIN fecha_ingreso_mas_antigua_sin_salida fimass ON ea.id = fimass.expediente_id
+        LEFT JOIN ingresos_mas_antigua ima ON ea.id = ima.expediente_id
+        LEFT JOIN ultima_actuacion_expediente uae ON ea.id = uae.expediente_id
+        WHERE COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) IS NOT NULL
+        ORDER BY 
+            COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) ASC,
+            ea.fecha_ingreso_expediente ASC,
+            uae.ultima_actuacion ASC NULLS LAST,
+            ea.id ASC
+        """
+    )
+
+    expedientes = cursor.fetchall()
+    for turno, row in enumerate(expedientes, 1):
+        cursor.execute(
+            "UPDATE expediente SET turno = %s WHERE id = %s",
+            (turno, row[0])
+        )
+
 
 def parsear_reporte_para_excel(contenido_reporte):
     """
@@ -1168,6 +1476,16 @@ def procesar_formulario_manual():
             conn.commit()
             logger.info("Transacción confirmada (COMMIT)")
             logger.info("=== FIN procesar_formulario_manual - ÉXITO ===")
+
+            # ── SINCRONIZACIÓN FINAL ──────────────────────────────────────────
+            try:
+                conn_sync = obtener_conexion()
+                sync_result = sincronizar_estados_y_turnos(conn_sync)
+                conn_sync.close()
+                logger.info(f"✅ Sincronización post-ingreso manual: {sync_result}")
+            except Exception as sync_err:
+                logger.error(f"❌ Error en sincronización post-ingreso manual: {sync_err}")
+
             return redirect(url_for('idvistasubirexpediente.vista_subirexpediente'))
             
         except Exception as db_error:
@@ -1466,6 +1784,15 @@ def procesar_excel_actualizacion(file_content):
         logger.info(f"=== FIN procesar_excel_actualizacion ===")
         logger.info(f"Resultados: {resultados}")
 
+        # ── SINCRONIZACIÓN FINAL ──────────────────────────────────────────────
+        try:
+            conn_sync = obtener_conexion()
+            sync_result = sincronizar_estados_y_turnos(conn_sync)
+            conn_sync.close()
+            logger.info(f"✅ Sincronización post-actualización: {sync_result}")
+        except Exception as sync_err:
+            logger.error(f"❌ Error en sincronización post-actualización: {sync_err}")
+
         return resultados
 
     except Exception as e:
@@ -1583,6 +1910,9 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 logger.info(f"✅ {len(expedientes_cache)} expedientes cargados en memoria (incluyendo búsqueda por últimos 13 dígitos)")
                 logger.info(f"⚡ Ahora procesando filas con búsqueda instantánea...")
                 
+                # Flag para indicar si se debe recalcular turnos después de procesar ingresos
+                necesita_recalculo_turnos = False
+
                 # Usar UNA SOLA conexión para todas las filas
                 conn_ingresos = obtener_conexion()
                 cursor_ingresos = conn_ingresos.cursor()
@@ -1759,6 +2089,7 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                 'solicitud': solicitud[:50] if solicitud and len(solicitud) > 50 else solicitud,
                                 'dudoso': radicado_completo in radicados_dudosos_ingresos  # ⚠️ Asociado por LIKE
                             })
+                            necesita_recalculo_turnos = True
                             
                         except Exception as e:
                             clasificacion = f'ERROR TECNICO: {str(e)[:60]}'
@@ -1778,7 +2109,7 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                     # Cerrar conexión de ingresos al final (después de procesar TODAS las filas)
                     cursor_ingresos.close()
                     conn_ingresos.close()
-                    
+
                     # 📊 Log de resumen de ingresos
                     logger.info(f"✅ Procesamiento de INGRESOS completado: {resultados['ingresos_agregados']} agregados, {len([e for e in resultados['errores_detallados'] if e.get('hoja') == pestaña_ingreso])} errores")
                 
@@ -2437,9 +2768,18 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                 
             except Exception as e:
                 logger.error(f"Error guardando reporte de actualización en BD: {e}")
-        
+
+        # ── SINCRONIZACIÓN FINAL ──────────────────────────────────────────────
+        try:
+            conn_sync = obtener_conexion()
+            sync_result = sincronizar_estados_y_turnos(conn_sync)
+            conn_sync.close()
+            logger.info(f"✅ Sincronización post-actualización múltiples pestañas: {sync_result}")
+        except Exception as sync_err:
+            logger.error(f"❌ Error en sincronización post-actualización múltiples pestañas: {sync_err}")
+
         return resultados
-        
+
     except Exception as e:
         logger.error(f"ERROR en procesar_excel_actualizacion_multiples_pestañas: {str(e)}")
         raise e
@@ -3141,6 +3481,16 @@ def procesar_excel_expedientes(file_content):
         }
         
         logger.info(f"=== FIN procesar_excel_expedientes - Resultado: {result} ===")
+
+        # ── SINCRONIZACIÓN FINAL ──────────────────────────────────────────────
+        try:
+            conn_sync = obtener_conexion()
+            sync_result = sincronizar_estados_y_turnos(conn_sync)
+            conn_sync.close()
+            logger.info(f"✅ Sincronización post-carga: {sync_result}")
+        except Exception as sync_err:
+            logger.error(f"❌ Error en sincronización post-carga: {sync_err}")
+
         return result
         
     except Exception as e:
@@ -3253,6 +3603,17 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
         elif pestaña_estados and 'estados' not in tablas_relacionadas:
             logger.warning("Pestaña de estados encontrada pero tabla 'estados' no existe en la BD")
             resultados['errores'] += 1
+        
+        if (resultado_ingresos.get('requiere_recalculo_turnos')
+                or resultado_estados.get('requiere_recalculo_turnos')):
+            try:
+                logger.info("🔄 RECALCULANDO TODOS LOS TURNOS DESPUÉS DE LA CARGA...")
+                recalcular_todos_los_turnos(cursor)
+                conn.commit()
+                logger.info("✅ Turnos recalculados después de carga de expedientes/estados")
+            except Exception as turno_error:
+                logger.error(f"❌ Error recalculando turnos después de carga: {turno_error}")
+                conn.rollback()
         
         conn.commit()
         logger.info("Transacción confirmada (COMMIT)")
@@ -3372,7 +3733,8 @@ def procesar_pestaña_ingresos(df, expediente_columns, formulas_detectadas=None)
         'ingresos_creados': 0,
         'errores': 0,
         'errores_detallados': [],  # Agregar lista de errores detallados
-        'ingresos_exitosos': []  # Agregar lista de ingresos exitosos
+        'ingresos_exitosos': [],  # Agregar lista de ingresos exitosos
+        'requiere_recalculo_turnos': False
     }
     
     try:
@@ -3546,6 +3908,26 @@ def procesar_pestaña_ingresos(df, expediente_columns, formulas_detectadas=None)
                         """, (expediente_id, fecha_ingreso, solicitud, observaciones))
                         
                         resultado['ingresos_creados'] += 1
+
+                        # Verificar estado del expediente tras agregar ingreso
+                        cursor_fila.execute(
+                            "SELECT estado FROM expediente WHERE id = %s",
+                            (expediente_id,)
+                        )
+                        estado_actual_row = cursor_fila.fetchone()
+                        estado_actual = estado_actual_row[0] if estado_actual_row else None
+                        estado_nuevo = calcular_estado_correcto(expediente_id, cursor_fila)
+
+                        if estado_nuevo and estado_nuevo != estado_actual:
+                            cursor_fila.execute(
+                                "UPDATE expediente SET estado = %s WHERE id = %s",
+                                (estado_nuevo, expediente_id)
+                            )
+                            conn_fila.commit()
+                            if manejar_cambio_estado_turno(cursor_fila, expediente_id, estado_actual, estado_nuevo):
+                                resultado['requiere_recalculo_turnos'] = True
+                        elif estado_actual == 'Activo Pendiente':
+                            resultado['requiere_recalculo_turnos'] = True
                         
                         # Guardar ingreso exitoso para el reporte
                         resultado['ingresos_exitosos'].append({
@@ -3605,7 +3987,8 @@ def procesar_pestaña_estados(df):
     resultado = {
         'procesados': 0,
         'errores': 0,
-        'estados_exitosos': []  # Agregar lista de estados exitosos
+        'estados_exitosos': [],  # Agregar lista de estados exitosos
+        'requiere_recalculo_turnos': False
     }
     
     try:
@@ -3725,6 +4108,25 @@ def procesar_pestaña_estados(df):
                     })
                     
                     logger.debug(f"Estado creado para expediente {radicado_completo} (ID: {expediente_id})")
+
+                    cursor_fila.execute(
+                        "SELECT estado FROM expediente WHERE id = %s",
+                        (expediente_id,)
+                    )
+                    estado_actual_row = cursor_fila.fetchone()
+                    estado_actual = estado_actual_row[0] if estado_actual_row else None
+                    estado_nuevo = calcular_estado_correcto(expediente_id, cursor_fila)
+
+                    if estado_nuevo and estado_nuevo != estado_actual:
+                        cursor_fila.execute(
+                            "UPDATE expediente SET estado = %s WHERE id = %s",
+                            (estado_nuevo, expediente_id)
+                        )
+                        conn_fila.commit()
+                        if manejar_cambio_estado_turno(cursor_fila, expediente_id, estado_actual, estado_nuevo):
+                            resultado['requiere_recalculo_turnos'] = True
+                    elif estado_actual == 'Activo Pendiente':
+                        resultado['requiere_recalculo_turnos'] = True
                     
                     # Commit de la fila exitosa
                     conn_fila.commit()
