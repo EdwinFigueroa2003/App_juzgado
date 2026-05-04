@@ -67,3 +67,5 @@ README_SETUP_RAILWAY.txt
 backup.sql
 app_juzgado.backup
 app_juzgado.sql
+backup_app_juzgado.dump
+backup_app_juzgado.sql
