@@ -545,7 +545,8 @@ def buscar_expedientes(radicado):
                 ingresos_fechas = [ingreso['fecha_ingreso'] for ingreso in expediente['ingresos'] if ingreso.get('fecha_ingreso')]
                 
                 if ingresos_fechas:
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(ingresos_fechas)
+                    """ expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(ingresos_fechas) """
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(ingresos_fechas)
                     logger.info(f"Fecha ingreso más reciente para exp {exp_id}: {expediente['fecha_ingreso_mas_antigua_sin_salida']}")
                 else:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = None

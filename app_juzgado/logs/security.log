@@ -213,3 +213,5 @@
 2026-04-29 19:31:07 | INFO | LOGIN_SUCCESS | IP: 127.0.0.1 | User: Anonymous | Successful login for user: juanito
 2026-04-29 22:21:41 | INFO | LOGIN_SUCCESS | IP: 127.0.0.1 | User: Anonymous | Successful login for user: juanito
 2026-05-04 11:00:16 | INFO | LOGIN_SUCCESS | IP: 127.0.0.1 | User: juanito | Successful login for user: juanito
+2026-05-05 11:23:40 | INFO | LOGIN_SUCCESS | IP: 127.0.0.1 | User: juanito | Successful login for user: juanito
+2026-05-05 11:25:10 | INFO | LOGIN_SUCCESS | IP: 127.0.0.1 | User: Anonymous | Successful login for user: juanito

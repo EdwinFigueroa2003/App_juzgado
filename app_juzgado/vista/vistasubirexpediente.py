@@ -12,6 +12,7 @@ IS_PRODUCTION = os.getenv('RAILWAY_ENVIRONMENT') is not None or os.getenv('RENDE
 
 from modelo.configBd import obtener_conexion
 from utils.auth import login_required
+from utils.turnos import sincronizar_estados_y_turnos
 
 # Crear un Blueprint
 vistasubirexpediente = Blueprint('idvistasubirexpediente', __name__, template_folder='templates')
@@ -99,252 +100,8 @@ def manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_n
     return False
 
 
-def sincronizar_estados_y_turnos(conn):
-    """
-    Función central que recalcula estados y turnos de TODOS los expedientes
-    basándose en el contenido real de las tablas ingresos y estados.
-
-    Debe llamarse al final de cualquier operación que modifique datos
-    (carga manual, Excel nuevos, Excel actualizaciones).
-
-    Paso 1 — Estados: actualiza el campo `estado` en la tabla `expediente`
-      - Activo Pendiente  : MAX(fecha_ingreso) > MAX(fecha_estado), o solo ingresos
-      - Activo Resuelto   : MAX(fecha_estado) >= MAX(fecha_ingreso) y <= 730 días
-      - Inactivo Resuelto : MAX(fecha_estado) >= MAX(fecha_ingreso) y > 730 días
-      - Pendiente         : sin ingresos ni estados
-
-    Paso 2 — Turnos: reasigna turnos secuenciales a expedientes 'Activo Pendiente'
-      ordenados por: ingreso más antiguo sin salida → fecha_ingreso expediente → id
-    """
-    cursor = conn.cursor()
-    try:
-        logger.info("🔄 [SYNC] Iniciando sincronización global de estados y turnos...")
-
-        # ── PASO 1: ACTUALIZAR ESTADOS ────────────────────────────────────────
-        cursor.execute("""
-            UPDATE expediente e
-            SET estado = calc.estado_nuevo
-            FROM (
-                SELECT
-                    exp.id,
-                    CASE
-                        -- Solo ingresos, sin estados → Activo Pendiente
-                        WHEN ing.cnt > 0 AND est.cnt = 0
-                            THEN 'Activo Pendiente'
-
-                        -- Solo estados, sin ingresos → por antigüedad
-                        WHEN est.cnt > 0 AND ing.cnt = 0
-                            THEN CASE
-                                WHEN (CURRENT_DATE - est.ultima_fecha) <= 730
-                                    THEN 'Activo Resuelto'
-                                ELSE 'Inactivo Resuelto'
-                            END
-
-                        -- Ambos → comparar fechas
-                        WHEN ing.cnt > 0 AND est.cnt > 0
-                            THEN CASE
-                                WHEN ing.ultima_fecha > est.ultima_fecha
-                                    THEN 'Activo Pendiente'
-                                WHEN (CURRENT_DATE - est.ultima_fecha) <= 730
-                                    THEN 'Activo Resuelto'
-                                ELSE 'Inactivo Resuelto'
-                            END
-
-                        -- Sin nada
-                        ELSE 'Pendiente'
-                    END AS estado_nuevo
-                FROM expediente exp
-                LEFT JOIN (
-                    SELECT expediente_id,
-                           COUNT(*)            AS cnt,
-                           MAX(fecha_ingreso)  AS ultima_fecha
-                    FROM ingresos
-                    WHERE fecha_ingreso IS NOT NULL
-                    GROUP BY expediente_id
-                ) ing ON ing.expediente_id = exp.id
-                LEFT JOIN (
-                    SELECT expediente_id,
-                           COUNT(*)           AS cnt,
-                           MAX(fecha_estado)  AS ultima_fecha
-                    FROM estados
-                    WHERE fecha_estado IS NOT NULL
-                    GROUP BY expediente_id
-                ) est ON est.expediente_id = exp.id
-            ) calc
-            WHERE e.id = calc.id
-              AND (e.estado IS DISTINCT FROM calc.estado_nuevo)
-        """)
-        estados_actualizados = cursor.rowcount
-        logger.info(f"✅ [SYNC] Estados actualizados: {estados_actualizados}")
-
-        # ── PASO 2: RECALCULAR TURNOS ─────────────────────────────────────────
-        # Limpiar turnos de todos los expedientes que ya no son Activo Pendiente
-        cursor.execute("""
-            UPDATE expediente
-            SET turno = NULL
-            WHERE estado != 'Activo Pendiente'
-              AND turno IS NOT NULL
-        """)
-
-        # Limpiar turnos de Activo Pendiente para reasignarlos desde cero
-        cursor.execute("""
-            UPDATE expediente
-            SET turno = NULL
-            WHERE estado = 'Activo Pendiente'
-        """)
-
-        # Obtener expedientes Activo Pendiente ordenados por:
-        # 1. Ingreso más antiguo sin estado posterior (el que lleva más tiempo esperando)
-        # 2. Fallback: ingreso más antiguo disponible
-        # 3. Fallback: fecha_ingreso del expediente
-        # 4. id como desempate final
-        cursor.execute("""
-            WITH ingresos_exp AS (
-                SELECT expediente_id, fecha_ingreso
-                FROM ingresos
-                WHERE fecha_ingreso IS NOT NULL
-            ),
-            ingresos_sin_salida AS (
-                -- Ingresos que NO tienen ningún estado con fecha posterior
-                SELECT ie.expediente_id, ie.fecha_ingreso
-                FROM ingresos_exp ie
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM estados est
-                    WHERE est.expediente_id = ie.expediente_id
-                      AND est.fecha_estado > ie.fecha_ingreso
-                )
-            ),
-            fecha_antigua_sin_salida AS (
-                -- El más antiguo sin salida por expediente
-                SELECT expediente_id, MIN(fecha_ingreso) AS fecha_ref
-                FROM ingresos_sin_salida
-                GROUP BY expediente_id
-            ),
-            fecha_antigua_total AS (
-                -- Fallback: el más antiguo de todos los ingresos
-                SELECT expediente_id, MIN(fecha_ingreso) AS fecha_ref
-                FROM ingresos_exp
-                GROUP BY expediente_id
-            )
-            SELECT e.id
-            FROM expediente e
-            LEFT JOIN fecha_antigua_sin_salida fass ON fass.expediente_id = e.id
-            LEFT JOIN fecha_antigua_total       fat  ON fat.expediente_id  = e.id
-            WHERE e.estado = 'Activo Pendiente'
-              AND COALESCE(fass.fecha_ref, fat.fecha_ref, e.fecha_ingreso) IS NOT NULL
-            ORDER BY
-                COALESCE(fass.fecha_ref, fat.fecha_ref, e.fecha_ingreso) ASC,
-                e.fecha_ingreso ASC NULLS LAST,
-                e.id ASC
-        """)
-
-        expedientes_ordenados = cursor.fetchall()
-        for turno_num, (exp_id,) in enumerate(expedientes_ordenados, 1):
-            cursor.execute(
-                "UPDATE expediente SET turno = %s WHERE id = %s",
-                (turno_num, exp_id)
-            )
-
-        turnos_asignados = len(expedientes_ordenados)
-        logger.info(f"✅ [SYNC] Turnos asignados: {turnos_asignados}")
-
-        conn.commit()
-        logger.info(f"✅ [SYNC] Sincronización completada — estados: {estados_actualizados}, turnos: {turnos_asignados}")
-
-        return {'estados_actualizados': estados_actualizados, 'turnos_asignados': turnos_asignados}
-
-    except Exception as e:
-        conn.rollback()
-        logger.error(f"❌ [SYNC] Error en sincronización: {e}")
-        raise
-    finally:
-        cursor.close()
-
-
-def recalcular_todos_los_turnos(cursor):
-    cursor.execute(
-        """
-        UPDATE expediente 
-        SET turno = NULL 
-        WHERE estado = 'Activo Pendiente'
-        """
-    )
-
-    cursor.execute(
-        """
-        WITH expedientes_activos AS (
-            SELECT 
-                e.id,
-                e.radicado_completo,
-                e.fecha_ingreso as fecha_ingreso_expediente
-            FROM expediente e
-            WHERE e.estado = 'Activo Pendiente'
-        ),
-        ingresos_expedientes AS (
-            SELECT 
-                i.expediente_id,
-                i.fecha_ingreso
-            FROM ingresos i
-            WHERE i.fecha_ingreso IS NOT NULL
-        ),
-        ingresos_sin_salida AS (
-            SELECT 
-                ie.expediente_id,
-                ie.fecha_ingreso
-            FROM ingresos_expedientes ie
-            WHERE NOT EXISTS (
-                SELECT 1 FROM estados est 
-                WHERE est.expediente_id = ie.expediente_id 
-                  AND est.fecha_estado >= ie.fecha_ingreso
-            )
-        ),
-        fecha_ingreso_mas_antigua_sin_salida AS (
-            SELECT 
-                expediente_id,
-                MAX(fecha_ingreso) as fecha_ingreso_sin_salida
-            FROM ingresos_expedientes
-            GROUP BY expediente_id
-        ),
-        ingresos_mas_antigua AS (
-            SELECT
-                expediente_id,
-                MIN(fecha_ingreso) as fecha_ingreso_mas_antigua
-            FROM ingresos_expedientes
-            GROUP BY expediente_id
-        ),
-        ultima_actuacion_expediente AS (
-            SELECT 
-                expediente_id,
-                MAX(fecha_estado) as ultima_actuacion
-            FROM estados
-            WHERE fecha_estado IS NOT NULL
-            GROUP BY expediente_id
-        )
-        SELECT 
-            ea.id,
-            ea.radicado_completo,
-            COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) as fecha_para_turno,
-            ea.fecha_ingreso_expediente,
-            uae.ultima_actuacion
-        FROM expedientes_activos ea
-        LEFT JOIN fecha_ingreso_mas_antigua_sin_salida fimass ON ea.id = fimass.expediente_id
-        LEFT JOIN ingresos_mas_antigua ima ON ea.id = ima.expediente_id
-        LEFT JOIN ultima_actuacion_expediente uae ON ea.id = uae.expediente_id
-        WHERE COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) IS NOT NULL
-        ORDER BY 
-            COALESCE(fimass.fecha_ingreso_sin_salida, ima.fecha_ingreso_mas_antigua, ea.fecha_ingreso_expediente) ASC,
-            ea.fecha_ingreso_expediente ASC,
-            uae.ultima_actuacion ASC NULLS LAST,
-            ea.id ASC
-        """
-    )
-
-    expedientes = cursor.fetchall()
-    for turno, row in enumerate(expedientes, 1):
-        cursor.execute(
-            "UPDATE expediente SET turno = %s WHERE id = %s",
-            (turno, row[0])
-        )
+# sincronizar_estados_y_turnos y recalcular_todos_los_turnos fueron
+# movidas a utils/turnos.py — importadas al inicio de este archivo.
 
 
 def parsear_reporte_para_excel(contenido_reporte):
@@ -3606,15 +3363,8 @@ def procesar_excel_multiples_pestañas(file_content, hojas_disponibles):
         
         if (resultado_ingresos.get('requiere_recalculo_turnos')
                 or resultado_estados.get('requiere_recalculo_turnos')):
-            try:
-                logger.info("🔄 RECALCULANDO TODOS LOS TURNOS DESPUÉS DE LA CARGA...")
-                recalcular_todos_los_turnos(cursor)
-                conn.commit()
-                logger.info("✅ Turnos recalculados después de carga de expedientes/estados")
-            except Exception as turno_error:
-                logger.error(f"❌ Error recalculando turnos después de carga: {turno_error}")
-                conn.rollback()
-        
+            logger.info("🔄 Recálculo de turnos diferido — se ejecutará en sincronización final")
+
         conn.commit()
         logger.info("Transacción confirmada (COMMIT)")
         
@@ -4070,17 +3820,21 @@ def procesar_pestaña_estados(df):
                 
                 # Crear registro en tabla estados
                 try:
-                    # 🔍 VERIFICAR SI YA EXISTE UN ESTADO DUPLICADO (igual que en modo actualización)
+                    # 🔍 VERIFICAR SI YA EXISTE UN ESTADO DUPLICADO
+                    # Se considera duplicado si coinciden expediente, fecha, clase y auto_anotacion
+                    # Las observaciones NO se usan como criterio para evitar falsos negativos
                     cursor_fila.execute("""
                         SELECT id FROM estados 
                         WHERE expediente_id = %s 
                         AND fecha_estado = %s 
                         AND clase = %s
-                        AND auto_anotacion = %s
-                        AND (observaciones IS NULL AND %s IS NULL OR observaciones = %s)
-                    """, (expediente_id, fecha_estado, clase, auto_anotacion, 
-                          observaciones_finales if observaciones_finales and str(observaciones_finales).strip() else None,
-                          observaciones_finales if observaciones_finales and str(observaciones_finales).strip() else None))
+                        AND (
+                            (auto_anotacion IS NULL AND %s IS NULL)
+                            OR auto_anotacion = %s
+                        )
+                    """, (expediente_id, fecha_estado, clase,
+                          auto_anotacion if auto_anotacion and str(auto_anotacion).strip() else None,
+                          auto_anotacion if auto_anotacion and str(auto_anotacion).strip() else None))
                     
                     estado_existente = cursor_fila.fetchone()
                     
