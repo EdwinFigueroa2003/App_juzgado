@@ -381,9 +381,9 @@
                                         <span class="badge badge-secondary badge-lg">
                                             <i class="fas fa-archive"></i> Inactivo Resuelto
                                         </span>
-                                        {% elif expediente.estado_actual == 'Pendiente' %}
+                                        {% elif expediente.estado_actual == 'Sin Movimiento' %}
                                         <span class="badge badge-light badge-lg">
-                                            <i class="fas fa-pause-circle"></i> Pendiente
+                                            <i class="fas fa-pause-circle"></i> Sin Movimiento
                                         </span>
                                         {% else %}
                                         <span class="badge badge-info badge-lg">
@@ -435,8 +435,8 @@
                                         <option value="Inactivo Resuelto" {{ 'selected' if
                                             expediente.estado_actual=='Inactivo Resuelto' }}>Inactivo Resuelto</option>
 
-                                        <option value="Pendiente" {{ 'selected' if expediente.estado_actual=='Pendiente'
-                                            }}>Pendiente</option>
+                                        <option value="Sin Movimiento" {{ 'selected' if expediente.estado_actual=='Sin Movimiento'
+                                            }}>Sin Movimiento</option>
 
                                     </select>
                                 </div>

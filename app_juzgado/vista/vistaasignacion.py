@@ -182,7 +182,7 @@ def obtener_expedientes_por_usuario(usuario_id, rol_usuario):
                     WHEN e.estado = 'Activo Pendiente' THEN 1
                     WHEN e.estado = 'Activo Resuelto' THEN 2
                     WHEN e.estado = 'Inactivo Resuelto' THEN 3
-                    WHEN e.estado = 'Pendiente' THEN 4
+                    WHEN e.estado = 'Sin Movimiento' THEN 4
                     ELSE 5
                 END,
                 CASE 
@@ -262,7 +262,7 @@ def calcular_estadisticas_usuario(expedientes, rol_usuario):
     # Mapeo de estados
     activos = estados_count.get('Activo Pendiente', 0) + estados_count.get('Activo Resuelto', 0)
     inactivos = estados_count.get('Inactivo Resuelto', 0)
-    pendientes = estados_count.get('Pendiente', 0)
+    pendientes = estados_count.get('Sin Movimiento', 0)
     
     # Estados antiguos (para compatibilidad)
     completados = sum(estados_count.get(estado, 0) for estado in ['COMPLETADO', 'FINALIZADO', 'TERMINADO', 'PROCESADO_AZURE', 'Activo Resuelto', 'Inactivo Resuelto'])
@@ -375,7 +375,7 @@ def obtener_estadisticas_generales():
                     COUNT(CASE WHEN estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
                     COUNT(CASE WHEN estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
                     COUNT(CASE WHEN estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                    COUNT(CASE WHEN estado = 'Pendiente' THEN 1 END) as pendiente
+                    COUNT(CASE WHEN estado = 'Sin Movimiento' THEN 1 END) as pendiente
                 FROM expediente 
                 WHERE responsable = %s
             """, (rol,))
@@ -396,7 +396,7 @@ def obtener_estadisticas_generales():
                             WHEN estado = 'Activo Pendiente' THEN 1
                             WHEN estado = 'Activo Resuelto' THEN 2
                             WHEN estado = 'Inactivo Resuelto' THEN 3
-                            WHEN estado = 'Pendiente' THEN 4
+                            WHEN estado = 'Sin Movimiento' THEN 4
                             ELSE 5
                         END,
                         CASE 
@@ -425,7 +425,7 @@ def obtener_estadisticas_generales():
                     COUNT(CASE WHEN e.estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
                     COUNT(CASE WHEN e.estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
                     COUNT(CASE WHEN e.estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                    COUNT(CASE WHEN e.estado = 'Pendiente' THEN 1 END) as pendiente
+                    COUNT(CASE WHEN e.estado = 'Sin Movimiento' THEN 1 END) as pendiente
                 FROM expediente e
                 LEFT JOIN usuarios u ON e.usuario_asignado_id = u.id
                 WHERE (
@@ -446,7 +446,7 @@ def obtener_estadisticas_generales():
                     COUNT(CASE WHEN e.estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
                     COUNT(CASE WHEN e.estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
                     COUNT(CASE WHEN e.estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                    COUNT(CASE WHEN e.estado = 'Pendiente' THEN 1 END) as pendiente
+                    COUNT(CASE WHEN e.estado = 'Sin Movimiento' THEN 1 END) as pendiente
                 FROM expediente e
                 LEFT JOIN usuarios u ON e.usuario_asignado_id = u.id
                 WHERE (
@@ -509,7 +509,7 @@ def obtener_estadisticas_generales():
                         WHEN e.estado = 'Activo Pendiente' THEN 1
                         WHEN e.estado = 'Activo Resuelto' THEN 2
                         WHEN e.estado = 'Inactivo Resuelto' THEN 3
-                        WHEN e.estado = 'Pendiente' THEN 4
+                        WHEN e.estado = 'Sin Movimiento' THEN 4
                         ELSE 5
                     END,
                     CASE 
@@ -547,7 +547,7 @@ def obtener_estadisticas_generales():
                     COUNT(CASE WHEN e.estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
                     COUNT(CASE WHEN e.estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
                     COUNT(CASE WHEN e.estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                    COUNT(CASE WHEN e.estado = 'Pendiente' THEN 1 END) as pendiente
+                    COUNT(CASE WHEN e.estado = 'Sin Movimiento' THEN 1 END) as pendiente
                 FROM expediente e
                 WHERE (
                     -- Asignación específica por usuario_asignado_id
@@ -579,7 +579,7 @@ def obtener_estadisticas_generales():
                             WHEN e.estado = 'Activo Pendiente' THEN 1
                             WHEN e.estado = 'Activo Resuelto' THEN 2
                             WHEN e.estado = 'Inactivo Resuelto' THEN 3
-                            WHEN e.estado = 'Pendiente' THEN 4
+                            WHEN e.estado = 'Sin Movimiento' THEN 4
                             ELSE 5
                         END,
                         CASE 
@@ -670,7 +670,7 @@ def obtener_usuarios_con_expedientes():
                         COUNT(CASE WHEN e.estado = 'Activo Pendiente' THEN 1 END) as activo_pendiente,
                         COUNT(CASE WHEN e.estado = 'Activo Resuelto' THEN 1 END) as activo_resuelto,
                         COUNT(CASE WHEN e.estado = 'Inactivo Resuelto' THEN 1 END) as inactivo_resuelto,
-                        COUNT(CASE WHEN e.estado = 'Pendiente' THEN 1 END) as pendiente
+                        COUNT(CASE WHEN e.estado = 'Sin Movimiento' THEN 1 END) as pendiente
                     FROM expediente e
                     WHERE (
                         -- Prioridad 1: Asignación específica por usuario_asignado_id

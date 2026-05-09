@@ -103,7 +103,7 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
                                 ELSE 'Inactivo Resuelto'
                             END
 
-                        ELSE 'Pendiente'
+                        ELSE 'Sin Movimiento'
                     END AS estado_nuevo
                 FROM expediente exp
                 LEFT JOIN (

@@ -198,7 +198,7 @@ def calcular_estado_expediente(expediente_id, cursor):
                 return "Activo Pendiente", f"En trámite - {', '.join(desc_actividad)}, {estados_count} estado(s)"
         
         # Por defecto (sin ingresos, actuaciones ni estados)
-        return "Pendiente", "Sin movimiento registrado"
+        return "Sin Movimiento", "Sin movimiento registrado"
         
     except Exception as e:
         print(f"Error calculando estado para expediente {expediente_id}: {e}")
@@ -703,9 +703,9 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
         elif estado == "INACTIVO RESUELTO":
             where_conditions.append("e.estado = %s")
             parametros.append("Inactivo Resuelto")
-        elif estado == "PENDIENTE":
+        elif estado == "SIN_MOVIMIENTO":
             where_conditions.append("e.estado = %s")
-            parametros.append("Pendiente")
+            parametros.append("Sin Movimiento")
         elif estado == "ACTIVO":
             # Todos los activos (Pendiente + Resuelto)
             where_conditions.append("e.estado IN (%s, %s)")
@@ -983,9 +983,9 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
             elif estado_filtro == "INACTIVO RESUELTO":
                 query += " AND e.estado = %s"
                 parametros.append("Inactivo Resuelto")
-            elif estado_filtro == "PENDIENTE":
+            elif estado_filtro == "SIN_MOVIMIENTO":
                 query += " AND e.estado = %s"
-                parametros.append("Pendiente")
+                parametros.append("Sin Movimiento")
             else:
                 # Estado específico exacto
                 query += " AND e.estado = %s"

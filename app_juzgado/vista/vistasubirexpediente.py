@@ -10,6 +10,15 @@ from io import BytesIO
 # Detectar entorno (producción vs desarrollo)
 IS_PRODUCTION = os.getenv('RAILWAY_ENVIRONMENT') is not None or os.getenv('RENDER') is not None
 
+# Configurar logging según el entorno
+if IS_PRODUCTION:
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+else:
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+
 from modelo.configBd import obtener_conexion
 from utils.auth import login_required
 from utils.turnos import sincronizar_estados_y_turnos
@@ -85,7 +94,7 @@ def calcular_estado_correcto(expediente_id, cursor):
             return 'Activo Resuelto' if dias_desde_ultimo_estado <= 730 else 'Inactivo Resuelto'
         return 'Activo Pendiente'
 
-    return 'Pendiente'
+    return 'Sin Movimiento'
 
 
 def manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, estado_nuevo):

@@ -2,11 +2,16 @@
 Script para actualizar el campo 'estado' en la tabla expediente
 basándose en la lógica de negocio:
 
-LÓGICA DE ESTADOS:
+COMPORTAMIENTO ACTUAL:
+- Por defecto, SOLO procesa expedientes con estado = 'Pendiente' QUE TENGAN MOVIMIENTO (Grupo A)
+- Expedientes Pendiente SIN movimiento (Grupo B) se mantienen como Pendiente
+- Utiliza la misma lógica de estados que actualizar_estados_expedientes
+
+LÓGICA DE ESTADOS (para Grupo A):
 1. Si tiene ingresos o actuaciones SIN estados → Activo Pendiente
 2. Si tiene SOLO estados (sin ingresos/actuaciones) → Verificar antigüedad:
-   - Menos de 1 año → Activo Resuelto
-   - Más de 1 año → Inactivo Resuelto
+   - Menos de 2 años → Activo Resuelto
+   - Más de 2 años → Inactivo Resuelto
 3. Si tiene ingresos/actuaciones Y estados → Comparar fechas:
    - Si actividad más reciente que último estado → Activo Pendiente
    - Si estado más reciente → Aplicar lógica de antigüedad (Activo/Inactivo Resuelto)
@@ -15,9 +20,24 @@ USO:
     python app_juzgado/utils/actualizar_estados_expedientes.py
     
     Opciones:
-    --dry-run : Solo muestra los cambios sin aplicarlos
-    --expediente-id : Actualizar solo un expediente específico
-    --verbose : Mostrar información detallada
+    --dry-run            : Solo muestra los cambios sin aplicarlos
+    --expediente-id      : Actualizar solo un expediente específico
+    --verbose            : Mostrar información detallada
+    --todos              : Procesar TODOS los expedientes (no solo Pendiente)
+    --asignar-turnos     : Asignar automáticamente turnos después de actualizar estados
+
+EJEMPLOS:
+    # Ver cambios que se harían en Pendiente con movimiento
+    python actualizar_estados_expedientes.py --dry-run
+    
+    # Aplicar actualización a Pendiente con movimiento
+    python actualizar_estados_expedientes.py
+    
+    # Actualizar y asignar turnos automáticamente
+    python actualizar_estados_expedientes.py --asignar-turnos
+    
+    # Procesar todos los expedientes (no solo Pendiente)
+    python actualizar_estados_expedientes.py --todos
 """
 
 import sys
@@ -52,8 +72,8 @@ def calcular_estado_correcto(expediente_id, cursor):
     Calcula el estado correcto del expediente basado en la lógica SIMPLIFICADA:
     
     - Activo Pendiente: fecha_ingreso (más reciente) > fecha_estado (última)
-    - Activo Resuelto: fecha_estado (última) > fecha_ingreso (más reciente) Y < 1 año
-    - Inactivo Resuelto: fecha_estado (última) > fecha_ingreso (más reciente) Y > 1 año
+    - Activo Resuelto: fecha_estado (última) > fecha_ingreso (más reciente) Y < 2 años
+    - Inactivo Resuelto: fecha_estado (última) > fecha_ingreso (más reciente) Y > 2 años
     
     NOTA: Se ignora la tabla 'actuaciones' para el cálculo del estado
     
@@ -119,7 +139,7 @@ def calcular_estado_correcto(expediente_id, cursor):
             # Solo hay fecha de estado válida → Verificar antigüedad
             dias_desde_ultimo_estado = (datetime.now().date() - ultima_fecha_estado).days
             if dias_desde_ultimo_estado <= 730:
-                return "Activo Resuelto", f"Solo fecha de estado válida ({ultima_fecha_estado}), hace {dias_desde_ultimo_estado} días"
+                return "Activo Resuelto", f"Solo fecha de estado válida ({ultima_fecha_estado}), hace {dias_desde_ultimo_estado} días (< 2 años)"
             else:
                 return "Inactivo Resuelto", f"Solo fecha de estado válida ({ultima_fecha_estado}), hace {dias_desde_ultimo_estado} días (> 2 años)"
         else:
@@ -128,36 +148,57 @@ def calcular_estado_correcto(expediente_id, cursor):
     
     # Caso 4: Sin ingresos ni estados
     else:
-        return "Pendiente", "Sin movimiento registrado (sin ingresos ni estados)"
+        return "Sin Movimiento", "Sin movimiento registrado (sin ingresos ni estados)"
 
-def actualizar_estados(dry_run=False, expediente_id=None, verbose=False):
+def actualizar_estados(dry_run=False, expediente_id=None, verbose=False, solo_pendientes=True):
     """
-    Actualiza el campo estado de todos los expedientes (o uno específico)
+    Actualiza el campo estado de expedientes (por defecto solo los que están en 'Pendiente')
+    
+    Lógica:
+    - Grupo A: Expedientes Pendiente CON movimiento → Se actualizan a estado correcto
+    - Grupo B: Expedientes Pendiente SIN movimiento → Se mantienen como Pendiente
     
     Args:
         dry_run: Si es True, solo muestra los cambios sin aplicarlos
         expediente_id: Si se proporciona, solo actualiza ese expediente
         verbose: Si es True, muestra información detallada
+        solo_pendientes: Si es True, solo procesa expedientes con estado = 'Pendiente'
     """
     
     conexion = obtener_conexion()
     cursor = conexion.cursor()
     
     try:
-        # Obtener expedientes a procesar
+        # Obtener expedientes Pendiente y clasificarlos en Grupo A (con movimiento) y B (sin movimiento)
         if expediente_id:
-            cursor.execute("""
+            query = """
                 SELECT id, radicado_completo, estado 
                 FROM expediente 
                 WHERE id = %s
-            """, (expediente_id,))
+            """
+            params = (expediente_id,)
+        elif solo_pendientes:
+            # Solo expedientes con estado = 'Pendiente' que tengan movimiento (Grupo A)
+            query = """
+                SELECT e.id, e.radicado_completo, e.estado
+                FROM expediente e
+                WHERE e.estado = 'Pendiente'
+                  AND (
+                    EXISTS (SELECT 1 FROM ingresos WHERE expediente_id = e.id LIMIT 1)
+                    OR EXISTS (SELECT 1 FROM estados WHERE expediente_id = e.id LIMIT 1)
+                  )
+                ORDER BY e.id
+            """
+            params = ()
         else:
-            cursor.execute("""
+            query = """
                 SELECT id, radicado_completo, estado 
                 FROM expediente 
                 ORDER BY id
-            """)
+            """
+            params = ()
         
+        cursor.execute(query, params)
         expedientes = cursor.fetchall()
         total_expedientes = len(expedientes)
         
@@ -165,6 +206,8 @@ def actualizar_estados(dry_run=False, expediente_id=None, verbose=False):
         print(f"ACTUALIZACIÓN DE ESTADOS DE EXPEDIENTES")
         print(f"{'='*80}")
         print(f"Modo: {'DRY RUN (sin cambios)' if dry_run else 'ACTUALIZACIÓN REAL'}")
+        if solo_pendientes:
+            print(f"Filtro: Solo expedientes con estado = 'Pendiente' Y con movimiento")
         print(f"Total de expedientes a procesar: {total_expedientes}")
         print(f"{'='*80}\n")
         
@@ -217,7 +260,7 @@ def actualizar_estados(dry_run=False, expediente_id=None, verbose=False):
         
         # Resumen
         print(f"\n{'='*80}")
-        print(f"RESUMEN")
+        print(f"RESUMEN DE ACTUALIZACIÓN")
         print(f"{'='*80}")
         print(f"Total procesados:     {total_expedientes}")
         print(f"Actualizados:         {actualizados}")
@@ -226,10 +269,10 @@ def actualizar_estados(dry_run=False, expediente_id=None, verbose=False):
         print(f"{'='*80}")
         
         if cambios_por_estado:
-            print(f"\nCAMBIOS POR TIPO DE ESTADO:")
+            print(f"\nDISTRIBUCIÓN DE CAMBIOS POR ESTADO:")
             print(f"{'-'*80}")
             for cambio, cantidad in sorted(cambios_por_estado.items(), key=lambda x: x[1], reverse=True):
-                print(f"  {cambio}: {cantidad} expediente(s)")
+                print(f"  {cambio}: {cantidad:,} expediente(s)")
             print(f"{'-'*80}")
         
         if dry_run and actualizados > 0:
@@ -255,11 +298,34 @@ if __name__ == "__main__":
                        help='ID del expediente a actualizar (opcional)')
     parser.add_argument('--verbose', action='store_true', 
                        help='Mostrar información detallada')
+    parser.add_argument('--todos', action='store_true',
+                       help='Procesar TODOS los expedientes (por defecto solo Pendiente con movimiento)')
+    parser.add_argument('--asignar-turnos', action='store_true',
+                       help='Asignar turnos automáticamente a los expedientes actualizados')
     
     args = parser.parse_args()
     
+    # Ejecutar actualización
     actualizar_estados(
         dry_run=args.dry_run,
         expediente_id=args.expediente_id,
-        verbose=args.verbose
+        verbose=args.verbose,
+        solo_pendientes=not args.todos
     )
+    
+    # Asignar turnos si se solicitó y no fue dry-run
+    if args.asignar_turnos and not args.dry_run:
+        print("\n🔄 Asignando turnos automáticamente...")
+        try:
+            from utils.turnos import sincronizar_estados_y_turnos
+            conexion = obtener_conexion()
+            resultado = sincronizar_estados_y_turnos(conexion)
+            print(f"✅ Estados sincronizados: {resultado.get('estados_actualizados', 0)}")
+            print(f"✅ Turnos asignados: {resultado.get('turnos_asignados', 0)}")
+            if resultado.get('sin_turno_pendientes'):
+                print(f"⚠️  Pendientes sin turno: {resultado.get('sin_turno_pendientes', 0)}")
+            conexion.close()
+        except ImportError:
+            print("⚠️  No se pudo importar sincronizar_estados_y_turnos")
+        except Exception as e:
+            print(f"❌ Error al asignar turnos: {str(e)}")

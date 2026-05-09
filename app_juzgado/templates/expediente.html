@@ -105,9 +105,9 @@
                                                         estado_filtro=='INACTIVO RESUELTO' }}>
                                                         Inactivo Resuelto (>1 año desde resolución)
                                                     </option>
-                                                    <option value="PENDIENTE" {{ 'selected' if
-                                                        estado_filtro=='PENDIENTE' }}>
-                                                        Pendiente (sin movimiento)
+                                                    <option value="SIN_MOVIMIENTO" {{ 'selected' if
+                                                        estado_filtro=='SIN_MOVIMIENTO' }}>
+                                                        Sin Movimiento
                                                     </option>
                                                 </optgroup>
 
@@ -200,9 +200,9 @@
                                                         estado_filtro=='INACTIVO RESUELTO' }}>
                                                         Inactivo Resuelto (>1 año desde resolución)
                                                     </option>
-                                                    <option value="PENDIENTE" {{ 'selected' if
-                                                        estado_filtro=='PENDIENTE' }}>
-                                                        Pendiente (sin movimiento)
+                                                    <option value="SIN_MOVIMIENTO" {{ 'selected' if
+                                                        estado_filtro=='SIN_MOVIMIENTO' }}>
+                                                        Sin Movimiento
                                                     </option>
                                                 </optgroup>
 
@@ -443,7 +443,7 @@
                                 <span class="badge badge-secondary ml-2"
                                     title="{{ expediente.descripcion_estado or '' }}">{{ expediente.estado_actual
                                     }}</span>
-                                {% elif expediente.estado_actual == 'Pendiente' %}
+                                {% elif expediente.estado_actual == 'Sin Movimiento' %}
                                 <span class="badge badge-light ml-2"
                                     title="{{ expediente.descripcion_estado or '' }}">{{ expediente.estado_actual
                                     }}</span>
@@ -560,7 +560,7 @@
                                                 <span class="badge badge-secondary"
                                                     title="{{ expediente.descripcion_estado or '' }}">{{
                                                     expediente.estado_actual }}</span>
-                                                {% elif expediente.estado_actual == 'Pendiente' %}
+                                                {% elif expediente.estado_actual == 'Sin Movimiento' %}
                                                 <span class="badge badge-light"
                                                     title="{{ expediente.descripcion_estado or '' }}">{{
                                                     expediente.estado_actual }}</span>
