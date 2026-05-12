@@ -109,7 +109,7 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
 
                         -- Sin filas en ninguna tabla → no debería llegar aquí
                         -- por el WHERE de abajo, pero por seguridad
-                        ELSE e.estado
+                        ELSE exp.estado
                     END AS estado_nuevo
                 FROM expediente exp
                 LEFT JOIN (
