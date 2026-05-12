@@ -75,8 +75,9 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
 
         # ── PASO 1: ACTUALIZAR ESTADOS ────────────────────────────────────────
         # Un solo UPDATE que recalcula el campo `estado` comparando
-        # MAX(fecha_ingreso) vs MAX(fecha_estado) para cada expediente.
-        # Solo toca filas cuyo estado realmente cambió (IS DISTINCT FROM).
+        # Solo recalcula expedientes que tienen filas en ingresos o en estados.
+        # Si no tienen ninguna de las dos, el estado se preserva tal como está.
+        # expediente.fecha_ingreso NO se usa — puede generar confusiones.
         cursor.execute("""
             UPDATE expediente e
             SET estado = calc.estado_nuevo
@@ -84,17 +85,20 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
                 SELECT
                     exp.id,
                     CASE
-                        WHEN ing.cnt > 0 AND est.cnt = 0
+                        -- Solo ingresos, sin estados → Activo Pendiente
+                        WHEN COALESCE(ing.cnt, 0) > 0 AND COALESCE(est.cnt, 0) = 0
                             THEN 'Activo Pendiente'
 
-                        WHEN est.cnt > 0 AND ing.cnt = 0
+                        -- Solo estados, sin ingresos → por antigüedad
+                        WHEN COALESCE(est.cnt, 0) > 0 AND COALESCE(ing.cnt, 0) = 0
                             THEN CASE
                                 WHEN (CURRENT_DATE - est.ultima_fecha) <= 730
                                     THEN 'Activo Resuelto'
                                 ELSE 'Inactivo Resuelto'
                             END
 
-                        WHEN ing.cnt > 0 AND est.cnt > 0
+                        -- Tiene ambos → comparar fechas
+                        WHEN COALESCE(ing.cnt, 0) > 0 AND COALESCE(est.cnt, 0) > 0
                             THEN CASE
                                 WHEN ing.ultima_fecha > est.ultima_fecha
                                     THEN 'Activo Pendiente'
@@ -103,7 +107,9 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
                                 ELSE 'Inactivo Resuelto'
                             END
 
-                        ELSE 'Sin Movimiento'
+                        -- Sin filas en ninguna tabla → no debería llegar aquí
+                        -- por el WHERE de abajo, pero por seguridad
+                        ELSE e.estado
                     END AS estado_nuevo
                 FROM expediente exp
                 LEFT JOIN (
@@ -122,6 +128,9 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
                     WHERE fecha_estado IS NOT NULL
                     GROUP BY expediente_id
                 ) est ON est.expediente_id = exp.id
+                -- Solo procesar expedientes con datos reales en las tablas relacionadas
+                WHERE COALESCE(ing.cnt, 0) > 0
+                   OR COALESCE(est.cnt, 0) > 0
             ) calc
             WHERE e.id = calc.id
               AND (e.estado IS DISTINCT FROM calc.estado_nuevo)
