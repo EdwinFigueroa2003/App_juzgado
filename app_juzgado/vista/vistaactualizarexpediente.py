@@ -943,33 +943,25 @@ def agregar_estado():
         logger.info(f"Estado anterior del expediente: '{estado_anterior}'")
         logger.info(f"Nuevo estado a aplicar: '{nuevo_estado}'")
         
-        # Insertar nuevo estado
+        # Insertar nuevo estado en la tabla estados
         cursor.execute("""
             INSERT INTO estados 
             (expediente_id, clase, fecha_estado, auto_anotacion, observaciones)
             VALUES (%s, %s, %s, %s, %s)
         """, (expediente_id, nuevo_estado, fecha_estado_obj, observaciones_estado, observaciones_estado))
-        
-        # Actualizar estado actual del expediente
-        cursor.execute("""
-            UPDATE expediente 
-            SET estado = %s
-            WHERE id = %s
-        """, (nuevo_estado, expediente_id))
-        
-        # Manejar cambio de turno si el estado cambió
-        if estado_anterior != nuevo_estado:
-            logger.info(f"🔄 Detectado cambio de estado en agregar_estado: '{estado_anterior}' -> '{nuevo_estado}'")
-            manejar_cambio_estado_turno(cursor, expediente_id, estado_anterior, nuevo_estado)
-        else:
-            logger.info("ℹ️ No hay cambio de estado en agregar_estado, no se modifica turno")
-        
+
+        # NO se actualiza expediente.estado manualmente — lo recalcula
+        # sincronizar_estados_y_turnos después del commit según las reglas de negocio.
+
         conn.commit()
         cursor.close()
         conn.close()
-        
-        flash('Estado agregado y expediente actualizado exitosamente', 'success')
-        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
+
+        # Recalcular estados y turnos con la lógica central
+        _sincronizar_post_operacion()
+
+        flash('Estado agregado exitosamente', 'success')
+        return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') +
                        f'?buscar_id={expediente_id}')
         
     except Exception as e:
