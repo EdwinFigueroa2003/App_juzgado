@@ -8,7 +8,7 @@ Estado:
   - Activo Pendiente  : MAX(fecha_ingreso) > MAX(fecha_estado), o solo ingresos sin estados
   - Activo Resuelto   : MAX(fecha_estado) >= MAX(fecha_ingreso) y <= 730 días desde hoy
   - Inactivo Resuelto : MAX(fecha_estado) >= MAX(fecha_ingreso) y > 730 días desde hoy
-  - Pendiente         : sin ingresos ni estados
+  - Sin Movimiento  : sin ingresos ni estados
 
 Turno:
   - Solo expedientes con estado = 'Activo Pendiente' reciben turno.
@@ -75,8 +75,8 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
 
         # ── PASO 1: ACTUALIZAR ESTADOS ────────────────────────────────────────
         # Un solo UPDATE que recalcula el campo `estado` comparando
-        # Solo recalcula expedientes que tienen filas en ingresos o en estados.
-        # Si no tienen ninguna de las dos, el estado se preserva tal como está.
+        # Todos los expedientes se procesan, incluso aquellos que quedan
+        # sin ingresos ni estados tras una eliminación.
         # expediente.fecha_ingreso NO se usa — puede generar confusiones.
         cursor.execute("""
             UPDATE expediente e
@@ -107,8 +107,9 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
                                 ELSE 'Inactivo Resuelto'
                             END
 
-                        -- Sin filas en ninguna tabla → no debería llegar aquí
-                        -- por el WHERE de abajo, pero por seguridad
+                        -- Sin filas en ninguna tabla → debe marcarse como Sin Movimiento
+                        WHEN COALESCE(ing.cnt, 0) = 0 AND COALESCE(est.cnt, 0) = 0
+                            THEN 'Sin Movimiento'
                         ELSE exp.estado
                     END AS estado_nuevo
                 FROM expediente exp
@@ -128,9 +129,8 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
                     WHERE fecha_estado IS NOT NULL
                     GROUP BY expediente_id
                 ) est ON est.expediente_id = exp.id
-                -- Solo procesar expedientes con datos reales en las tablas relacionadas
-                WHERE COALESCE(ing.cnt, 0) > 0
-                   OR COALESCE(est.cnt, 0) > 0
+                -- Procesar todos los expedientes para capturar eliminaciones
+                -- de ingresos/estados que dejan al expediente sin movimiento.
             ) calc
             WHERE e.id = calc.id
               AND (e.estado IS DISTINCT FROM calc.estado_nuevo)

@@ -985,13 +985,7 @@
                         <div class="form-group">
                             <label for="nuevo_estado">Clase:</label>
                             <select class="form-control" id="nuevo_estado" name="nuevo_estado" required>
-                                <option value="">Seleccionar clase</option>
-                                <option value="Ejecutivos De Mínima Cuantía">Ejecutivos De Mínima Cuantía</option>
-                                <option value="Ejecutivos De Mayor Cuantía">Ejecutivos De Mayor Cuantía</option>
-                                <option value="Declarativos">Declarativos</option>
-                                <option value="Especiales">Especiales</option>
-                                <option value="Terminado">Terminado</option>
-                                <option value="Archivado">Archivado</option>
+                                <option value="">Cargando clases...</option>
                             </select>
                         </div>
 
@@ -1273,6 +1267,33 @@
     });
 
     // Las funciones toggle se definen en `static/js/base.js` para evitar duplicados.
+</script>
+
+<script>
+// ── Carga dinámica de clases de estado ───────────────────────────────────────
+(function cargarClasesSelect() {
+    const select = document.getElementById('nuevo_estado');
+    if (!select) return;
+
+    fetch('/api/clases_estado')
+        .then(r => r.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Seleccionar clase</option>';
+            if (data.ok && data.clases.length) {
+                data.clases.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value  = c.nombre;
+                    opt.textContent = c.nombre;
+                    select.appendChild(opt);
+                });
+            } else {
+                select.innerHTML = '<option value="">Sin clases disponibles</option>';
+            }
+        })
+        .catch(() => {
+            select.innerHTML = '<option value="">Error cargando clases</option>';
+        });
+})();
 </script>
 
 {% endblock %}

@@ -1002,7 +1002,10 @@ def eliminar_ingreso():
         conn.commit()
         cursor.close()
         conn.close()
-        
+
+        # Recalcular estado y turnos tras eliminar el ingreso
+        _sincronizar_post_operacion()
+
         flash('Ingreso eliminado exitosamente', 'success')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
                        f'?buscar_id={expediente_id}')
@@ -1045,7 +1048,10 @@ def eliminar_estado():
         conn.commit()
         cursor.close()
         conn.close()
-        
+
+        # Recalcular estado y turnos tras eliminar el estado
+        _sincronizar_post_operacion()
+
         flash('Estado eliminado exitosamente', 'success')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente') + 
                        f'?buscar_id={expediente_id}')
@@ -2009,3 +2015,176 @@ def eliminar_expediente():
         logger.error(traceback.format_exc())
         flash(f'Error eliminando expediente: {str(e)}', 'error')
         return redirect(url_for('idvistaactualizarexpediente.vista_actualizarexpediente'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRUD DE CLASES DE ESTADO
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _obtener_clases():
+    """Retorna todas las clases de estado ordenadas por nombre.
+    Crea la tabla automáticamente si no existe (primera ejecución).
+    """
+    conn = obtener_conexion()
+    cursor = conn.cursor()
+
+    # Crear tabla si no existe — idempotente
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS clases_estado (
+            id      SERIAL PRIMARY KEY,
+            nombre  VARCHAR(200) NOT NULL UNIQUE,
+            activo  BOOLEAN NOT NULL DEFAULT TRUE,
+            creado  TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+
+    # Poblar con clases iniciales si la tabla está vacía
+    cursor.execute("SELECT COUNT(*) FROM clases_estado")
+    if cursor.fetchone()[0] == 0:
+        clases_iniciales = [
+            'Ejecutivos De Mínima Cuantía',
+            'Ejecutivos De Mayor Cuantía',
+            'Procesos Ejecutivos',
+            'Declarativos',
+            'Especiales',
+            'Terminado',
+            'Archivado',
+        ]
+        for nombre in clases_iniciales:
+            cursor.execute(
+                "INSERT INTO clases_estado (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING",
+                (nombre,)
+            )
+        logger.info(f"✅ Tabla clases_estado creada y poblada con {len(clases_iniciales)} clases iniciales")
+
+    conn.commit()
+
+    cursor.execute("""
+        SELECT id, nombre, activo
+        FROM clases_estado
+        ORDER BY nombre
+    """)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [{'id': r[0], 'nombre': r[1], 'activo': r[2]} for r in rows]
+
+
+@vistaactualizarexpediente.route('/api/clases_estado', methods=['GET'])
+@login_required
+def api_listar_clases():
+    """Devuelve la lista de clases en JSON.
+    ?todas=1  → devuelve activas e inactivas (para tabla de admin)
+    sin param → solo activas (para el select del formulario)
+    """
+    try:
+        todas = request.args.get('todas', '0') == '1'
+        clases = _obtener_clases()
+        if not todas:
+            clases = [c for c in clases if c['activo']]
+        return jsonify({'ok': True, 'clases': clases})
+    except Exception as e:
+        logger.error(f"Error listando clases: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@vistaactualizarexpediente.route('/api/clases_estado', methods=['POST'])
+@login_required
+def api_crear_clase():
+    """Crea una nueva clase de estado."""
+    try:
+        data = request.get_json(silent=True) or {}
+        nombre = (data.get('nombre') or '').strip()
+        if not nombre:
+            return jsonify({'ok': False, 'error': 'El nombre es obligatorio'}), 400
+
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO clases_estado (nombre)
+            VALUES (%s)
+            ON CONFLICT (nombre) DO NOTHING
+            RETURNING id, nombre, activo
+        """, (nombre,))
+        row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not row:
+            return jsonify({'ok': False, 'error': 'Ya existe una clase con ese nombre'}), 409
+
+        return jsonify({'ok': True, 'clase': {'id': row[0], 'nombre': row[1], 'activo': row[2]}}), 201
+
+    except Exception as e:
+        logger.error(f"Error creando clase: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@vistaactualizarexpediente.route('/api/clases_estado/<int:clase_id>', methods=['PUT'])
+@login_required
+def api_editar_clase(clase_id):
+    """Edita el nombre o el estado activo de una clase."""
+    try:
+        data = request.get_json(silent=True) or {}
+        nombre = (data.get('nombre') or '').strip()
+        activo = data.get('activo')  # puede ser True/False o None (no cambiar)
+
+        if not nombre and activo is None:
+            return jsonify({'ok': False, 'error': 'Nada que actualizar'}), 400
+
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+
+        sets, params = [], []
+        if nombre:
+            sets.append("nombre = %s")
+            params.append(nombre)
+        if activo is not None:
+            sets.append("activo = %s")
+            params.append(bool(activo))
+
+        params.append(clase_id)
+        cursor.execute(
+            f"UPDATE clases_estado SET {', '.join(sets)} WHERE id = %s RETURNING id, nombre, activo",
+            params
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not row:
+            return jsonify({'ok': False, 'error': 'Clase no encontrada'}), 404
+
+        return jsonify({'ok': True, 'clase': {'id': row[0], 'nombre': row[1], 'activo': row[2]}})
+
+    except Exception as e:
+        logger.error(f"Error editando clase {clase_id}: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@vistaactualizarexpediente.route('/api/clases_estado/<int:clase_id>', methods=['DELETE'])
+@login_required
+def api_eliminar_clase(clase_id):
+    """Elimina una clase de estado."""
+    try:
+        conn = obtener_conexion()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM clases_estado WHERE id = %s RETURNING nombre",
+            (clase_id,)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not row:
+            return jsonify({'ok': False, 'error': 'Clase no encontrada'}), 404
+
+        return jsonify({'ok': True, 'eliminado': row[0]})
+
+    except Exception as e:
+        logger.error(f"Error eliminando clase {clase_id}: {e}")
+        return jsonify({'ok': False, 'error': str(e)}), 500

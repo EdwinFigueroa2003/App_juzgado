@@ -141,6 +141,11 @@
                         <i class="fas fa-user-tie"></i> Por Responsable
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="expedientes-tab" data-bs-toggle="tab" href="#expedientes" role="tab">
+                        <i class="fa-solid fa-file"></i></i> Expedientes
+                    </a>
+                </li>
             </ul>
 
             <div class="tab-content" id="adminTabsContent">
@@ -669,41 +674,282 @@
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Acciones Rápidas -->
-            <!-- <div class="row mt-4">
-                <div class="col-12">
+                <!-- Tab Por Expediente — Gestión de Clases de Estado -->
+                <div class="tab-pane fade" id="expedientes" role="tabpanel">
                     <div class="card">
-                        <div class="card-header">
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">
-                                <i class="fas fa-bolt"></i> Acciones Rápidas de Administrador
+                                <i class="fas fa-tags"></i> Clases de Estado
+                                <small class="text-muted ml-2" style="font-size:0.75rem;">
+                                    Usadas en el selector "Clase" al agregar estados a un expediente
+                                </small>
                             </h5>
+                            <button class="btn btn-sm btn-success" onclick="abrirModalNuevaClase()">
+                                <i class="fas fa-plus"></i> Nueva Clase
+                            </button>
                         </div>
-                        <div class="card-body">
-                            <div class="btn-group" role="group">
-                                <a href="{{ url_for('idvistausuarios.vista_usuarios') }}" class="btn btn-primary">
-                                    <i class="fas fa-users-cog"></i> Gestionar Usuarios
-                                </a>
-                                <a href="{{ url_for('idvistaroles.vista_roles') }}" class="btn btn-info">
-                                    <i class="fas fa-user-tag"></i> Gestionar Roles
-                                </a>
-                                <a href="{{ url_for('idvistaactualizarexpediente.vista_actualizarexpediente') }}" class="btn btn-warning">
-                                    <i class="fas fa-magic"></i> Asignación Masiva
-                                </a>
-                                <a href="{{ url_for('idvistaexpediente.vista_expediente') }}" class="btn btn-success">
-                                    <i class="fas fa-search"></i> Consultar Expedientes
-                                </a>
-                                <a href="{{ url_for('idvistasecurity.security_dashboard') }}" class="btn btn-danger">
-                                    <i class="fas fa-shield-alt"></i> Seguridad
-                                </a>
+                        <div class="card-body p-0">
+                            <div id="clases-alert" class="mx-3 mt-3" style="display:none;"></div>
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0" id="tabla-clases">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th style="width:60px">#</th>
+                                            <th>Nombre</th>
+                                            <th style="width:100px" class="text-center">Estado</th>
+                                            <th style="width:130px" class="text-center">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="clases-tbody">
+                                        <tr>
+                                            <td colspan="4" class="text-center text-muted py-4">
+                                                <i class="fas fa-spinner fa-spin"></i> Cargando clases...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div> -->
+            </div>
         </div>
     </div>
 </div>
+
+<!-- Modal Nueva / Editar Clase -->
+<div class="modal fade" id="modalClase" tabindex="-1" role="dialog" aria-labelledby="modalClaseLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalClaseLabel">Nueva Clase</h5>
+                <!-- <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button> -->
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="clase-id" value="">
+                <div class="form-group mb-0">
+                    <label for="clase-nombre">Nombre de la clase</label>
+                    <input type="text" class="form-control" id="clase-nombre"
+                           placeholder="Ej: Procesos Ejecutivos" maxlength="200">
+                </div>
+                <small 
+                class="text-muted">Esta acción no se puede deshacer.
+                Para salir de esta pestaña haz clic afuera.
+                </small>
+            </div>
+            <div class="modal-footer">
+                <!-- <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button> -->
+                <button type="button" class="btn btn-primary btn-sm" onclick="guardarClase()">
+                    <i class="fas fa-save"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmar Eliminar -->
+<div class="modal fade" id="modalEliminarClase" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-trash"></i> Eliminar Clase</h5>
+                <!-- <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button> -->
+            </div>
+            <div class="modal-body">
+                ¿Eliminar la clase <strong id="clase-nombre-eliminar"></strong>?
+                <br>
+                <small 
+                class="text-muted">Esta acción no se puede deshacer.
+                Para salir de esta pestaña haz clic afuera.
+                </small>
+            </div>
+            <div class="modal-footer">
+                <!-- <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button> -->
+                <button type="button" class="btn btn-danger btn-sm" onclick="confirmarEliminarClase()">
+                    <i class="fas fa-trash"></i> Eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── Gestión de Clases de Estado ──────────────────────────────────────────────
+let _claseIdEliminar = null;
+
+// Lee el token CSRF del meta tag que genera Flask-WTF
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+// Wrapper de fetch que incluye el token CSRF automáticamente
+function fetchCsrf(url, options = {}) {
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
+    if (options.method && options.method !== 'GET') {
+        headers['X-CSRFToken'] = getCsrfToken();
+    }
+    return fetch(url, Object.assign({}, options, { headers }));
+}
+
+function mostrarAlertaClases(msg, tipo) {
+    const el = document.getElementById('clases-alert');
+    el.innerHTML = `<div class="alert alert-${tipo} alert-dismissible fade show py-2">
+        ${msg}
+        <button type="button" class="close py-1" data-dismiss="alert"><span>&times;</span></button>
+    </div>`;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+function cargarClasesTabla() {
+    fetch('/api/clases_estado')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('clases-tbody');
+            if (!data.ok || !data.clases.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin clases registradas</td></tr>';
+                return;
+            }
+            // Pedir todas (activas e inactivas) para la tabla de admin
+            return fetch('/api/clases_estado?todas=1')
+                .then(r => r.json())
+                .then(d => renderizarClases(d.ok ? d.clases : data.clases));
+        })
+        .catch(() => {
+            document.getElementById('clases-tbody').innerHTML =
+                '<tr><td colspan="4" class="text-center text-danger py-3">Error cargando clases</td></tr>';
+        });
+}
+
+function renderizarClases(clases) {
+    const tbody = document.getElementById('clases-tbody');
+    if (!clases || !clases.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin clases registradas</td></tr>';
+        return;
+    }
+    tbody.innerHTML = clases.map((c, i) => `
+        <tr id="fila-clase-${c.id}">
+            <td class="text-muted">${i + 1}</td>
+            <td><strong>${c.nombre}</strong></td>
+            <td class="text-center">
+                <span class="badge badge-${c.activo ? 'success' : 'secondary'}" style="cursor:pointer"
+                      onclick="toggleActivoClase(${c.id}, ${c.activo})"
+                      title="${c.activo ? 'Clic para desactivar' : 'Clic para activar'}">
+                    ${c.activo ? 'Activa' : 'Inactiva'}
+                </span>
+            </td>
+            <td class="text-center">
+                <button class="btn btn-xs btn-outline-primary mr-1" onclick="abrirModalEditarClase(${c.id}, '${c.nombre.replace(/'/g, "\\'")}')" title="Editar">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-xs btn-outline-danger" onclick="abrirModalEliminarClase(${c.id}, '${c.nombre.replace(/'/g, "\\'")}')" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function abrirModalNuevaClase() {
+    document.getElementById('clase-id').value = '';
+    document.getElementById('clase-nombre').value = '';
+    document.getElementById('modalClaseLabel').textContent = 'Nueva Clase';
+    $('#modalClase').modal('show');
+    setTimeout(() => document.getElementById('clase-nombre').focus(), 400);
+}
+
+function abrirModalEditarClase(id, nombre) {
+    document.getElementById('clase-id').value = id;
+    document.getElementById('clase-nombre').value = nombre;
+    document.getElementById('modalClaseLabel').textContent = 'Editar Clase';
+    $('#modalClase').modal('show');
+    setTimeout(() => document.getElementById('clase-nombre').focus(), 400);
+}
+
+function guardarClase() {
+    const id     = document.getElementById('clase-id').value;
+    const nombre = document.getElementById('clase-nombre').value.trim();
+    if (!nombre) { alert('El nombre es obligatorio'); return; }
+
+    const url    = id ? `/api/clases_estado/${id}` : '/api/clases_estado';
+    const method = id ? 'PUT' : 'POST';
+
+    fetchCsrf(url, {
+        method,
+        body: JSON.stringify({ nombre })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) { mostrarAlertaClases('Error: ' + data.error, 'danger'); return; }
+        $('#modalClase').modal('hide');
+        mostrarAlertaClases(id ? 'Clase actualizada.' : 'Clase creada.', 'success');
+        cargarClasesAdmin();
+    })
+    .catch(() => mostrarAlertaClases('Error de conexión', 'danger'));
+}
+
+function toggleActivoClase(id, activoActual) {
+    fetchCsrf(`/api/clases_estado/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ activo: !activoActual })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) { mostrarAlertaClases('Error: ' + data.error, 'danger'); return; }
+        mostrarAlertaClases(`Clase ${data.clase.activo ? 'activada' : 'desactivada'}.`, 'info');
+        cargarClasesAdmin();
+    })
+    .catch(() => mostrarAlertaClases('Error de conexión', 'danger'));
+}
+
+function abrirModalEliminarClase(id, nombre) {
+    _claseIdEliminar = id;
+    document.getElementById('clase-nombre-eliminar').textContent = nombre;
+    $('#modalEliminarClase').modal('show');
+}
+
+function confirmarEliminarClase() {
+    if (!_claseIdEliminar) return;
+    fetchCsrf(`/api/clases_estado/${_claseIdEliminar}`, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(data => {
+        $('#modalEliminarClase').modal('hide');
+        if (!data.ok) { mostrarAlertaClases('Error: ' + data.error, 'danger'); return; }
+        mostrarAlertaClases(`Clase "${data.eliminado}" eliminada.`, 'warning');
+        cargarClasesAdmin();
+    })
+    .catch(() => mostrarAlertaClases('Error de conexión', 'danger'));
+}
+
+// Carga todas las clases (activas e inactivas) para la tabla de admin
+function cargarClasesAdmin() {
+    fetch('/api/clases_estado?todas=1')
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) renderizarClases(data.clases);
+        })
+        .catch(() => {});
+}
+
+// Cargar al abrir el tab
+document.addEventListener('DOMContentLoaded', function () {
+    const tabExpedientes = document.querySelector('a[href="#expedientes"]');
+    if (tabExpedientes) {
+        tabExpedientes.addEventListener('shown.bs.tab', cargarClasesAdmin);
+        tabExpedientes.addEventListener('shown.bs.tab', cargarClasesAdmin); // Bootstrap 4
+    }
+    // También cargar si el tab ya está activo al cargar la página
+    if (document.getElementById('expedientes') &&
+        document.getElementById('expedientes').classList.contains('active')) {
+        cargarClasesAdmin();
+    }
+});
+</script>
 
 {% endblock %}
