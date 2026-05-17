@@ -131,7 +131,7 @@
                     <h5 class="mb-0">
                         <i class="fas fa-folder-open"></i> Expedientes Asignados
                         {% if expedientes %}
-                            <span class="badge badge-secondary ml-2">{{ expedientes|length }}</span>
+                            <span class="badge-secondary ml-2">{{ expedientes|length }}</span>
                         {% endif %}
                     </h5>
                 </div>
@@ -154,16 +154,7 @@
                             </thead>
                             <tbody>
                                 {% for expediente in expedientes %}
-                                <tr class="expediente-row" data-estado="{% if expediente.estado_principal and expediente.estado_adicional %}
-                                        <span class="badge badge-success">{{ expediente.estado_principal }}</span>
-                                        <span class="badge badge-info">{{ expediente.estado_adicional }}</span>
-                                    {% elif expediente.estado_principal %}
-                                        <span class="badge badge-success">{{ expediente.estado_principal }}</span>
-                                    {% elif expediente.estado_adicional %}
-                                        <span class="badge badge-info">{{ expediente.estado_adicional }}</span>
-                                    {% else %}
-                                        <span class="badge badge-secondary">{{ expediente.estado_actual or 'Sin estado' }}</span>
-                                    {% endif %}">
+                                <tr class="expediente-row" data-estado="{{ expediente.estado_actual or '' }}">
                                     <td>
                                         <strong>{{ expediente.radicado_corto or expediente.radicado_completo[:15] + '...' if expediente.radicado_completo and expediente.radicado_completo|length > 15 else expediente.radicado_completo }}</strong>
                                         {% if expediente.radicado_completo and expediente.radicado_corto %}
@@ -248,17 +239,7 @@
                     <div class="text-center py-5">
                         <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
                         <h5>No tienes expedientes asignados</h5>
-                        <!-- {% if not usuario or not usuario.rol %}
-                            <p class="text-muted">Necesitas tener un rol asignado para ver expedientes.</p>
-                            <a href="{{ url_for('idvistaroles.vista_roles') }}" class="btn btn-primary">
-                                <i class="fas fa-user-cog"></i> Gestionar Roles
-                            </a>
-                        {% else %} -->
-                            <p class="text-muted">Los expedientes asignados a ti como {{ usuario.rol }} aparecerán aquí.</p>
-                            <!-- <a href="{{ url_for('idvistaexpediente.vista_expediente') }}" class="btn btn-primary">
-                                <i class="fas fa-search"></i> Buscar Expedientes
-                            </a> -->
-                        {% endif %}
+                        <p class="text-muted">Los expedientes asignados a ti como {{ usuario.rol }} aparecerán aquí.</p>
                     </div>
                     {% endif %}
                 </div>
