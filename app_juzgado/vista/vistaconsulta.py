@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, jsonify, send_file, redirect, url_for
+﻿from flask import Blueprint, render_template, request, flash, jsonify, send_file, redirect, url_for
 import sys
 import os
 import logging
@@ -104,7 +104,7 @@ def buscar_expediente():
                 for fi in ingresos_dates:
                     if not fi:
                         continue
-                    tiene_salida = any(fe and fe > fi for fe in estados_dates)
+                    tiene_salida = any(fe and fe >= fi for fe in estados_dates)
                     if not tiene_salida:
                         if fecha_mas_antigua is None or fi < fecha_mas_antigua:
                             fecha_mas_antigua = fi
@@ -241,7 +241,7 @@ def buscar_por_nombres():
                 for fi in ingresos_dates:
                     if not fi:
                         continue
-                    tiene_salida = any(fe and fe > fi for fe in estados_dates)
+                    tiene_salida = any(fe and fe >= fi for fe in estados_dates)
                     if not tiene_salida:
                         if fecha_mas_antigua is None or fi < fecha_mas_antigua:
                             fecha_mas_antigua = fi

@@ -232,20 +232,24 @@ def buscar_expediente_por_radicado(radicado):
             query = f"""
                 SELECT {select_clause}
                 FROM expediente 
-                WHERE radicado_completo = %s
-                   OR REPLACE(radicado_completo, ' ', '') = %s
-                   OR radicado_completo LIKE %s
+                WHERE radicado_completo ILIKE %s
+                   OR radicado_completo ILIKE %s
+                   OR radicado_corto ILIKE %s
                 LIMIT 1
             """
-            params = (radicado_limpio, radicado_limpio.replace(' ', ''), f'%{radicado_limpio}%')
+            patron = f"%{radicado_limpio}%"
+            params = (radicado_limpio, patron, patron)
         else:
+            # Búsqueda mejorada para radicado corto: ahora con ILIKE para flexibilidad
             query = f"""
                 SELECT {select_clause}
                 FROM expediente 
-                WHERE radicado_corto = %s
+                WHERE radicado_corto ILIKE %s
+                   OR radicado_completo ILIKE %s
                 LIMIT 1
             """
-            params = (radicado_limpio,)
+            patron = f"%{radicado_limpio}%"
+            params = (patron, patron)
         
         logger.info(f"Query: {query}")
         logger.info(f"Parámetros: {params}")
@@ -588,19 +592,24 @@ def buscar_expediente_para_actualizar():
             query = f"""
                 SELECT {select_clause}
                 FROM expediente 
-                WHERE radicado_completo = %s
-                   OR REPLACE(radicado_completo, ' ', '') = %s
-                   OR radicado_completo LIKE %s
+                WHERE radicado_completo ILIKE %s
+                   OR radicado_completo ILIKE %s
+                   OR radicado_corto ILIKE %s
+                LIMIT 1
             """
-            params = (radicado_limpio, radicado_limpio.replace(' ', ''), f'%{radicado_limpio}%')
+            patron = f"%{radicado_limpio}%"
+            params = (radicado_limpio, patron, patron)
         else:
+            # Búsqueda mejorada para radicado corto: ahora con ILIKE para flexibilidad
             query = f"""
                 SELECT {select_clause}
                 FROM expediente 
-                WHERE radicado_corto = %s
+                WHERE radicado_corto ILIKE %s
+                   OR radicado_completo ILIKE %s
                 LIMIT 1
             """
-            params = (radicado_limpio,)
+            patron = f"%{radicado_limpio}%"
+            params = (patron, patron)
         
         logger.info(f"Query: {query}")
         logger.info(f"Parámetros: {params}")

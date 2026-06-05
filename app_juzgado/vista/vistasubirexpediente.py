@@ -2344,11 +2344,11 @@ def procesar_excel_actualizacion_multiples_pestañas(file_content, hojas_disponi
                                     )
                                 ),
                                 fecha_ingreso_mas_antigua_sin_salida AS (
-                                    -- Para cada expediente, obtener la fecha de ingreso MÁS RECIENTE (independientemente de salida)
+                                    -- Para cada expediente, obtener la fecha de ingreso MÁS ANTIGUA sin salida
                                     SELECT 
                                         expediente_id,
-                                        MAX(fecha_ingreso) as fecha_ingreso_sin_salida
-                                    FROM ingresos_expedientes
+                                        MIN(fecha_ingreso) as fecha_ingreso_sin_salida
+                                    FROM ingresos_sin_salida
                                     GROUP BY expediente_id
                                 ),
                                 ingresos_mas_antigua AS (
@@ -3072,7 +3072,7 @@ def procesar_excel_expedientes(file_content):
                           AND NOT EXISTS (
                             SELECT 1 FROM estados est 
                             WHERE est.expediente_id = ie.expediente_id 
-                              AND est.fecha_estado > ie.fecha_ingreso
+                          AND est.fecha_estado >= ie.fecha_ingreso
                           )
                     ),
                     fecha_mas_antigua_sin_salida AS (

@@ -176,7 +176,7 @@ def sincronizar_estados_y_turnos(conn, dry_run: bool = False, verbose: bool = Fa
                     SELECT 1
                     FROM estados est
                     WHERE est.expediente_id = ie.expediente_id
-                      AND est.fecha_estado > ie.fecha_ingreso
+                      AND est.fecha_estado >= ie.fecha_ingreso
                 )
             ),
             fecha_activa AS (

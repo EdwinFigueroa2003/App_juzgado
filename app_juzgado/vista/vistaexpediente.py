@@ -48,13 +48,10 @@ def normalize_date(fecha_valor):
     elif isinstance(fecha_valor, datetime):
         return fecha_valor.date()
     else:
-        try:
-            # Intentar parsear como string
-            if isinstance(fecha_valor, str):
-                return datetime.strptime(fecha_valor, '%Y-%m-%d').date()
-            return fecha_valor
-        except:
-            return None
+        if isinstance(fecha_valor, str):
+            parsed = parse_date(fecha_valor)
+            return parsed.date() if parsed else None
+        return None
 
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -539,21 +536,10 @@ def buscar_expedientes(radicado):
                 logger.error(f"ERROR obteniendo estados para expediente {exp_id}: {e}")
                 expediente['estados'] = []
             
-            # Calcular fecha de ingreso más reciente (para mostrar en la interfaz)
-            try:
-                # Obtener todas las fechas de ingreso y seleccionar la más reciente
-                ingresos_fechas = [ingreso['fecha_ingreso'] for ingreso in expediente['ingresos'] if ingreso.get('fecha_ingreso')]
-                
-                if ingresos_fechas:
-                    """ expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(ingresos_fechas) """
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(ingresos_fechas)
-                    logger.info(f"Fecha ingreso más reciente para exp {exp_id}: {expediente['fecha_ingreso_mas_antigua_sin_salida']}")
-                else:
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
-                    logger.info(f"No hay ingresos para exp {exp_id}")
-            except Exception as e:
-                logger.error(f"ERROR calculando fecha más reciente para expediente {exp_id}: {e}")
-                expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
+            # No se calcula aquí. La fecha de ingreso más antigua sin salida
+            # se determina al final del procesamiento para usar todas las tablas
+            # de ingresos y estados juntos.
+            expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
             
             # Obtener actuaciones con manejo de errores y logging detallado
             try:
@@ -636,9 +622,11 @@ def buscar_expedientes(radicado):
                 expediente['fecha_actuacion'] = None  # N/A - "para resolver"
 
             # Fecha de ingreso más antigua SIN estado posterior
-            # Regla: de todos los ingresos que no tienen ningún estado con fecha > fecha_ingreso,
-            # tomar el más antiguo (lleva más tiempo esperando resolución).
-            # Fallback: si todos los ingresos tienen estado posterior, mostrar el último ingreso.
+            # Regla: de todos los ingresos que no tienen ningún estado con fecha >=  fecha_ingreso,
+            # tomar el más antiguo. Un estado con la misma fecha del ingreso SÍ cierra ese ingreso
+            # (consistente con la lógica de turnos.py que usa >= en la condición SQL).
+            # Fallback: si todos los ingresos tienen estado posterior, usar el ingreso más antiguo
+            # (MIN) — consistente con la lógica de turnos.py.
             try:
                 fechas_sin_salida = []
                 todas_fechas_ingreso = []
@@ -648,7 +636,8 @@ def buscar_expedientes(radicado):
                         continue
                     todas_fechas_ingreso.append(fi)
                     tiene_salida = any(
-                        normalize_date(est.get('fecha_estado')) and normalize_date(est.get('fecha_estado')) > fi
+                        normalize_date(est.get('fecha_estado')) is not None
+                        and normalize_date(est.get('fecha_estado')) >= fi
                         for est in expediente['estados']
                     )
                     if not tiene_salida:
@@ -658,8 +647,8 @@ def buscar_expedientes(radicado):
                     # Más antiguo sin salida
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(fechas_sin_salida)
                 elif todas_fechas_ingreso:
-                    # Todos tienen salida → mostrar el último ingreso
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(todas_fechas_ingreso)
+                    # Todos tienen salida → fallback al ingreso más antiguo (consistente con turnos.py)
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(todas_fechas_ingreso)
                 else:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = normalize_date(expediente.get('fecha_ingreso'))
             except Exception:
@@ -835,7 +824,8 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                         continue
                     todas_fechas_ingreso_f.append(fi)
                     tiene_salida = any(
-                        normalize_date(est.get('fecha_estado')) and normalize_date(est.get('fecha_estado')) > fi
+                        normalize_date(est.get('fecha_estado')) is not None
+                        and normalize_date(est.get('fecha_estado')) >= fi
                         for est in expediente['estados']
                     )
                     if not tiene_salida:
@@ -844,7 +834,7 @@ def filtrar_por_estado(estado, orden_fecha='DESC', limite=50, fecha_desde=None, 
                 if fechas_sin_salida_f:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(fechas_sin_salida_f)
                 elif todas_fechas_ingreso_f:
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(todas_fechas_ingreso_f)
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(todas_fechas_ingreso_f)
                 else:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
             except Exception as e:
@@ -1093,7 +1083,8 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
                         continue
                     todas_fechas_ingreso_f.append(fi)
                     tiene_salida = any(
-                        normalize_date(est.get('fecha_estado')) and normalize_date(est.get('fecha_estado')) > fi
+                        normalize_date(est.get('fecha_estado')) is not None
+                        and normalize_date(est.get('fecha_estado')) >= fi
                         for est in expediente['estados']
                     )
                     if not tiene_salida:
@@ -1102,7 +1093,7 @@ def filtrar_por_solicitud(solicitud, estado_filtro='', orden_fecha='DESC', limit
                 if fechas_sin_salida_f:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(fechas_sin_salida_f)
                 elif todas_fechas_ingreso_f:
-                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = max(todas_fechas_ingreso_f)
+                    expediente['fecha_ingreso_mas_antigua_sin_salida'] = min(todas_fechas_ingreso_f)
                 else:
                     expediente['fecha_ingreso_mas_antigua_sin_salida'] = None
             except Exception as e:
